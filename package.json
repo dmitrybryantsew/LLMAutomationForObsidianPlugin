@@ -12,7 +12,9 @@
     "deploy": "node scripts/deploy.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Plugin.ps1",
+    "deploy:ps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Plugin.ps1 -Deploy"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

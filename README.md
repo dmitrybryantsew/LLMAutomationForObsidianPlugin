@@ -1,26 +1,47 @@
 # LLM Automation For Obsidian Plugin
 
-Personal Obsidian plugin for LLM-assisted knowledge-base work: text generation, article/video summarization, transcript handling, quizzes, flashcards, and path/tag management.
+Personal Obsidian plugin for LLM-assisted knowledge-base work: text generation, article and video summarization, transcript handling, quizzes, flashcards, and path/tag management.
 
-The repository name is `LLMAutomationForObsidianPlugin`, but the Obsidian plugin id is intentionally still `gpt4free-text-generator-plugin` so existing local settings and database files keep working.
+The repository name is `LLMAutomationForObsidianPlugin`, but the Obsidian plugin id intentionally remains `gpt4free-text-generator-plugin`. Keeping the id preserves compatibility with the existing installed plugin folder, local `data.json`, and local `transcripts.db`.
+
+## What Is In This Repo
+
+This repo contains the Obsidian plugin frontend/runtime code:
+
+- TypeScript source in `src/`
+- Obsidian manifest in `manifest.json`
+- Build scripts and deploy helpers
+- Vitest tests and Obsidian API mocks
+
+It does not contain private runtime state or the server-side GeneralTools project.
 
 ## Server-Side Tools
 
-Some workflows still depend on server-side/general tooling. That server is not bundled in this plugin repository. Keep it in the separate GeneralTools project:
+Some workflows still use server-side/general tooling. That code lives separately:
 
 - Local reference: `H:\Common\Python\GeneralTools`
-- GitHub reference: https://github.com/dmitrybryantsew/GeneralTools
+- GitHub: https://github.com/dmitrybryantsew/GeneralTools
+
+Keep this plugin repo focused on the Obsidian plugin. Treat GeneralTools as a separate dependency/tooling repo.
 
 ## Private Runtime Files
 
-Do not commit these files:
+Never commit these files:
 
 - `data.json` - Obsidian plugin settings and provider API keys.
 - `transcripts.db` - local JSON transcript/summary database.
 
-They belong in the installed Obsidian plugin directory and in private backups only.
+They belong in the installed Obsidian plugin directory and private backups only. The `.gitignore` is configured to keep them out of git.
 
 ## Build
+
+Recommended PowerShell command:
+
+```powershell
+.\scripts\Build-Plugin.ps1
+```
+
+Equivalent npm command:
 
 ```powershell
 npm install
@@ -33,30 +54,60 @@ Build output is written to:
 build/gpt4free-text-generator-plugin/
 ```
 
-## Deploy To Obsidian
+The generated package currently contains:
 
-Set the target install directory and deploy:
+- `main.js`
+- `manifest.json`
+
+## Build And Test
 
 ```powershell
-$env:OBSIDIAN_PLUGIN_DIR = "H:\Common\foam\knowledgeBase\.obsidian\plugins\gpt4free-text-generator-plugin"
-npm run build
-npm run deploy
+.\scripts\Build-Plugin.ps1 -Test
 ```
 
-Deploy copies only generated plugin files such as `main.js` and `manifest.json`. It does not delete or overwrite local runtime files like `data.json` and `transcripts.db`.
-
-## Current Test Status
+or:
 
 ```powershell
 npm test
 ```
 
-Some tests are known to be out of sync with the current provider implementation because the code now uses Obsidian `requestUrl`, while older tests mock a fetch-style path. Build currently matters more for preserving the working plugin; fix the test harness before treating tests as the regression gate.
+Current baseline: `155` tests pass.
 
-## Publishing Notes
+## Deploy To Obsidian
 
-Before pushing this repository publicly:
+Set the target install directory and deploy:
 
-- Rotate any API keys that were ever stored in the old plugin `data.json`.
-- Confirm `git status --short` does not include runtime state or build output.
-- Run a secret scan for `sk-`, `Bearer`, `apiKey`, `openRouterApiKey`, `chutesApiKey`, and `zaiApiKey`.
+```powershell
+.\scripts\Build-Plugin.ps1 -Deploy -PluginDir "H:\Common\foam\knowledgeBase\.obsidian\plugins\gpt4free-text-generator-plugin"
+```
+
+You can also use an environment variable:
+
+```powershell
+$env:OBSIDIAN_PLUGIN_DIR = "H:\Common\foam\knowledgeBase\.obsidian\plugins\gpt4free-text-generator-plugin"
+.\scripts\Build-Plugin.ps1 -Deploy
+```
+
+Deploy copies only generated plugin files from `build/gpt4free-text-generator-plugin/`. It does not delete or overwrite local runtime files such as `data.json` and `transcripts.db`.
+
+## GitHub Setup
+
+After creating the GitHub repository:
+
+```powershell
+git remote add origin https://github.com/dmitrybryantsew/LLMAutomationForObsidianPlugin.git
+git push -u origin main
+```
+
+Before making the repo public, rotate any API keys that were ever stored in the old plugin `data.json`.
+
+## Useful Commands
+
+```powershell
+npm run clean
+npm run build
+npm test
+npm run deploy
+npm run build:ps
+npm run deploy:ps
+```
