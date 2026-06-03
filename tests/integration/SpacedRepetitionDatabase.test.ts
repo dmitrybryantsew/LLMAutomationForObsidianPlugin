@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFileSync } from 'fs';
 import { describe, expect, it } from 'vitest';
 import { SpacedRepetitionDatabase } from '../../src/utils/spacedRepetition/SpacedRepetitionDatabase';
 import { SpacedRepetitionScheduler } from '../../src/utils/spacedRepetition/SpacedRepetitionScheduler';
@@ -34,6 +35,13 @@ function createBinaryAdapterApp() {
 
 describe('SpacedRepetitionDatabase', () => {
   const wasmPath = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
+  const adapterWasmPath = '.obsidian/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm';
+
+  function createAppWithAdapterWasm() {
+    const setup = createBinaryAdapterApp();
+    setup.files.set(adapterWasmPath, readFileSync(wasmPath));
+    return setup;
+  }
 
   it('creates the SQLite file and stores note questions', async () => {
     const { app, files } = createBinaryAdapterApp();
@@ -75,6 +83,21 @@ describe('SpacedRepetitionDatabase', () => {
     await database.initialize();
     await database.initialize();
     const noteId = await database.upsertNoteFromFile({ path: 'Notes/Repeated.md', basename: 'Repeated' } as any, 'hash');
+
+    expect(noteId).toContain('note_');
+
+    await database.close();
+  });
+
+  it('loads sql.js wasm through the vault adapter', async () => {
+    const { app } = createAppWithAdapterWasm();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath: adapterWasmPath,
+    });
+
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/AdapterWasm.md', basename: 'AdapterWasm' } as any, 'hash');
 
     expect(noteId).toContain('note_');
 

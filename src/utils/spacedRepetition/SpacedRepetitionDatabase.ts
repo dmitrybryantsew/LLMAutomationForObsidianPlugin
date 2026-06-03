@@ -397,9 +397,12 @@ export class SpacedRepetitionDatabase {
   }
 
   private async doInitialize(): Promise<void> {
-    this.sql = await initSqlJs({
-      locateFile: (file) => this.config.wasmPath || file,
-    });
+    const wasmBinary = await this.readWasmBinary();
+    this.sql = await initSqlJs(
+      wasmBinary
+        ? { wasmBinary }
+        : { locateFile: (file) => this.config.wasmPath || file }
+    );
 
     await this.ensureParentDirectory();
     const data = await this.readDatabaseBytes();
@@ -574,6 +577,33 @@ export class SpacedRepetitionDatabase {
     }
 
     return Uint8Array.from(Buffer.from(encoded, 'base64'));
+  }
+
+  private async readWasmBinary(): Promise<Uint8Array | null> {
+    if (!this.config.wasmPath) {
+      return null;
+    }
+
+    const adapter = this.app.vault.adapter as any;
+    const normalizedWasmPath = normalizePath(this.config.wasmPath);
+
+    try {
+      if (typeof adapter.exists === 'function' && await adapter.exists(normalizedWasmPath)) {
+        if (typeof adapter.readBinary === 'function') {
+          const buffer = await adapter.readBinary(normalizedWasmPath);
+          return new Uint8Array(buffer);
+        }
+
+        if (typeof adapter.read === 'function') {
+          const encoded = await adapter.read(normalizedWasmPath);
+          return Uint8Array.from(Buffer.from(encoded, 'base64'));
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to read sql.js WASM through vault adapter, falling back to locateFile:', error);
+    }
+
+    return null;
   }
 
   private async persist(): Promise<void> {

@@ -82,7 +82,7 @@ export class PluginServices {
     if (settings.spacedRepetition.enabled) {
       this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(app, {
         dbPath: settings.spacedRepetition.databasePath,
-        wasmPath: "sql-wasm.wasm"
+        wasmPath: `${app.vault.configDir}/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm`
       });
     }
 
@@ -197,7 +197,7 @@ export class PluginServices {
     if (!this._spacedRepetitionDatabase) {
       this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(this.app, {
         dbPath: this._settings.spacedRepetition.databasePath,
-        wasmPath: "sql-wasm.wasm"
+        wasmPath: `${this.app.vault.configDir}/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm`
       });
     }
 
