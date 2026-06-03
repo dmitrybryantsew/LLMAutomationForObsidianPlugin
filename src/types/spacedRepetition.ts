@@ -26,6 +26,7 @@ export interface ReviewScheduleState {
 }
 
 export interface QuestionReviewState {
+  questionId?: string;
   nextRepeatAt: string;
   shouldReask: boolean;
   reaskAfterCount: number;
@@ -38,6 +39,14 @@ export interface ScheduledReviewResult {
   shouldReask: boolean;
   reaskAfterCount: number;
   schedule: ReviewScheduleState;
+}
+
+export interface ReviewRecordInput {
+  questionId: string;
+  grade: ReviewGrade;
+  userAnswer?: string | null;
+  checkerResult?: Record<string, unknown> | null;
+  elapsedMs?: number | null;
 }
 
 export interface SpacedRepetitionNoteRecord {

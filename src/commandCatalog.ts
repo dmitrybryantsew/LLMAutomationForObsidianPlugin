@@ -22,6 +22,18 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the text generation side panel.',
   },
   {
+    id: 'add-manual-spaced-repetition-question',
+    name: 'Add Manual Spaced Repetition Question',
+    group: 'Spaced Repetition',
+    description: 'Adds a manually written review question linked to the active note.',
+  },
+  {
+    id: 'open-spaced-repetition-review',
+    name: 'Open Spaced Repetition Review',
+    group: 'Spaced Repetition',
+    description: 'Opens the review view for due spaced repetition cards.',
+  },
+  {
     id: 'open-image-generator-panel',
     name: 'Open Image Generator Panel',
     group: 'Generation',

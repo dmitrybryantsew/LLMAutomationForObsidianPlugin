@@ -16,11 +16,22 @@ Completed foundation pieces:
 - Wired scheduler and optional database service into `PluginServices`.
 - Added tests for scheduler behavior and database creation/study-set storage.
 
+Completed Phase 2 pieces:
+
+- Added command `Add Manual Spaced Repetition Question`.
+- Added command `Open Spaced Repetition Review`.
+- Added settings controls for enabling spaced repetition, database path, max cards per session, and grade `0` reask delay.
+- Added a dedicated review view for due cards.
+- Added manual question modal for current-note questions.
+- Added review persistence with scheduler updates and review history writes.
+- Added same-session grade `0` reask behavior where the card waits for other reviewed cards before becoming due again.
+
 Current verification:
 
 - Build passes.
-- Test suite passes with `161` tests.
+- Test suite passes with `162` tests.
 - Built plugin package contains `main.js`, `manifest.json`, and `sql-wasm.wasm`.
+- Phase 2 build was deployed to the live Obsidian plugin folder.
 
 ## Goal
 

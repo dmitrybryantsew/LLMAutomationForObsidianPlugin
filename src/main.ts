@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
-import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, DEFAULT_SETTINGS } from './constants';
+import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import { GenerateTextView } from './views/GenerateTextView';
 import { GenerateImageView } from './views/GenerateImageView';
@@ -32,6 +32,8 @@ import { QuickQueryModal } from './modals/QuickQueryModal'; // Import the QuickQ
 import { QuizGeneratorModal } from './modals/QuizGeneratorModal'; // Import the QuizGeneratorModal
 import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // Import the FlashcardGeneratorModal
 import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
+import { SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
+import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 
 import './styles/styles.css';
 
@@ -56,6 +58,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.registerView(VIEW_TYPE_GENERATE_TEXT, (leaf) => new GenerateTextView(leaf, this));
     this.registerView(VIEW_TYPE_GENERATE_IMAGE, (leaf) => new GenerateImageView(leaf, this));
     this.registerView(VIEW_TYPE_VIDEO_PROCESSING, (leaf) => new VideoProcessingView(leaf, this));
+    this.registerView(VIEW_TYPE_SPACED_REPETITION_REVIEW, (leaf) => new SpacedRepetitionReviewView(leaf, this));
 
     // Initialize VideoQueueManager after plugin is fully initialized
     // It depends on TranscriptManager which might be doing async work internally
@@ -245,6 +248,26 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       id: 'create-command-cheatsheet',
       name: 'Create/Update Plugin Commands Cheatsheet',
       callback: () => this.createOrUpdateCommandCheatsheet(),
+    });
+
+    this.addCommand({
+      id: 'add-manual-spaced-repetition-question',
+      name: 'Add Manual Spaced Repetition Question',
+      callback: () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('No active note');
+          return;
+        }
+
+        new SpacedRepetitionManualQuestionModal(this.app, this, activeFile).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-spaced-repetition-review',
+      name: 'Open Spaced Repetition Review',
+      callback: () => this.activateView(VIEW_TYPE_SPACED_REPETITION_REVIEW),
     });
 
     // Text Generator command
@@ -744,6 +767,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENERATE_TEXT);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENERATE_IMAGE);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_VIDEO_PROCESSING);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_REVIEW);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services

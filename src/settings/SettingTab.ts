@@ -29,6 +29,7 @@ class SettingTab extends PluginSettingTab {
     this.addSummarySettings(containerEl);
     this.addLanguageSettings(containerEl);
     this.addContentStorageSettings(containerEl);
+    this.addSpacedRepetitionSettings(containerEl);
     this.addDebugSettings(containerEl);
     this.addTestSettings(containerEl);
   }
@@ -424,6 +425,59 @@ class SettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+  }
+
+  addSpacedRepetitionSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Spaced Repetition Settings' });
+
+    new Setting(containerEl)
+      .setName("Enable Spaced Repetition")
+      .setDesc("Use a separate SQLite database for review questions and scheduling state.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.spacedRepetition.enabled)
+        .onChange(async value => {
+          this.plugin.settings.spacedRepetition.enabled = value;
+          await this.plugin.saveSettings();
+          if (value) {
+            await this.plugin.services.ensureSpacedRepetitionDatabase();
+            new Notice("Spaced repetition database initialized.");
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("SQLite Database Path")
+      .setDesc("Runtime database file. Keep this out of git.")
+      .addText(text => text
+        .setValue(this.plugin.settings.spacedRepetition.databasePath)
+        .onChange(async value => {
+          this.plugin.settings.spacedRepetition.databasePath = value.trim() || this.plugin.settings.spacedRepetition.databasePath;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Max Cards Per Session")
+      .addText(text => text
+        .setValue(String(this.plugin.settings.spacedRepetition.maxReviewCardsPerSession))
+        .onChange(async value => {
+          const parsed = parseInt(value, 10);
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            this.plugin.settings.spacedRepetition.maxReviewCardsPerSession = parsed;
+            await this.plugin.saveSettings();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("Grade 0 Reask Delay")
+      .setDesc("Number of other reviewed cards before a grade 0 card can appear again.")
+      .addText(text => text
+        .setValue(String(this.plugin.settings.spacedRepetition.gradeZeroReaskDelay))
+        .onChange(async value => {
+          const parsed = parseInt(value, 10);
+          if (!Number.isNaN(parsed) && parsed >= 0) {
+            this.plugin.settings.spacedRepetition.gradeZeroReaskDelay = parsed;
+            await this.plugin.saveSettings();
+          }
+        }));
   }
 
   addMultiProviderSettings(containerEl: HTMLElement): void {

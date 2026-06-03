@@ -192,6 +192,18 @@ export class PluginServices {
   public get spacedRepetitionScheduler(): SpacedRepetitionScheduler {
     return this._spacedRepetitionScheduler;
   }
+
+  public async ensureSpacedRepetitionDatabase(): Promise<SpacedRepetitionDatabase> {
+    if (!this._spacedRepetitionDatabase) {
+      this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(this.app, {
+        dbPath: this._settings.spacedRepetition.databasePath,
+        wasmPath: "sql-wasm.wasm"
+      });
+      await this._spacedRepetitionDatabase.initialize();
+    }
+
+    return this._spacedRepetitionDatabase;
+  }
   
   /**
    * Update settings when they change
@@ -208,6 +220,7 @@ export class PluginServices {
     this._spacedRepetitionScheduler = new SpacedRepetitionScheduler({
       gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
     });
+
     
     // Update ErrorHandler debug mode
     ErrorHandler.setDebugMode(settings.debugMode || false);

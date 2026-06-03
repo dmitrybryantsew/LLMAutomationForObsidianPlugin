@@ -1,6 +1,13 @@
 import { App, TFile, normalizePath } from 'obsidian';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
-import { SpacedRepetitionQuestionInput, SpacedRepetitionStudySetRecord, StudySetSourceType } from '../../types/spacedRepetition';
+import {
+  QuestionReviewState,
+  ReviewRecordInput,
+  ScheduledReviewResult,
+  SpacedRepetitionQuestionInput,
+  SpacedRepetitionStudySetRecord,
+  StudySetSourceType
+} from '../../types/spacedRepetition';
 
 const SCHEMA_VERSION = 1;
 
@@ -204,7 +211,7 @@ export class SpacedRepetitionDatabase {
         should_reask as shouldReask, reask_after_count as reaskAfterCount
       FROM questions
       WHERE enabled = 1
-        AND (should_reask = 1 OR next_repeat_at <= ?)
+        AND ((should_reask = 1 AND reask_after_count <= 0) OR (should_reask = 0 AND next_repeat_at <= ?))
       ORDER BY should_reask DESC, next_repeat_at ASC
       LIMIT ?
       `,
@@ -225,6 +232,134 @@ export class SpacedRepetitionDatabase {
       shouldReask: Number(row.shouldReask) === 1,
       reaskAfterCount: Number(row.reaskAfterCount),
     }));
+  }
+
+  getQuestionReviewState(questionId: string): QuestionReviewState | null {
+    const rows = this.select<Record<string, unknown>>(
+      `
+      SELECT
+        q.id as questionId, q.next_repeat_at as nextRepeatAt, q.should_reask as shouldReask,
+        q.reask_after_count as reaskAfterCount, q.last_reviewed_at as lastReviewedAt,
+        s.algorithm, s.interval_days as intervalDays, s.ease, s.repetition_count as repetitionCount,
+        s.lapse_count as lapseCount, s.last_grade as lastGrade, s.due_position as duePosition
+      FROM questions q
+      LEFT JOIN schedules s ON s.question_id = q.id
+      WHERE q.id = ?
+      LIMIT 1
+      `,
+      [questionId]
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      questionId: String(row.questionId),
+      nextRepeatAt: String(row.nextRepeatAt),
+      shouldReask: Number(row.shouldReask) === 1,
+      reaskAfterCount: Number(row.reaskAfterCount),
+      lastReviewedAt: row.lastReviewedAt ? String(row.lastReviewedAt) : null,
+      schedule: {
+        algorithm: String(row.algorithm ?? 'mnemosyne_like_v1'),
+        intervalDays: Number(row.intervalDays ?? 0),
+        ease: Number(row.ease ?? 2.5),
+        repetitionCount: Number(row.repetitionCount ?? 0),
+        lapseCount: Number(row.lapseCount ?? 0),
+        lastGrade: row.lastGrade === null || row.lastGrade === undefined ? null : Number(row.lastGrade) as any,
+        duePosition: row.duePosition === null || row.duePosition === undefined ? null : Number(row.duePosition),
+      },
+    };
+  }
+
+  async recordReview(input: ReviewRecordInput, scheduled: ScheduledReviewResult, reviewedAt: Date = new Date()): Promise<void> {
+    const db = this.requireDb();
+    const previous = this.getQuestionReviewState(input.questionId);
+    if (!previous) {
+      throw new Error(`Question not found: ${input.questionId}`);
+    }
+
+    const reviewId = this.createId('review');
+    const nowIso = reviewedAt.toISOString();
+
+    db.run(
+      `
+      UPDATE questions
+      SET
+        next_repeat_at = ?,
+        last_reviewed_at = ?,
+        should_reask = ?,
+        reask_after_count = ?,
+        updated_at = ?
+      WHERE id = ?
+      `,
+      [
+        scheduled.nextRepeatAt,
+        nowIso,
+        scheduled.shouldReask ? 1 : 0,
+        scheduled.reaskAfterCount,
+        nowIso,
+        input.questionId,
+      ]
+    );
+
+    db.run(
+      `
+      UPDATE schedules
+      SET
+        algorithm = ?,
+        interval_days = ?,
+        ease = ?,
+        repetition_count = ?,
+        lapse_count = ?,
+        last_grade = ?,
+        due_position = ?
+      WHERE question_id = ?
+      `,
+      [
+        scheduled.schedule.algorithm,
+        scheduled.schedule.intervalDays,
+        scheduled.schedule.ease,
+        scheduled.schedule.repetitionCount,
+        scheduled.schedule.lapseCount,
+        scheduled.schedule.lastGrade,
+        scheduled.schedule.duePosition ?? null,
+        input.questionId,
+      ]
+    );
+
+    db.run(
+      `
+      INSERT INTO review_history (
+        id, question_id, reviewed_at, grade, user_answer, checker_result_json,
+        previous_next_repeat_at, next_repeat_at, elapsed_ms
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        reviewId,
+        input.questionId,
+        nowIso,
+        input.grade,
+        input.userAnswer ?? null,
+        JSON.stringify(input.checkerResult ?? null),
+        previous.nextRepeatAt,
+        scheduled.nextRepeatAt,
+        input.elapsedMs ?? null,
+      ]
+    );
+
+    db.run(
+      `
+      UPDATE questions
+      SET reask_after_count = MAX(reask_after_count - 1, 0)
+      WHERE should_reask = 1 AND reask_after_count > 0 AND id != ?
+      `,
+      [input.questionId]
+    );
+
+    await this.persist();
   }
 
   getStudySets(): SpacedRepetitionStudySetRecord[] {

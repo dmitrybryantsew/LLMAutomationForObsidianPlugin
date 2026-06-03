@@ -1,6 +1,7 @@
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { SpacedRepetitionDatabase } from '../../src/utils/spacedRepetition/SpacedRepetitionDatabase';
+import { SpacedRepetitionScheduler } from '../../src/utils/spacedRepetition/SpacedRepetitionScheduler';
 
 function createBinaryAdapterApp() {
   const files = new Map<string, Uint8Array>();
@@ -104,6 +105,58 @@ describe('SpacedRepetitionDatabase', () => {
     expect(due).toHaveLength(1);
     expect(due[0].studySetId).toBe(studySetId);
     expect(due[0].noteId).toBeNull();
+
+    await database.close();
+  });
+
+  it('records reviews and delays grade 0 reask cards', async () => {
+    const { app } = createBinaryAdapterApp();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath,
+    });
+    const scheduler = new SpacedRepetitionScheduler({ gradeZeroReaskDelay: 1 });
+
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/Test.md', basename: 'Test' } as any, 'hash-1');
+    const [againId, otherId] = await database.createQuestions([
+      {
+        noteId,
+        questionText: 'Again?',
+        questionType: 'self_check',
+        answerText: 'Again answer.',
+        answerCheckMode: 'self',
+        nextRepeatAt: '2026-06-03T07:00:00.000Z',
+      },
+      {
+        noteId,
+        questionText: 'Other?',
+        questionType: 'self_check',
+        answerText: 'Other answer.',
+        answerCheckMode: 'self',
+        nextRepeatAt: '2026-06-03T07:00:00.000Z',
+      },
+    ]);
+
+    const againState = database.getQuestionReviewState(againId);
+    await database.recordReview(
+      { questionId: againId, grade: 0 },
+      scheduler.scheduleReview(againState, 0, new Date('2026-06-03T08:00:00.000Z')),
+      new Date('2026-06-03T08:00:00.000Z')
+    );
+
+    let due = database.getDueQuestions(new Date('2026-06-03T08:00:01.000Z'));
+    expect(due.map((card) => card.id)).toEqual([otherId]);
+
+    const otherState = database.getQuestionReviewState(otherId);
+    await database.recordReview(
+      { questionId: otherId, grade: 3 },
+      scheduler.scheduleReview(otherState, 3, new Date('2026-06-03T08:01:00.000Z')),
+      new Date('2026-06-03T08:01:00.000Z')
+    );
+
+    due = database.getDueQuestions(new Date('2026-06-03T08:01:01.000Z'));
+    expect(due.map((card) => card.id)).toEqual([againId]);
 
     await database.close();
   });
