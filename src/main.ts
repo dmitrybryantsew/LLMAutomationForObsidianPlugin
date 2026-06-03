@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo } from 'obsidian';
+import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
 import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import { GenerateTextView } from './views/GenerateTextView';
@@ -31,6 +31,7 @@ import { StandaloneTranscriptCleanupModal } from './modals/StandaloneTranscriptC
 import { QuickQueryModal } from './modals/QuickQueryModal'; // Import the QuickQueryModal
 import { QuizGeneratorModal } from './modals/QuizGeneratorModal'; // Import the QuizGeneratorModal
 import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // Import the FlashcardGeneratorModal
+import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
 
 import './styles/styles.css';
 
@@ -240,6 +241,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   }
 
   private addCommands() {
+    this.addCommand({
+      id: 'create-command-cheatsheet',
+      name: 'Create/Update Plugin Commands Cheatsheet',
+      callback: () => this.createOrUpdateCommandCheatsheet(),
+    });
+
     // Text Generator command
     this.addCommand({
       id: "open-text-generator-panel",
@@ -616,6 +623,29 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // We can't read the file synchronously, so we'll check the file content asynchronously
     // For now, return true and let the modal handle the check
     return true;
+  }
+
+  private async createOrUpdateCommandCheatsheet() {
+    const notePath = normalizePath(COMMAND_CHEATSHEET_NOTE_PATH);
+    const content = renderCommandCheatsheet();
+
+    try {
+      const existingFile = this.app.vault.getAbstractFileByPath(notePath);
+      let file: TFile;
+
+      if (existingFile instanceof TFile) {
+        await this.app.vault.modify(existingFile, content);
+        file = existingFile;
+      } else {
+        file = await this.app.vault.create(notePath, content);
+      }
+
+      await this.app.workspace.getLeaf(false).openFile(file);
+      new Notice(`Updated command cheatsheet: ${notePath}`);
+    } catch (error) {
+      console.error('Failed to create command cheatsheet:', error);
+      new Notice(`Failed to create command cheatsheet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
   
   // Keeping for backward compatibility or specific use cases, but services.transcriptManager is preferred

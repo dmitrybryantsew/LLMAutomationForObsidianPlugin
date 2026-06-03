@@ -90,6 +90,22 @@ $env:OBSIDIAN_PLUGIN_DIR = "H:\Common\foam\knowledgeBase\.obsidian\plugins\gpt4f
 
 Deploy copies only generated plugin files from `build/gpt4free-text-generator-plugin/`. It does not delete or overwrite local runtime files such as `data.json` and `transcripts.db`.
 
+## In-Vault Command Cheatsheet
+
+Run this Obsidian command from the command palette:
+
+```text
+Create/Update Plugin Commands Cheatsheet
+```
+
+It creates or refreshes this generated vault note:
+
+```text
+LLM Automation Plugin Commands.md
+```
+
+The command list is generated from `src/commandCatalog.ts`, so update that catalog when adding or removing plugin commands.
+
 ## GitHub Setup
 
 After creating the GitHub repository:
