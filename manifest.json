@@ -1,0 +1,10 @@
+{
+  "id": "gpt4free-text-generator-plugin",
+  "name": "LLM Automation for Obsidian",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Personal LLM automation tools for Obsidian: generation, transcript summarization, quizzes, flashcards, and knowledge-base workflows.",
+  "author": "Taily",
+  "authorUrl": "",
+  "isDesktopOnly": true
+}

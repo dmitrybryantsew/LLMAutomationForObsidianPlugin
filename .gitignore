@@ -1,0 +1,35 @@
+node_modules/
+coverage/
+dist/
+build/
+android-build/
+
+# Obsidian runtime state: local settings, keys, transcript database
+data.json
+transcripts.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated plugin bundles
+/main.js
+/main.js.map
+/main.css
+/styles.css
+*.js.map
+
+# Old generated/context files that should never enter this repo
+combined.ts
+ts_project_context.txt
+python_project_context.txt
+.kilocode/
+.bmad/
+.kilocodemodes
+bmm-workflow-status.yaml
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
