@@ -199,4 +199,28 @@ describe('SpacedRepetitionDatabase', () => {
 
     await database.close();
   });
+
+  it('stores note chat messages linked to a note', async () => {
+    const { app } = createBinaryAdapterApp();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath,
+    });
+
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/Chat.md', basename: 'Chat' } as any, 'hash-chat');
+    const chatId = await database.createNoteChat(noteId, 'Chat test');
+    await database.addNoteChatMessage({ chatId, role: 'user', content: 'What matters here?' });
+    await database.addNoteChatMessage({ chatId, role: 'assistant', content: 'The review loop matters.' });
+
+    const latestChat = database.getLatestNoteChat(noteId);
+    const messages = database.getNoteChatMessages(chatId);
+
+    expect(latestChat?.id).toBe(chatId);
+    expect(messages).toHaveLength(2);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[1].content).toBe('The review loop matters.');
+
+    await database.close();
+  });
 });

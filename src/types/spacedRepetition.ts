@@ -49,6 +49,13 @@ export interface ReviewRecordInput {
   elapsedMs?: number | null;
 }
 
+export interface AnswerCheckerResult {
+  isAcceptable: boolean;
+  confidence: number;
+  feedback: string;
+  correctedAnswer?: string | null;
+}
+
 export interface SpacedRepetitionNoteRecord {
   id: string;
   notePath: string;
@@ -79,4 +86,22 @@ export interface SpacedRepetitionQuestionInput {
   metadata?: Record<string, unknown>;
   nextRepeatAt?: string;
   enabled?: boolean;
+}
+
+export interface NoteChatRecord {
+  id: string;
+  noteId: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface NoteChatMessageRecord {
+  id: string;
+  chatId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: string;
+  metadata: Record<string, unknown>;
 }

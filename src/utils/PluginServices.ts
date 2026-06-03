@@ -15,6 +15,7 @@ import { FlashcardManager } from "./FlashcardManager";
 import { SpacedRepetitionDatabase } from "./spacedRepetition/SpacedRepetitionDatabase";
 import { SpacedRepetitionScheduler } from "./spacedRepetition/SpacedRepetitionScheduler";
 import { SpacedRepetitionGenerator } from "./spacedRepetition/SpacedRepetitionGenerator";
+import { AnswerChecker } from "./spacedRepetition/AnswerChecker";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
 import type GptFreeTextGeneratorPlugin from "../main";
@@ -41,6 +42,7 @@ export class PluginServices {
   private _spacedRepetitionDatabase: SpacedRepetitionDatabase | null = null;
   private _spacedRepetitionScheduler: SpacedRepetitionScheduler;
   private _spacedRepetitionGenerator: SpacedRepetitionGenerator;
+  private _answerChecker: AnswerChecker;
   
   // Settings
   private _settings: PluginSettings;
@@ -81,6 +83,7 @@ export class PluginServices {
       gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
     });
     this._spacedRepetitionGenerator = new SpacedRepetitionGenerator(this._llmClientService);
+    this._answerChecker = new AnswerChecker(this._llmClientService);
 
     if (settings.spacedRepetition.enabled) {
       this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(app, {
@@ -198,6 +201,10 @@ export class PluginServices {
 
   public get spacedRepetitionGenerator(): SpacedRepetitionGenerator {
     return this._spacedRepetitionGenerator;
+  }
+
+  public get answerChecker(): AnswerChecker {
+    return this._answerChecker;
   }
 
   public async ensureSpacedRepetitionDatabase(): Promise<SpacedRepetitionDatabase> {

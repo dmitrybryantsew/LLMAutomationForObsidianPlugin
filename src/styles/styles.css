@@ -329,9 +329,86 @@
     color: var(--text-warning);
 }
 
+.spaced-repetition-checker-result {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    background: var(--background-primary-alt);
+}
+
+.spaced-repetition-checker-ok {
+    border-left: 3px solid var(--text-success);
+}
+
+.spaced-repetition-checker-warning {
+    border-left: 3px solid var(--text-warning);
+}
+
+.spaced-repetition-checker-title {
+    font-weight: var(--font-semibold);
+}
+
+.spaced-repetition-checker-confidence,
+.spaced-repetition-checker-feedback,
+.spaced-repetition-checker-corrected {
+    margin-top: 6px;
+}
+
 .spaced-repetition-choices {
     margin: 0;
     padding-left: 24px;
+}
+
+.spaced-repetition-note-chat-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.spaced-repetition-note-chat-history {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px;
+    background: var(--background-primary);
+}
+
+.spaced-repetition-note-chat-message {
+    border-left: 3px solid var(--background-modifier-border);
+    padding: 8px 10px;
+    background: var(--background-primary-alt);
+    white-space: pre-wrap;
+}
+
+.spaced-repetition-note-chat-assistant {
+    border-left-color: var(--interactive-accent);
+}
+
+.spaced-repetition-note-chat-role {
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-semibold);
+    margin-bottom: 4px;
+    text-transform: capitalize;
+}
+
+.spaced-repetition-note-chat-empty {
+    color: var(--text-muted);
+}
+
+.spaced-repetition-note-chat-input {
+    width: 100%;
+    min-height: 110px;
+    resize: vertical;
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
 }
 
 @media (max-width: 520px) {

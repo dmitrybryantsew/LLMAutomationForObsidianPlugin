@@ -35,6 +35,7 @@ import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './command
 import { SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
+import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
 
 import './styles/styles.css';
 
@@ -283,6 +284,20 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       id: 'open-spaced-repetition-review',
       name: 'Open Spaced Repetition Review',
       callback: () => this.activateView(VIEW_TYPE_SPACED_REPETITION_REVIEW),
+    });
+
+    this.addCommand({
+      id: 'chat-with-current-note-ollama',
+      name: 'Chat With Current Note Using Ollama',
+      callback: () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('No active note');
+          return;
+        }
+
+        new SpacedRepetitionNoteChatModal(this.app, this, activeFile).open();
+      },
     });
 
     // Text Generator command

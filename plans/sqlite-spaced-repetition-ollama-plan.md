@@ -44,12 +44,22 @@ Completed Phase 4 pieces:
 - Generated questions are saved into the spaced repetition SQLite database and linked back to the source note through `question_sources`.
 - Added parser/validation tests for generated question JSON.
 
+Completed Phase 5 pieces:
+
+- Added `AnswerChecker` for Ollama-backed `typed_llm_checked` answer evaluation.
+- Review cards with `typed_llm_checked` now accept a typed answer, call Ollama, reveal the expected answer, show feedback/confidence, and still let the user choose the final `0-4` grade.
+- Checker results are saved into `review_history.checker_result_json`.
+- Added SQLite chat persistence helpers for `note_chats` and `note_chat_messages`.
+- Added command `Chat With Current Note Using Ollama`.
+- Note chat uses the active note as context, saves user/assistant turns, reloads the latest saved chat, and can save the latest user question plus Ollama reply as a self-check review card.
+- Added answer-checker parser tests and chat-persistence tests.
+
 Current verification:
 
 - Build passes.
-- Test suite passes with `176` tests.
+- Test suite passes with `179` tests.
 - Built plugin package contains `main.js`, `manifest.json`, and `sql-wasm.wasm`.
-- Phase 4 current-note generation build was deployed to the live Obsidian plugin folder.
+- Phase 5 answer checking and note chat build was deployed to the live Obsidian plugin folder.
 
 ## Goal
 
@@ -821,9 +831,10 @@ Success criteria:
 
 Success criteria:
 
-- User can type an answer and get an Ollama-based check.
-- Review grade is still user-controlled.
-- Chat history is saved and linked to the note.
+- [x] User can type an answer and get an Ollama-based check.
+- [x] Review grade is still user-controlled.
+- [x] Chat history is saved and linked to the note.
+- [x] Latest chat answer can be saved as a review question.
 
 ### Phase 6: Comfort Features
 

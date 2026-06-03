@@ -2,7 +2,7 @@ import { ItemView, Notice, Setting, WorkspaceLeaf } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { VIEW_TYPE_SPACED_REPETITION_REVIEW } from '../constants';
 import { DueQuestionRecord } from '../utils/spacedRepetition/SpacedRepetitionDatabase';
-import { ReviewGrade } from '../types/spacedRepetition';
+import { AnswerCheckerResult, ReviewGrade } from '../types/spacedRepetition';
 
 export class SpacedRepetitionReviewView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -10,6 +10,8 @@ export class SpacedRepetitionReviewView extends ItemView {
   private currentCard: DueQuestionRecord | null = null;
   private answerRevealed = false;
   private userAnswer = '';
+  private checkerResult: AnswerCheckerResult | null = null;
+  private checkingAnswer = false;
   private sessionReviewed = 0;
   private cardStartedAt = Date.now();
   private keyHandler = (event: KeyboardEvent) => this.handleKey(event);
@@ -51,6 +53,8 @@ export class SpacedRepetitionReviewView extends ItemView {
     this.currentCard = this.dueCards.shift() ?? null;
     this.answerRevealed = false;
     this.userAnswer = '';
+    this.checkerResult = null;
+    this.checkingAnswer = false;
     this.cardStartedAt = Date.now();
     this.render();
   }
@@ -91,6 +95,7 @@ export class SpacedRepetitionReviewView extends ItemView {
         text: this.currentCard.answerText ?? '',
         cls: 'spaced-repetition-answer-text',
       });
+      this.renderCheckerResult(card);
       this.renderGradeButtons(card);
     } else {
       new Setting(card)
@@ -102,6 +107,12 @@ export class SpacedRepetitionReviewView extends ItemView {
               this.answerRevealed = true;
               this.render();
             });
+        })
+        .addButton((button) => {
+          button
+            .setButtonText(this.checkingAnswer ? 'Checking...' : 'Check With Ollama')
+            .setDisabled(this.checkingAnswer || this.currentCard?.questionType !== 'typed_llm_checked')
+            .onClick(() => this.checkAnswerWithOllama());
         })
         .addButton((button) => {
           button
@@ -132,7 +143,7 @@ export class SpacedRepetitionReviewView extends ItemView {
       return;
     }
 
-    if (this.currentCard.questionType === 'typed_exact') {
+    if (this.currentCard.questionType === 'typed_exact' || this.currentCard.questionType === 'typed_llm_checked') {
       const input = container.createEl('input', {
         type: 'text',
         cls: 'spaced-repetition-answer-input',
@@ -142,8 +153,14 @@ export class SpacedRepetitionReviewView extends ItemView {
       input.addEventListener('input', () => {
         this.userAnswer = input.value;
       });
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && this.currentCard?.questionType === 'typed_llm_checked' && !this.answerRevealed) {
+          event.preventDefault();
+          this.checkAnswerWithOllama();
+        }
+      });
 
-      if (this.answerRevealed) {
+      if (this.currentCard.questionType === 'typed_exact' && this.answerRevealed) {
         const normalizedUser = this.normalizeAnswer(this.userAnswer);
         const normalizedExpected = this.normalizeAnswer(this.currentCard.answerText ?? '');
         container.createEl('div', {
@@ -158,6 +175,68 @@ export class SpacedRepetitionReviewView extends ItemView {
       for (const choice of this.currentCard.choices) {
         choices.createEl('li', { text: choice });
       }
+    }
+  }
+
+  private renderCheckerResult(container: HTMLElement): void {
+    if (!this.checkerResult) {
+      return;
+    }
+
+    const result = container.createDiv({
+      cls: this.checkerResult.isAcceptable
+        ? 'spaced-repetition-checker-result spaced-repetition-checker-ok'
+        : 'spaced-repetition-checker-result spaced-repetition-checker-warning',
+    });
+    result.createEl('div', {
+      text: this.checkerResult.isAcceptable ? 'Ollama check: acceptable' : 'Ollama check: needs work',
+      cls: 'spaced-repetition-checker-title',
+    });
+    result.createEl('div', {
+      text: `Confidence: ${Math.round(this.checkerResult.confidence * 100)}%`,
+      cls: 'spaced-repetition-checker-confidence',
+    });
+    result.createEl('div', {
+      text: this.checkerResult.feedback,
+      cls: 'spaced-repetition-checker-feedback',
+    });
+
+    if (this.checkerResult.correctedAnswer) {
+      result.createEl('div', {
+        text: `Suggested answer: ${this.checkerResult.correctedAnswer}`,
+        cls: 'spaced-repetition-checker-corrected',
+      });
+    }
+  }
+
+  private async checkAnswerWithOllama(): Promise<void> {
+    if (!this.currentCard || this.currentCard.questionType !== 'typed_llm_checked') {
+      return;
+    }
+
+    if (!this.userAnswer.trim()) {
+      new Notice('Type an answer first');
+      return;
+    }
+
+    try {
+      this.checkingAnswer = true;
+      this.render();
+
+      this.checkerResult = await this.plugin.services.answerChecker.checkWithOllama({
+        questionText: this.currentCard.questionText,
+        expectedAnswer: this.currentCard.answerText ?? '',
+        userAnswer: this.userAnswer,
+        rubric: this.getRubric(this.currentCard.metadata),
+        model: this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud',
+      });
+      this.answerRevealed = true;
+    } catch (error) {
+      console.error('Failed to check answer with Ollama:', error);
+      new Notice(`Failed to check answer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      this.checkingAnswer = false;
+      this.render();
     }
   }
 
@@ -195,7 +274,7 @@ export class SpacedRepetitionReviewView extends ItemView {
           questionId: this.currentCard.id,
           grade,
           userAnswer: this.userAnswer || null,
-          checkerResult: null,
+          checkerResult: this.checkerResult as unknown as Record<string, unknown> | null,
           elapsedMs: Date.now() - this.cardStartedAt,
         },
         scheduled
@@ -228,5 +307,10 @@ export class SpacedRepetitionReviewView extends ItemView {
 
   private normalizeAnswer(value: string): string {
     return value.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  private getRubric(metadata: Record<string, unknown>): string | null {
+    const rubric = metadata.rubric ?? metadata.answerRubric ?? metadata.checkRubric;
+    return typeof rubric === 'string' && rubric.trim() ? rubric.trim() : null;
   }
 }

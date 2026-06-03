@@ -2,6 +2,8 @@ import { App, TFile, normalizePath } from 'obsidian';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
 import {
   QuestionReviewState,
+  NoteChatMessageRecord,
+  NoteChatRecord,
   ReviewRecordInput,
   ScheduledReviewResult,
   SpacedRepetitionQuestionInput,
@@ -26,6 +28,7 @@ export interface DueQuestionRecord {
   answerText: string | null;
   choices: string[] | null;
   answerCheckMode: string;
+  metadata: Record<string, unknown>;
   nextRepeatAt: string;
   shouldReask: boolean;
   reaskAfterCount: number;
@@ -213,7 +216,8 @@ export class SpacedRepetitionDatabase {
       SELECT
         id, note_id as noteId, study_set_id as studySetId, question_name as questionName,
         question_text as questionText, question_type as questionType, answer_text as answerText,
-        choices_json as choicesJson, answer_check_mode as answerCheckMode, next_repeat_at as nextRepeatAt,
+        choices_json as choicesJson, answer_check_mode as answerCheckMode, metadata_json as metadataJson,
+        next_repeat_at as nextRepeatAt,
         should_reask as shouldReask, reask_after_count as reaskAfterCount
       FROM questions
       WHERE enabled = 1
@@ -234,6 +238,7 @@ export class SpacedRepetitionDatabase {
       answerText: row.answerText ? String(row.answerText) : null,
       choices: this.parseJson(row.choicesJson, null),
       answerCheckMode: String(row.answerCheckMode),
+      metadata: this.parseJson(row.metadataJson, {}),
       nextRepeatAt: String(row.nextRepeatAt),
       shouldReask: Number(row.shouldReask) === 1,
       reaskAfterCount: Number(row.reaskAfterCount),
@@ -385,6 +390,82 @@ export class SpacedRepetitionDatabase {
       tags: this.parseJson(row.tagsJson, []),
       enabled: Number(row.enabled) === 1,
     }));
+  }
+
+  getLatestNoteChat(noteId: string): NoteChatRecord | null {
+    const rows = this.select<Record<string, unknown>>(
+      `
+      SELECT id, note_id as noteId, title, created_at as createdAt, updated_at as updatedAt,
+        metadata_json as metadataJson
+      FROM note_chats
+      WHERE note_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+      `,
+      [noteId]
+    );
+
+    return rows[0] ? this.mapNoteChat(rows[0]) : null;
+  }
+
+  async createNoteChat(noteId: string, title?: string | null, metadata: Record<string, unknown> = {}): Promise<string> {
+    const db = this.requireDb();
+    const id = this.createId('chat');
+    const now = new Date().toISOString();
+
+    db.run(
+      `
+      INSERT INTO note_chats (id, note_id, title, created_at, updated_at, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [id, noteId, title ?? null, now, now, JSON.stringify(metadata)]
+    );
+
+    await this.persist();
+    return id;
+  }
+
+  getNoteChatMessages(chatId: string): NoteChatMessageRecord[] {
+    return this.select<Record<string, unknown>>(
+      `
+      SELECT id, chat_id as chatId, role, content, created_at as createdAt, metadata_json as metadataJson
+      FROM note_chat_messages
+      WHERE chat_id = ?
+      ORDER BY created_at ASC
+      `,
+      [chatId]
+    ).map((row) => ({
+      id: String(row.id),
+      chatId: String(row.chatId),
+      role: this.normalizeChatRole(row.role),
+      content: String(row.content),
+      createdAt: String(row.createdAt),
+      metadata: this.parseJson(row.metadataJson, {}),
+    }));
+  }
+
+  async addNoteChatMessage(input: {
+    chatId: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<string> {
+    const db = this.requireDb();
+    const id = this.createId('message');
+    const now = new Date().toISOString();
+
+    db.run(
+      `
+      INSERT INTO note_chat_messages (id, chat_id, role, content, created_at, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [id, input.chatId, input.role, input.content, now, JSON.stringify(input.metadata ?? {})]
+    );
+
+    db.run('UPDATE note_chats SET updated_at = ? WHERE id = ?', [now, input.chatId]);
+
+    await this.persist();
+    return id;
   }
 
   async close(): Promise<void> {
@@ -645,6 +726,25 @@ export class SpacedRepetitionDatabase {
     } catch {
       return fallback;
     }
+  }
+
+  private mapNoteChat(row: Record<string, unknown>): NoteChatRecord {
+    return {
+      id: String(row.id),
+      noteId: String(row.noteId),
+      title: row.title ? String(row.title) : null,
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt),
+      metadata: this.parseJson(row.metadataJson, {}),
+    };
+  }
+
+  private normalizeChatRole(value: unknown): 'user' | 'assistant' | 'system' {
+    if (value === 'assistant' || value === 'system') {
+      return value;
+    }
+
+    return 'user';
   }
 
   private createId(prefix: string): string {

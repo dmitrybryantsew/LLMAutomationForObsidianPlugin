@@ -40,6 +40,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the review view for due spaced repetition cards.',
   },
   {
+    id: 'chat-with-current-note-ollama',
+    name: 'Chat With Current Note Using Ollama',
+    group: 'Spaced Repetition',
+    description: 'Chats with Ollama using the active note as context and saves the chat history in the spaced repetition database.',
+  },
+  {
     id: 'open-image-generator-panel',
     name: 'Open Image Generator Panel',
     group: 'Generation',
