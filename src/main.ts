@@ -34,6 +34,7 @@ import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // I
 import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
 import { SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
+import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
 
 import './styles/styles.css';
 
@@ -261,6 +262,20 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         }
 
         new SpacedRepetitionManualQuestionModal(this.app, this, activeFile).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'generate-spaced-repetition-from-current-note',
+      name: 'Generate Spaced Repetition Questions From Current Note',
+      callback: () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('No active note');
+          return;
+        }
+
+        new SpacedRepetitionGenerateQuestionsModal(this.app, this, activeFile).open();
       },
     });
 

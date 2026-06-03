@@ -28,6 +28,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Adds a manually written review question linked to the active note.',
   },
   {
+    id: 'generate-spaced-repetition-from-current-note',
+    name: 'Generate Spaced Repetition Questions From Current Note',
+    group: 'Spaced Repetition',
+    description: 'Uses Ollama to generate review questions from the active note and saves them to the spaced repetition database.',
+  },
+  {
     id: 'open-spaced-repetition-review',
     name: 'Open Spaced Repetition Review',
     group: 'Spaced Repetition',

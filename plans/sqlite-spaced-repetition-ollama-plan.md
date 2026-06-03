@@ -35,12 +35,21 @@ Completed Phase 3 pieces:
 - Added Ollama to existing provider dropdowns and the provider connection test modal.
 - Added mocked tests for Ollama text generation, model listing, factory creation, provider parsing, and no-key client creation.
 
+Completed Phase 4 pieces:
+
+- Added `SpacedRepetitionGenerator` for Ollama-backed JSON question generation.
+- Added strict generated-question parsing and validation before SQLite writes.
+- Added command `Generate Spaced Repetition Questions From Current Note`.
+- Added generation modal for active-note question generation with question count, type selection, model selection, and additional instructions.
+- Generated questions are saved into the spaced repetition SQLite database and linked back to the source note through `question_sources`.
+- Added parser/validation tests for generated question JSON.
+
 Current verification:
 
 - Build passes.
-- Test suite passes with `172` tests.
+- Test suite passes with `176` tests.
 - Built plugin package contains `main.js`, `manifest.json`, and `sql-wasm.wasm`.
-- Phase 3 build was deployed to the live Obsidian plugin folder.
+- Phase 4 current-note generation build was deployed to the live Obsidian plugin folder.
 
 ## Goal
 
@@ -797,10 +806,11 @@ Success criteria:
 
 Success criteria:
 
-- Generate questions from a note using Ollama.
-- Generate cross-note questions from linked notes or selected notes.
-- Bad JSON does not corrupt the database.
-- Generated cards appear in the note item manager and review queue.
+- [x] Generate questions from a note using Ollama.
+- [ ] Generate cross-note questions from linked notes or selected notes.
+- [x] Bad JSON does not corrupt the database.
+- [x] Generated cards appear in the review queue.
+- [ ] Generated cards appear in the note item manager.
 
 ### Phase 5: LLM-Checked Answers And Note Chat
 
