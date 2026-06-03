@@ -199,9 +199,9 @@ export class PluginServices {
         dbPath: this._settings.spacedRepetition.databasePath,
         wasmPath: "sql-wasm.wasm"
       });
-      await this._spacedRepetitionDatabase.initialize();
     }
 
+    await this._spacedRepetitionDatabase.initialize();
     return this._spacedRepetitionDatabase;
   }
   

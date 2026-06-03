@@ -36,6 +36,8 @@ export class SpacedRepetitionDatabase {
   private config: SpacedRepetitionDatabaseConfig;
   private sql: SqlJsStatic | null = null;
   private db: Database | null = null;
+  private initialized = false;
+  private initializePromise: Promise<void> | null = null;
 
   constructor(app: App, config: SpacedRepetitionDatabaseConfig) {
     this.app = app;
@@ -46,16 +48,20 @@ export class SpacedRepetitionDatabase {
   }
 
   async initialize(): Promise<void> {
-    this.sql = await initSqlJs({
-      locateFile: (file) => this.config.wasmPath || file,
-    });
+    if (this.initialized) {
+      return;
+    }
 
-    await this.ensureParentDirectory();
-    const data = await this.readDatabaseBytes();
-    this.db = data ? new this.sql.Database(data) : new this.sql.Database();
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
 
-    this.applyMigrations();
-    await this.persist();
+    this.initializePromise = this.doInitialize();
+    try {
+      await this.initializePromise;
+    } finally {
+      this.initializePromise = null;
+    }
   }
 
   async upsertNoteFromFile(file: TFile, contentHash?: string | null): Promise<string> {
@@ -386,7 +392,22 @@ export class SpacedRepetitionDatabase {
       await this.persist();
       this.db.close();
       this.db = null;
+      this.initialized = false;
     }
+  }
+
+  private async doInitialize(): Promise<void> {
+    this.sql = await initSqlJs({
+      locateFile: (file) => this.config.wasmPath || file,
+    });
+
+    await this.ensureParentDirectory();
+    const data = await this.readDatabaseBytes();
+    this.db = data ? new this.sql.Database(data) : new this.sql.Database();
+
+    this.applyMigrations();
+    await this.persist();
+    this.initialized = true;
   }
 
   private applyMigrations(): void {

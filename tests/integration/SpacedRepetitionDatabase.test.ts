@@ -65,6 +65,22 @@ describe('SpacedRepetitionDatabase', () => {
     await database.close();
   });
 
+  it('allows repeated initialize calls before writes', async () => {
+    const { app } = createBinaryAdapterApp();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath,
+    });
+
+    await database.initialize();
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/Repeated.md', basename: 'Repeated' } as any, 'hash');
+
+    expect(noteId).toContain('note_');
+
+    await database.close();
+  });
+
   it('stores study sets and cross-note question sources', async () => {
     const { app } = createBinaryAdapterApp();
     const database = new SpacedRepetitionDatabase(app as any, {
