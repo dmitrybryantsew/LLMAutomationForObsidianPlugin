@@ -3,6 +3,7 @@ export * from '../utils/FileManager';
 export * from '../utils/ErrorHandler';
 export * from '../utils/TranscriptManager';
 import { SummaryType } from '../utils/summaryPrompts'; // Import SummaryType
+import { SpacedRepetitionSettings } from './spacedRepetition';
 
 /**
  * PluginSettings Interface
@@ -95,6 +96,9 @@ export interface PluginSettings {
     
     // Debug settings
     debugMode: boolean; // Enable debug logging for troubleshooting
+
+    // Spaced repetition settings
+    spacedRepetition: SpacedRepetitionSettings;
   }
   
   /**

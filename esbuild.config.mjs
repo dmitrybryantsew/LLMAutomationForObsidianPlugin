@@ -22,6 +22,10 @@ const outfile = path.join(packageDir, "main.js");
 async function copyStaticFiles() {
   await mkdir(packageDir, { recursive: true });
   await copyFile(path.join(rootDir, "manifest.json"), path.join(packageDir, "manifest.json"));
+  await copyFile(
+    path.join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm"),
+    path.join(packageDir, "sql-wasm.wasm")
+  );
 }
 
 if (!watch) {

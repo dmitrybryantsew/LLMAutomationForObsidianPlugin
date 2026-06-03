@@ -12,6 +12,8 @@ import { DatabaseManager } from "../database/DatabaseManager";
 import { LLMClientService } from "./LLMClientService";
 import { ErrorHandler } from "./ErrorHandler";
 import { FlashcardManager } from "./FlashcardManager";
+import { SpacedRepetitionDatabase } from "./spacedRepetition/SpacedRepetitionDatabase";
+import { SpacedRepetitionScheduler } from "./spacedRepetition/SpacedRepetitionScheduler";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
 import type GptFreeTextGeneratorPlugin from "../main";
@@ -35,6 +37,8 @@ export class PluginServices {
   private _databaseManager: DatabaseManager | null = null;
   private _llmClientService: LLMClientService;
   private _flashcardManager: FlashcardManager;
+  private _spacedRepetitionDatabase: SpacedRepetitionDatabase | null = null;
+  private _spacedRepetitionScheduler: SpacedRepetitionScheduler;
   
   // Settings
   private _settings: PluginSettings;
@@ -71,6 +75,17 @@ export class PluginServices {
     // Initialize FlashcardManager
     this._flashcardManager = new FlashcardManager(app, settings, this._llmClientService);
 
+    this._spacedRepetitionScheduler = new SpacedRepetitionScheduler({
+      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
+    });
+
+    if (settings.spacedRepetition.enabled) {
+      this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(app, {
+        dbPath: settings.spacedRepetition.databasePath,
+        wasmPath: "sql-wasm.wasm"
+      });
+    }
+
     // Initialize managers that depend on core services, passing dependencies
     this._transcriptManager = new TranscriptManager(app, this._fileManager, this._tagManager, this._pathManager, this._databaseManager, this._settings, this._llmClientService);
     this._articleManager = new ArticleManager(app, this._fileManager, this._tagManager, this._llmClientService); // Pass TagManager and LLMClientService to ArticleManager
@@ -100,6 +115,14 @@ export class PluginServices {
     
      // TagManager initialization (loading custom tags) is handled within its constructor's async call.
      // We don't need to await it here unless the UI or logic immediately depends on loaded custom tags.
+
+    if (this._spacedRepetitionDatabase) {
+      try {
+        await this._spacedRepetitionDatabase.initialize();
+      } catch (error) {
+        console.error("Failed to initialize spaced repetition database:", error);
+      }
+    }
   }
   
   /**
@@ -161,6 +184,14 @@ export class PluginServices {
   public get flashcardManager(): FlashcardManager {
     return this._flashcardManager;
   }
+
+  public get spacedRepetitionDatabase(): SpacedRepetitionDatabase | null {
+    return this._spacedRepetitionDatabase;
+  }
+
+  public get spacedRepetitionScheduler(): SpacedRepetitionScheduler {
+    return this._spacedRepetitionScheduler;
+  }
   
   /**
    * Update settings when they change
@@ -173,6 +204,10 @@ export class PluginServices {
     
     // Update FlashcardManager
     this._flashcardManager.updateSettings(settings);
+
+    this._spacedRepetitionScheduler = new SpacedRepetitionScheduler({
+      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
+    });
     
     // Update ErrorHandler debug mode
     ErrorHandler.setDebugMode(settings.debugMode || false);
@@ -206,6 +241,10 @@ export class PluginServices {
     // Close database connection
     if (this._databaseManager) {
       await this._databaseManager.close();
+    }
+
+    if (this._spacedRepetitionDatabase) {
+      await this._spacedRepetitionDatabase.close();
     }
 
     // Other managers currently don't hold resources needing explicit destroy

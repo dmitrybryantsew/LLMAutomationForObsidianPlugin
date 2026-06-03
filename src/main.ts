@@ -672,6 +672,10 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.minContextLength = this.settings.minContextLength ?? DEFAULT_SETTINGS.minContextLength;
     this.settings.defaultBackend = this.settings.defaultBackend ?? DEFAULT_SETTINGS.defaultBackend; // Initialize defaultBackend
     this.settings.flashcardFolder = this.settings.flashcardFolder ?? DEFAULT_SETTINGS.flashcardFolder; // Initialize flashcardFolder
+    this.settings.spacedRepetition = {
+      ...DEFAULT_SETTINGS.spacedRepetition,
+      ...(this.settings.spacedRepetition ?? {})
+    };
     
     // Settings relevant to service initialization are passed in the constructor
     // of PluginServices during plugin's onload.

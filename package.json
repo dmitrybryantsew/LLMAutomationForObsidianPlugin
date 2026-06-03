@@ -26,5 +26,8 @@
     "pdfjs-dist": "^4.0.379",
     "typescript": "^5.9.3",
     "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
   }
 }

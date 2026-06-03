@@ -44,6 +44,15 @@ const DEFAULT_SETTINGS = {
   zaiTextModel: "glm-4.6",
   // Debug settings
   debugMode: false, // Debug mode for detailed logging
+  // Spaced repetition settings
+  spacedRepetition: {
+    enabled: false,
+    databasePath: ".obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite",
+    maxReviewCardsPerSession: 50,
+    newCardsPerDay: 20,
+    gradeZeroReaskDelay: 3,
+    includeLinkedNotesByDefault: true,
+  },
 };
 
 export { VIEW_TYPE_GENERATE_TEXT };
