@@ -9,7 +9,8 @@
 export enum LLMProvider {
     OPENROUTER = 'openrouter',
     CHUTES = 'chutes',
-    ZAI = 'zai'
+    ZAI = 'zai',
+    OLLAMA = 'ollama'
 }
 
 /**
@@ -52,6 +53,15 @@ export interface ChutesConfig extends ProviderConfig {
 export interface ZAIConfig extends ProviderConfig {
     provider: LLMProvider.ZAI;
     /** ZAI-specific settings */
+}
+
+/**
+ * Ollama-specific configuration
+ */
+export interface OllamaConfig extends ProviderConfig {
+    provider: LLMProvider.OLLAMA;
+    /** Ollama base URL, for example http://localhost:11434 */
+    baseUrl: string;
 }
 
 /**

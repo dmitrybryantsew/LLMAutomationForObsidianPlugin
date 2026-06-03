@@ -6,13 +6,17 @@
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { ChutesProvider } from './ChutesProvider';
 import { ZAIProvider } from './ZAIProvider';
+import { OllamaProvider } from './OllamaProvider';
 import {
     LLMProvider,
     ProviderConfig,
     OpenRouterConfig,
     ChutesConfig,
-    ZAIConfig
+    ZAIConfig,
+    OllamaConfig
 } from '../types/providers';
+
+export type LLMClient = OpenRouterProvider | ChutesProvider | ZAIProvider | OllamaProvider;
 
 /**
  * LLM Client Factory
@@ -28,7 +32,7 @@ export class LLMClientFactory {
     static createClient(
         provider: LLMProvider,
         config: ProviderConfig
-    ): OpenRouterProvider | ChutesProvider | ZAIProvider {
+    ): LLMClient {
         switch (provider) {
             case LLMProvider.OPENROUTER:
                 return new OpenRouterProvider(config as OpenRouterConfig);
@@ -38,6 +42,9 @@ export class LLMClientFactory {
             
             case LLMProvider.ZAI:
                 return new ZAIProvider(config as ZAIConfig);
+
+            case LLMProvider.OLLAMA:
+                return new OllamaProvider(config as OllamaConfig);
             
             default:
                 throw new Error(`Unsupported provider: ${provider}`);
@@ -116,6 +123,27 @@ export class LLMClientFactory {
     }
 
     /**
+     * Create an Ollama client
+     * @param baseUrl - Ollama base URL
+     * @param debugMode - Enable debug logging
+     * @param timeout - Request timeout in milliseconds
+     * @returns Ollama client instance
+     */
+    static createOllamaClient(
+        baseUrl?: string,
+        debugMode?: boolean,
+        timeout?: number
+    ): OllamaProvider {
+        const config: OllamaConfig = {
+            apiKey: '',
+            baseUrl: baseUrl || 'http://localhost:11434',
+            timeout: timeout ?? 120000,
+            provider: LLMProvider.OLLAMA
+        };
+        return new OllamaProvider(config, debugMode || false);
+    }
+
+    /**
      * Parse provider from string
      * @param providerString - Provider string (e.g., "openrouter", "chutes", "zai")
      * @returns LLMProvider enum value
@@ -130,6 +158,8 @@ export class LLMClientFactory {
                 return LLMProvider.CHUTES;
             case 'zai':
                 return LLMProvider.ZAI;
+            case 'ollama':
+                return LLMProvider.OLLAMA;
             default:
                 throw new Error(`Unknown provider: ${providerString}`);
         }
@@ -148,6 +178,8 @@ export class LLMClientFactory {
                 return 'Chutes';
             case LLMProvider.ZAI:
                 return 'ZAI';
+            case LLMProvider.OLLAMA:
+                return 'Ollama';
         }
     }
 }
@@ -168,9 +200,11 @@ export function createLLMClientFromSettings(
         openRouterBaseUrl?: string;
         chutesBaseUrl?: string;
         zaiBaseUrl?: string;
+        ollamaBaseUrl?: string;
+        ollamaTimeout?: number;
         debugMode?: boolean;
     }
-): OpenRouterProvider | ChutesProvider | ZAIProvider {
+): LLMClient {
     switch (provider) {
         case LLMProvider.OPENROUTER:
             if (!settings.openRouterApiKey) {
@@ -201,6 +235,13 @@ export function createLLMClientFromSettings(
                 settings.zaiApiKey,
                 settings.zaiBaseUrl,
                 settings.debugMode
+            );
+
+        case LLMProvider.OLLAMA:
+            return LLMClientFactory.createOllamaClient(
+                settings.ollamaBaseUrl,
+                settings.debugMode,
+                settings.ollamaTimeout
             );
         
         default:

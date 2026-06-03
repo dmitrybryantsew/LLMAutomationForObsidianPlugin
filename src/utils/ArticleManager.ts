@@ -6,6 +6,7 @@ import { TagManager } from "./TagManager"; // Import TagManager
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
 
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
 
 interface ArticleData {
   title: string;
@@ -33,7 +34,7 @@ interface ArticleSummaryOptions {
   summaryModel: string;
   outputLanguage: string;
   articlesFolder: string;
-  provider?: 'openrouter' | 'chutes' | 'zai'; // Optional provider override
+  provider?: TextProviderId; // Optional provider override
 }
 
 // Assuming backend returns similar structure for generate-text
@@ -140,7 +141,7 @@ class ArticleManager {
     content: string,
     model: string,
     outputLanguage: string,
-    provider?: 'openrouter' | 'chutes' | 'zai'
+    provider?: TextProviderId
   ): Promise<string> {
     try {
         // Limit content sent to LLM to avoid token limits, especially for summaries
@@ -183,7 +184,7 @@ class ArticleManager {
     }
   }
 
-  private async generateTags(articleData: ArticleData, provider?: 'openrouter' | 'chutes' | 'zai'): Promise<string[]> {
+  private async generateTags(articleData: ArticleData, provider?: TextProviderId): Promise<string[]> {
     try {
        // Get existing tags formatted for the prompt
        const existingTagsPrompt = this.tagManager.formatTagsForPrompt(30); // Include a sample of existing tags

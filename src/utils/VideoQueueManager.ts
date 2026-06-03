@@ -7,6 +7,7 @@ import type GptFreeTextGeneratorPlugin from '../main';
 import { PathManager } from "./pathStructure/PathManager"; // Import PathManager
 import { HierarchyManager } from "./HierarchyManager"; // Import HierarchyManager
 
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
 
 export interface VideoProcessingOptions {
   summaryModel: string;
@@ -16,7 +17,7 @@ export interface VideoProcessingOptions {
   numberOfOutputTokens: number;
   topic?: string;
   skipExisting: boolean;
-  provider?: 'openrouter' | 'chutes' | 'zai'; // New: Use multi-provider system
+  provider?: TextProviderId; // New: Use multi-provider system
   enableChunking?: boolean; // New: Enable chunking for long videos
 }
 

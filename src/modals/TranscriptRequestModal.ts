@@ -3,13 +3,15 @@ import type GptFreeTextGeneratorPlugin from '../main';
 import { TranscriptManager } from "../utils/TranscriptManager";
 import { ErrorHandler } from "../utils/ErrorHandler";
 
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+
 export class TranscriptRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
   private transcriptManager: TranscriptManager;
   private videoUrl: string = "";
   private transcriptLanguage: string = "en";
   private outputLanguage: string = "en"; // Add new property for output language
-  private provider: 'openrouter' | 'chutes' | 'zai'; // New: Use multi-provider system
+  private provider: TextProviderId; // New: Use multi-provider system
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin) {
     super(app);
@@ -31,12 +33,13 @@ export class TranscriptRequestModal extends Modal {
         dropdown.addOptions({
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
-          'zai': 'ZAI'
+          'zai': 'ZAI',
+          'ollama': 'Ollama'
         });
         dropdown
           .setValue(this.provider)
           .onChange(value => {
-            this.provider = value as 'openrouter' | 'chutes' | 'zai';
+            this.provider = value as TextProviderId;
           });
       });
 

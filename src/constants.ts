@@ -30,19 +30,24 @@ const DEFAULT_SETTINGS = {
   descriptionStorageLocation: 'database', // 'database' or 'note'
   detailedSummariesStorageLocation: 'database', // 'database' or 'note'
   // Multi-provider settings
-  defaultLLMProvider: 'openrouter', // 'openrouter', 'chutes', or 'zai'
+  defaultLLMProvider: 'openrouter', // 'openrouter', 'chutes', 'zai', or 'ollama'
   chutesApiKey: "",
   zaiApiKey: "",
   providerTimeout: 60000, // 60 seconds default timeout
   providerRetryCount: 3, // Number of retries for failed requests
+  ollamaBaseUrl: "http://localhost:11434",
+  ollamaTimeout: 120000,
+  ollamaModels: [],
   // Provider-specific summary models (NEW)
   openrouterSummaryModel: "openrouter/deepseek/deepseek-r1:free",
   chutesSummaryModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiSummaryModel: "glm-4.6",
+  ollamaSummaryModel: "gemma4:31b-cloud",
   // Provider-specific text models (NEW)
   openrouterTextModel: "openrouter/deepseek/deepseek-r1:free",
   chutesTextModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiTextModel: "glm-4.6",
+  ollamaTextModel: "gemma4:31b-cloud",
   // Debug settings
   debugMode: false, // Debug mode for detailed logging
   // Spaced repetition settings

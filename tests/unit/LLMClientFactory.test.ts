@@ -7,6 +7,7 @@ import { LLMClientFactory, createLLMClientFromSettings } from '../../src/utils/L
 import { OpenRouterProvider } from '../../src/utils/OpenRouterProvider';
 import { ChutesProvider } from '../../src/utils/ChutesProvider';
 import { ZAIProvider } from '../../src/utils/ZAIProvider';
+import { OllamaProvider } from '../../src/utils/OllamaProvider';
 import { LLMProvider } from '../../src/types/providers';
 
 describe('LLMClientFactory', () => {
@@ -45,6 +46,19 @@ describe('LLMClientFactory', () => {
             );
             
             expect(client).toBeInstanceOf(ZAIProvider);
+        });
+
+        it('should create Ollama client', () => {
+            const client = LLMClientFactory.createClient(
+                LLMProvider.OLLAMA,
+                {
+                    apiKey: '',
+                    baseUrl: 'http://localhost:11434',
+                    provider: LLMProvider.OLLAMA
+                }
+            );
+
+            expect(client).toBeInstanceOf(OllamaProvider);
         });
 
         it('should throw error for unsupported provider', () => {
@@ -131,6 +145,14 @@ describe('LLMClientFactory', () => {
         });
     });
 
+    describe('createOllamaClient', () => {
+        it('should create Ollama client without API key', () => {
+            const client = LLMClientFactory.createOllamaClient('http://localhost:11434');
+
+            expect(client).toBeInstanceOf(OllamaProvider);
+        });
+    });
+
     describe('parseProvider', () => {
         it('should parse openrouter string', () => {
             const provider = LLMClientFactory.parseProvider('openrouter');
@@ -160,6 +182,11 @@ describe('LLMClientFactory', () => {
         it('should parse zai string', () => {
             const provider = LLMClientFactory.parseProvider('zai');
             expect(provider).toBe(LLMProvider.ZAI);
+        });
+
+        it('should parse ollama string', () => {
+            const provider = LLMClientFactory.parseProvider('ollama');
+            expect(provider).toBe(LLMProvider.OLLAMA);
         });
 
         it('should parse ZAI string (case insensitive)', () => {
@@ -200,6 +227,11 @@ describe('LLMClientFactory', () => {
             const name = LLMClientFactory.getProviderName(LLMProvider.ZAI);
             expect(name).toBe('ZAI');
         });
+
+        it('should return Ollama for OLLAMA enum', () => {
+            const name = LLMClientFactory.getProviderName(LLMProvider.OLLAMA);
+            expect(name).toBe('Ollama');
+        });
     });
 });
 
@@ -235,6 +267,17 @@ describe('createLLMClientFromSettings', () => {
         );
         
         expect(client).toBeInstanceOf(ZAIProvider);
+    });
+
+    it('should create Ollama client from settings without API key', () => {
+        const client = createLLMClientFromSettings(
+            LLMProvider.OLLAMA,
+            {
+                ollamaBaseUrl: 'http://localhost:11434'
+            }
+        );
+
+        expect(client).toBeInstanceOf(OllamaProvider);
     });
 
     it('should throw error if OpenRouter API key is missing', () => {

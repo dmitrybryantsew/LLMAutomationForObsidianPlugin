@@ -8,6 +8,8 @@ import {
   import type GptFreeTextGeneratorPlugin from '../main';
   import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
 
+  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+
   class TextGeneratorModal extends Modal {
     plugin: GptFreeTextGeneratorPlugin;
     onSave: (options: any) => void;
@@ -15,7 +17,7 @@ import {
     language: string;
     textType: string;
     filePath: string = "";
-    private provider: 'openrouter' | 'chutes' | 'zai'; // New: Use multi-provider system
+    private provider: TextProviderId; // New: Use multi-provider system
     private modelDropdown: DropdownComponent | null = null; // Reference to model dropdown component
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin, onSave: (options: any) => void) {
@@ -29,7 +31,7 @@ import {
   }
 
   // Helper method to get text model for provider
-  private getTextModelForProvider(provider: 'openrouter' | 'chutes' | 'zai'): string {
+  private getTextModelForProvider(provider: TextProviderId): string {
     switch (provider) {
       case 'openrouter':
         return this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
@@ -37,6 +39,8 @@ import {
         return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
       case 'zai':
         return this.plugin.settings.zaiTextModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
       default:
         return this.plugin.settings.defaultTextModel;
     }
@@ -56,12 +60,13 @@ import {
         dropdown.addOptions({
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
-          'zai': 'ZAI'
+          'zai': 'ZAI',
+          'ollama': 'Ollama'
         });
         dropdown
           .setValue(this.provider)
           .onChange(async value => {
-            this.provider = value as 'openrouter' | 'chutes' | 'zai';
+            this.provider = value as TextProviderId;
             this.model = this.getTextModelForProvider(this.provider); // Update model for new provider
             this.updateModelDropdown(contentEl); // Update model dropdown based on new provider
           });

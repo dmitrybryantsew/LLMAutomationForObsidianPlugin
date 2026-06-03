@@ -18,7 +18,7 @@ interface TestResult {
 
 class TestProviderConnectionModal extends Modal {
     private plugin: GptFreeTextGeneratorPlugin;
-    private selectedProvider: LLMProvider = LLMProvider.CHUTES;
+    private selectedProvider: LLMProvider = LLMProvider.OLLAMA;
     private testPrompt: string = "Hello! Please respond with a simple greeting.";
     private testResult: TestResult | null = null;
     private isTesting: boolean = false;
@@ -47,7 +47,8 @@ class TestProviderConnectionModal extends Modal {
                 dropdown.addOptions({
                     'openrouter': 'OpenRouter',
                     'chutes': 'Chutes',
-                    'zai': 'ZAI'
+                    'zai': 'ZAI',
+                    'ollama': 'Ollama'
                 });
                 dropdown
                     .setValue(this.selectedProvider.toLowerCase())
@@ -105,7 +106,7 @@ class TestProviderConnectionModal extends Modal {
         try {
             // Check if API key is configured
             const apiKey = this.getApiKeyForProvider(this.selectedProvider);
-            if (!apiKey) {
+            if (this.selectedProvider !== LLMProvider.OLLAMA && !apiKey) {
                 this.testResult = {
                     success: false,
                     message: "API key not configured",
@@ -123,6 +124,8 @@ class TestProviderConnectionModal extends Modal {
                 openRouterApiKey: this.plugin.settings.openRouterApiKey,
                 chutesApiKey: this.plugin.settings.chutesApiKey,
                 zaiApiKey: this.plugin.settings.zaiApiKey,
+                ollamaBaseUrl: this.plugin.settings.ollamaBaseUrl,
+                ollamaTimeout: this.plugin.settings.ollamaTimeout,
                 debugMode: true
             });
 
@@ -172,6 +175,8 @@ class TestProviderConnectionModal extends Modal {
                 return this.plugin.settings.chutesApiKey;
             case LLMProvider.ZAI:
                 return this.plugin.settings.zaiApiKey;
+            case LLMProvider.OLLAMA:
+                return '';
             default:
                 return undefined;
         }
@@ -185,6 +190,8 @@ class TestProviderConnectionModal extends Modal {
                 return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
             case LLMProvider.ZAI:
                 return this.plugin.settings.zaiTextModel || 'glm-4.6';
+            case LLMProvider.OLLAMA:
+                return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
             default:
                 return this.plugin.settings.defaultTextModel;
         }

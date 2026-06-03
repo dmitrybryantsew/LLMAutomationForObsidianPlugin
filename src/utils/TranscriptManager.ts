@@ -12,6 +12,8 @@ import { DatabaseManager } from "../database/DatabaseManager";
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
 
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+
 interface VideoData {
   title: string;
   channel: string;
@@ -38,7 +40,7 @@ interface LocalTranscriptInput {
   summaryType: SummaryType; // New: Type of summary
   numberOfOutputTokens: number; // New: Max tokens for summary
   topic?: string; // New: Optional topic for tutorials
-  provider?: 'openrouter' | 'chutes' | 'zai'; // Optional provider override
+  provider?: TextProviderId; // Optional provider override
 }
 
 interface TranscriptMetadata {
@@ -68,7 +70,7 @@ interface VideoSummaryOptions {
   overwriteExisting?: boolean; // Add this new property
   enableChunking?: boolean; // New: Enable chunking for long videos
   saveToDatabase?: boolean; // New: Save transcript to database instead of note file
-  provider?: 'openrouter' | 'chutes' | 'zai'; // Optional provider override
+  provider?: TextProviderId; // Optional provider override
 }
   
   // You might also want a response type for the provider metadata

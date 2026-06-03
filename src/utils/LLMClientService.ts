@@ -4,17 +4,14 @@
  */
 
 import { App } from 'obsidian';
-import { LLMClientFactory, createLLMClientFromSettings } from './LLMClientFactory';
+import { LLMClientFactory, createLLMClientFromSettings, LLMClient } from './LLMClientFactory';
 import { LLMProvider } from '../types/providers';
-import { OpenRouterProvider } from './OpenRouterProvider';
-import { ChutesProvider } from './ChutesProvider';
-import { ZAIProvider } from './ZAIProvider';
 import { PluginSettings } from '../types';
 
 export class LLMClientService {
   private app: App;
   private settings: PluginSettings;
-  private currentClient: OpenRouterProvider | ChutesProvider | ZAIProvider | null = null;
+  private currentClient: LLMClient | null = null;
 
   constructor(app: App, settings: PluginSettings) {
     this.app = app;
@@ -34,6 +31,8 @@ export class LLMClientService {
         openRouterBaseUrl: this.settings.openRouterBaseUrl,
         chutesBaseUrl: this.settings.chutesBaseUrl,
         zaiBaseUrl: this.settings.zaiBaseUrl,
+        ollamaBaseUrl: this.settings.ollamaBaseUrl,
+        ollamaTimeout: this.settings.ollamaTimeout,
         debugMode: this.settings.debugMode
       });
       
@@ -53,7 +52,7 @@ export class LLMClientService {
   /**
    * Get the current LLM client
    */
-  getClient(): OpenRouterProvider | ChutesProvider | ZAIProvider | null {
+  getClient(): LLMClient | null {
     return this.currentClient;
   }
 
@@ -61,7 +60,7 @@ export class LLMClientService {
    * Get a client for a specific provider (ad-hoc provider selection)
    * This allows getting a specific client without changing global defaults
    */
-  getClientForProvider(providerId: 'openrouter' | 'chutes' | 'zai'): OpenRouterProvider | ChutesProvider | ZAIProvider | null {
+  getClientForProvider(providerId: 'openrouter' | 'chutes' | 'zai' | 'ollama'): LLMClient | null {
     try {
       const provider = LLMClientFactory.parseProvider(providerId);
       return createLLMClientFromSettings(provider, {
@@ -71,6 +70,8 @@ export class LLMClientService {
         openRouterBaseUrl: this.settings.openRouterBaseUrl,
         chutesBaseUrl: this.settings.chutesBaseUrl,
         zaiBaseUrl: this.settings.zaiBaseUrl,
+        ollamaBaseUrl: this.settings.ollamaBaseUrl,
+        ollamaTimeout: this.settings.ollamaTimeout,
         debugMode: this.settings.debugMode
       });
     } catch (error) {

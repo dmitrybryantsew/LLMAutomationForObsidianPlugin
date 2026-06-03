@@ -61,7 +61,7 @@ export interface PluginSettings {
     minContextLength: number;             // Minimum context length filter
     
     // Backend selection
-    defaultBackend: 'g4f' | 'openrouter' | 'chutes' | 'zai'; // Added for backend selection
+    defaultBackend: 'g4f' | 'openrouter' | 'chutes' | 'zai' | 'ollama'; // Added for backend selection
     
     // Content storage location settings
     transcriptStorageLocation: 'database' | 'note'; // Where to store transcripts
@@ -69,7 +69,7 @@ export interface PluginSettings {
     detailedSummariesStorageLocation: 'database' | 'note'; // Where to store detailed summaries
     
     // Multi-provider settings
-    defaultLLMProvider: 'openrouter' | 'chutes' | 'zai'; // Default LLM provider
+    defaultLLMProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama'; // Default LLM provider
     chutesApiKey: string; // API key for Chutes provider
     zaiApiKey: string; // API key for ZAI provider
     providerTimeout: number; // Request timeout in milliseconds
@@ -79,20 +79,25 @@ export interface PluginSettings {
     openRouterBaseUrl?: string; // Custom OpenRouter endpoint
     chutesBaseUrl?: string; // Custom Chutes endpoint
     zaiBaseUrl?: string; // Custom ZAI endpoint
+    ollamaBaseUrl: string; // Ollama local/server endpoint
+    ollamaTimeout: number; // Ollama request timeout in milliseconds
     
     // Provider-specific model lists
     chutesModels?: string[]; // List of available Chutes models
     zaiModels?: string[]; // List of available ZAI models
+    ollamaModels?: string[]; // List of available Ollama models
     
     // Provider-specific summary models (NEW)
     openrouterSummaryModel: string; // Default summary model for OpenRouter
     chutesSummaryModel: string; // Default summary model for Chutes
     zaiSummaryModel: string; // Default summary model for ZAI
+    ollamaSummaryModel: string; // Default summary model for Ollama
     
     // Provider-specific text models (NEW)
     openrouterTextModel: string; // Default text model for OpenRouter
     chutesTextModel: string; // Default text model for Chutes
     zaiTextModel: string; // Default text model for ZAI
+    ollamaTextModel: string; // Default text model for Ollama
     
     // Debug settings
     debugMode: boolean; // Enable debug logging for troubleshooting

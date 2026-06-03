@@ -26,12 +26,21 @@ Completed Phase 2 pieces:
 - Added review persistence with scheduler updates and review history writes.
 - Added same-session grade `0` reask behavior where the card waits for other reviewed cards before becoming due again.
 
+Completed Phase 3 pieces:
+
+- Added `ollama` as a first-class LLM provider.
+- Added `OllamaProvider` using Obsidian `requestUrl` against Ollama `/api/chat` with `stream: false`.
+- Added Ollama model listing through `/api/tags`.
+- Added Ollama settings for base URL, model refresh, model selection, and longer Ollama timeout.
+- Added Ollama to existing provider dropdowns and the provider connection test modal.
+- Added mocked tests for Ollama text generation, model listing, factory creation, provider parsing, and no-key client creation.
+
 Current verification:
 
 - Build passes.
-- Test suite passes with `162` tests.
+- Test suite passes with `172` tests.
 - Built plugin package contains `main.js`, `manifest.json`, and `sql-wasm.wasm`.
-- Phase 2 build was deployed to the live Obsidian plugin folder.
+- Phase 3 build was deployed to the live Obsidian plugin folder.
 
 ## Goal
 
@@ -774,9 +783,9 @@ Success criteria:
 
 Success criteria:
 
-- Plugin can call local Ollama.
-- Existing OpenRouter/Chutes/ZAI tests still pass.
-- No API key is required for Ollama.
+- [x] Plugin can call local Ollama.
+- [x] Existing OpenRouter/Chutes/ZAI tests still pass.
+- [x] No API key is required for Ollama.
 
 ### Phase 4: LLM Question Generation
 

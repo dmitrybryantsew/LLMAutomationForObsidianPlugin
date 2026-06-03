@@ -4,6 +4,8 @@ import type GptFreeTextGeneratorPlugin from '../main';
 import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts';
 import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
 
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+
 export class PlaylistSummaryModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
   private playlistUrl: string = "";
@@ -17,7 +19,7 @@ export class PlaylistSummaryModal extends Modal {
   private topic: string = "";
   private isProcessing: boolean = false;
   private skipExisting: boolean = true;
-  private provider: 'openrouter' | 'chutes' | 'zai'; // New: Use multi-provider system
+  private provider: TextProviderId; // New: Use multi-provider system
   private enableChunking: boolean = true; // New: Enable chunking toggle
   private modelDropdown: DropdownComponent | null = null; // Reference to model dropdown component
 
@@ -29,7 +31,7 @@ export class PlaylistSummaryModal extends Modal {
   }
 
   // Helper method to get summary model for provider
-  private getSummaryModelForProvider(provider: 'openrouter' | 'chutes' | 'zai'): string {
+  private getSummaryModelForProvider(provider: TextProviderId): string {
     switch (provider) {
       case 'openrouter':
         return this.plugin.settings.openrouterSummaryModel || this.plugin.settings.summaryModel;
@@ -37,6 +39,8 @@ export class PlaylistSummaryModal extends Modal {
         return this.plugin.settings.chutesSummaryModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
       case 'zai':
         return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
       default:
         return this.plugin.settings.summaryModel;
     }
@@ -137,12 +141,13 @@ export class PlaylistSummaryModal extends Modal {
         dropdown.addOptions({
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
-          'zai': 'ZAI'
+          'zai': 'ZAI',
+          'ollama': 'Ollama'
         });
         dropdown
           .setValue(this.provider)
           .onChange(async value => {
-            this.provider = value as 'openrouter' | 'chutes' | 'zai';
+            this.provider = value as TextProviderId;
             this.summaryModel = this.getSummaryModelForProvider(this.provider); // Update model for new provider
             this.updateModelDropdown(contentEl); // Update model dropdown based on new provider
           });

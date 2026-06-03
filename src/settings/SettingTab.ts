@@ -9,6 +9,10 @@ import {
   import { fetchOpenRouterModels } from '../utils/OpenRouterAPI';
   import { OpenRouterModel } from '../types';
   import { TestProviderConnectionModal } from '../modals/TestProviderConnectionModal';
+  import { LLMClientFactory } from '../utils/LLMClientFactory';
+  import { LLMProvider } from '../types/providers';
+
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
 
 class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
@@ -45,12 +49,13 @@ class SettingTab extends PluginSettingTab {
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
           'zai': 'ZAI',
+          'ollama': 'Ollama',
           'g4f': 'G4F (Local - Legacy)'
         });
         dropdown
           .setValue(this.plugin.settings.defaultBackend)
           .onChange(async value => {
-            this.plugin.settings.defaultBackend = value as 'g4f' | 'openrouter' | 'chutes' | 'zai';
+            this.plugin.settings.defaultBackend = value as 'g4f' | TextProviderId;
             await this.plugin.saveSettings();
             this.display(); // Re-render to update model dropdowns
           });
@@ -92,7 +97,7 @@ class SettingTab extends PluginSettingTab {
   }
 
   // Helper method to get text model for provider
-  private getTextModelForProvider(provider: 'openrouter' | 'chutes' | 'zai'): string {
+  private getTextModelForProvider(provider: TextProviderId): string {
     switch (provider) {
       case 'openrouter':
         return this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
@@ -100,13 +105,15 @@ class SettingTab extends PluginSettingTab {
         return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
       case 'zai':
         return this.plugin.settings.zaiTextModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
       default:
         return this.plugin.settings.defaultTextModel;
     }
   }
 
   // Helper method to set text model for provider
-  private setTextModelForProvider(provider: 'openrouter' | 'chutes' | 'zai', model: string): void {
+  private setTextModelForProvider(provider: TextProviderId, model: string): void {
     switch (provider) {
       case 'openrouter':
         this.plugin.settings.openrouterTextModel = model;
@@ -117,13 +124,16 @@ class SettingTab extends PluginSettingTab {
       case 'zai':
         this.plugin.settings.zaiTextModel = model;
         break;
+      case 'ollama':
+        this.plugin.settings.ollamaTextModel = model;
+        break;
       default:
         this.plugin.settings.defaultTextModel = model;
     }
   }
 
   // Helper method to get summary model for provider
-  private getSummaryModelForProvider(provider: 'openrouter' | 'chutes' | 'zai'): string {
+  private getSummaryModelForProvider(provider: TextProviderId): string {
     switch (provider) {
       case 'openrouter':
         return this.plugin.settings.openrouterSummaryModel || this.plugin.settings.summaryModel;
@@ -131,13 +141,15 @@ class SettingTab extends PluginSettingTab {
         return this.plugin.settings.chutesSummaryModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
       case 'zai':
         return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
       default:
         return this.plugin.settings.summaryModel;
     }
   }
 
   // Helper method to set summary model for provider
-  private setSummaryModelForProvider(provider: 'openrouter' | 'chutes' | 'zai', model: string): void {
+  private setSummaryModelForProvider(provider: TextProviderId, model: string): void {
     switch (provider) {
       case 'openrouter':
         this.plugin.settings.openrouterSummaryModel = model;
@@ -147,6 +159,9 @@ class SettingTab extends PluginSettingTab {
         break;
       case 'zai':
         this.plugin.settings.zaiSummaryModel = model;
+        break;
+      case 'ollama':
+        this.plugin.settings.ollamaSummaryModel = model;
         break;
       default:
         this.plugin.settings.summaryModel = model;
@@ -491,12 +506,13 @@ class SettingTab extends PluginSettingTab {
         dropdown.addOptions({
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
-          'zai': 'ZAI'
+          'zai': 'ZAI',
+          'ollama': 'Ollama'
         });
         dropdown
           .setValue(this.plugin.settings.defaultLLMProvider)
           .onChange(async value => {
-            this.plugin.settings.defaultLLMProvider = value as 'openrouter' | 'chutes' | 'zai';
+            this.plugin.settings.defaultLLMProvider = value as TextProviderId;
             await this.plugin.saveSettings();
             this.display(); // Re-render to show provider-specific settings
           });
@@ -525,6 +541,54 @@ class SettingTab extends PluginSettingTab {
         }));
 
     // Provider Timeout
+    new Setting(containerEl)
+      .setName("Ollama Base URL")
+      .setDesc("Ollama server endpoint. Use http://localhost:11434 for local Ollama.")
+      .addText(text => text
+        .setValue(this.plugin.settings.ollamaBaseUrl || 'http://localhost:11434')
+        .onChange(async value => {
+          this.plugin.settings.ollamaBaseUrl = value.trim() || 'http://localhost:11434';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Refresh Ollama Models")
+      .setDesc("Load models from Ollama /api/tags. Cloud models may not appear until used or signed in.")
+      .addButton(button => button
+        .setButtonText("Refresh Ollama")
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Refreshing...");
+          try {
+            const client = LLMClientFactory.createOllamaClient(
+              this.plugin.settings.ollamaBaseUrl,
+              this.plugin.settings.debugMode,
+              this.plugin.settings.ollamaTimeout
+            );
+            this.plugin.settings.ollamaModels = await client.listModels();
+            await this.plugin.saveSettings();
+            new Notice(`Loaded ${this.plugin.settings.ollamaModels.length} Ollama model(s).`);
+            this.display();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            new Notice(`Failed to refresh Ollama models: ${message}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Refresh Ollama");
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("Ollama Timeout (seconds)")
+      .setDesc("Longer values help with first cloud calls and larger local models.")
+      .addText(text => text
+        .setValue(String((this.plugin.settings.ollamaTimeout || 120000) / 1000))
+        .onChange(async value => {
+          const numValue = parseInt(value, 10) * 1000;
+          if (!isNaN(numValue) && numValue > 0) {
+            this.plugin.settings.ollamaTimeout = numValue;
+            await this.plugin.saveSettings();
+          }
+        }));
+
     new Setting(containerEl)
       .setName("Provider Timeout (seconds)")
       .setDesc("Timeout for API requests in seconds")
@@ -570,7 +634,7 @@ class SettingTab extends PluginSettingTab {
     return models;
   }
 
-  public getFilteredModelsForBackend(provider: 'openrouter' | 'chutes' | 'zai'): Record<string, string> {
+  public getFilteredModelsForBackend(provider: TextProviderId): Record<string, string> {
     switch (provider) {
       case 'openrouter':
         return this.getFilteredOpenRouterModels().reduce((acc: Record<string, string>, model) => {
@@ -595,6 +659,16 @@ class SettingTab extends PluginSettingTab {
           "glm-4.7": "GLM 4.7",
           // Add more ZAI models as needed
         };
+
+      case 'ollama': {
+        const models = this.plugin.settings.ollamaModels?.length
+          ? this.plugin.settings.ollamaModels
+          : [this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud'];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
       
       default:
         // Fallback to G4F models for backward compatibility
