@@ -96,7 +96,13 @@ export interface ProviderApiResponse {
         index: number;
         message: {
             role: string;
-            content: string;
+            content?: string | Array<{
+                type?: string;
+                text?: string;
+                content?: string;
+            }> | null;
+            reasoning?: string | null;
+            refusal?: string | null;
         };
         finish_reason: string;
     }>;

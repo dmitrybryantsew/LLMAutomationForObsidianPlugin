@@ -92,6 +92,66 @@ describe('OpenRouterProvider Integration', () => {
             expect(content).toContain('Please answer in spanish');
         });
 
+        it('should read text from OpenRouter content blocks', async () => {
+            const mockResponse = {
+                id: 'test-id',
+                model: 'test-model',
+                created: 1234567890,
+                choices: [{
+                    message: {
+                        role: 'assistant',
+                        content: [
+                            { type: 'text', text: 'First block' },
+                            { type: 'text', text: 'Second block' }
+                        ]
+                    },
+                    finish_reason: 'stop'
+                }]
+            };
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockResponse
+            });
+
+            const result = await provider.generateText({
+                message: 'Test',
+                model: 'test-model',
+                language: 'english'
+            });
+
+            expect(result.output).toBe('First block\nSecond block');
+        });
+
+        it('should fall back to reasoning text when content is empty', async () => {
+            const mockResponse = {
+                id: 'test-id',
+                model: 'test-model',
+                created: 1234567890,
+                choices: [{
+                    message: {
+                        role: 'assistant',
+                        content: '',
+                        reasoning: 'Reasoning-only output'
+                    },
+                    finish_reason: 'stop'
+                }]
+            };
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => mockResponse
+            });
+
+            const result = await provider.generateText({
+                message: 'Test',
+                model: 'test-model',
+                language: 'english'
+            });
+
+            expect(result.output).toBe('Reasoning-only output');
+        });
+
         it('should include file context in message', async () => {
             const mockResponse = {
                 id: 'test-id',

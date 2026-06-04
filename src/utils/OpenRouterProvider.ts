@@ -86,11 +86,7 @@ export class OpenRouterProvider extends BaseLLMClient {
             // Parse response
             const result: ProviderApiResponse = await response.json();
 
-            if (!result.choices?.[0]?.message?.content) {
-                throw new Error('Invalid response format: missing choices content');
-            }
-
-            const content = result.choices[0].message.content;
+            const content = this.extractMessageContent(result);
 
             // Extract metadata
             const providerMetadata = this.extractMetadata(result, startTime);
@@ -172,11 +168,7 @@ export class OpenRouterProvider extends BaseLLMClient {
             // Parse response
             const result: ProviderApiResponse = await response.json();
 
-            if (!result.choices?.[0]?.message?.content) {
-                throw new Error('Invalid response format: missing choices content');
-            }
-
-            const content = result.choices[0].message.content;
+            const content = this.extractMessageContent(result);
 
             // Extract metadata
             const providerMetadata = this.extractMetadata(result, startTime);
@@ -204,6 +196,40 @@ export class OpenRouterProvider extends BaseLLMClient {
      */
     protected getProviderName(response: ProviderApiResponse): string {
         return (response as any).provider?.name || "OpenRouter";
+    }
+
+    private extractMessageContent(result: ProviderApiResponse): string {
+        const choice = result.choices?.[0];
+        const message = choice?.message;
+        const content = message?.content;
+
+        if (typeof content === 'string' && content.trim()) {
+            return content;
+        }
+
+        if (Array.isArray(content)) {
+            const text = content
+                .map((part) => {
+                    if (typeof part === 'string') {
+                        return part;
+                    }
+                    return part?.text ?? part?.content ?? '';
+                })
+                .filter((part) => part.trim())
+                .join('\n');
+
+            if (text.trim()) {
+                return text;
+            }
+        }
+
+        if (typeof message?.reasoning === 'string' && message.reasoning.trim()) {
+            return message.reasoning;
+        }
+
+        const finishReason = choice?.finish_reason ?? 'unknown';
+        const messageKeys = message ? Object.keys(message).join(', ') : 'none';
+        throw new Error(`Invalid response format: missing choices content (finish_reason: ${finishReason}, message keys: ${messageKeys})`);
     }
 
     /**

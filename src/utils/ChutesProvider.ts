@@ -79,7 +79,8 @@ export class ChutesProvider extends BaseLLMClient {
             const result: ProviderApiResponse = await response.json();
 
             // Extract content with null checking
-            const content = result.choices?.[0]?.message?.content ?? '';
+            const rawContent = result.choices?.[0]?.message?.content;
+            const content = typeof rawContent === 'string' ? rawContent : '';
 
             // Extract metadata
             const providerMetadata = this.extractMetadata(result, startTime);
@@ -162,7 +163,8 @@ export class ChutesProvider extends BaseLLMClient {
             const result: ProviderApiResponse = await response.json();
 
             // Extract content with null checking
-            const content = result.choices?.[0]?.message?.content ?? '';
+            const rawContent = result.choices?.[0]?.message?.content;
+            const content = typeof rawContent === 'string' ? rawContent : '';
 
             // Extract metadata
             const providerMetadata = this.extractMetadata(result, startTime);
