@@ -89,6 +89,7 @@ export interface PluginSettings {
     
     // Provider-specific summary models (NEW)
     openrouterSummaryModel: string; // Default summary model for OpenRouter
+    openrouterTagModel: string; // Default tag model for OpenRouter video/local transcript tagging
     chutesSummaryModel: string; // Default summary model for Chutes
     zaiSummaryModel: string; // Default summary model for ZAI
     ollamaSummaryModel: string; // Default summary model for Ollama

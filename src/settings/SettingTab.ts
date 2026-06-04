@@ -208,6 +208,17 @@ class SettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
+      .setName("OpenRouter Tag Model")
+      .setDesc("Model used only for video/local transcript tags when the selected provider is OpenRouter.")
+      .addText(text => text
+        .setValue(this.plugin.settings.openrouterTagModel || 'google/gemma-4-31b-it')
+        .setPlaceholder("google/gemma-4-31b-it")
+        .onChange(async value => {
+          this.plugin.settings.openrouterTagModel = value.trim() || 'google/gemma-4-31b-it';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
       .setName("Last Updated")
       .setDesc("Date and time when OpenRouter models were last refreshed.")
       .addMomentFormat(moment => moment

@@ -720,6 +720,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // Ensure new OpenRouter settings have default values if not present
     this.settings.openRouterApiKey = this.settings.openRouterApiKey ?? DEFAULT_SETTINGS.openRouterApiKey;
     this.settings.openRouterModels = this.settings.openRouterModels ?? DEFAULT_SETTINGS.openRouterModels;
+    this.settings.openrouterTagModel = this.settings.openrouterTagModel ?? DEFAULT_SETTINGS.openrouterTagModel;
     this.settings.lastUpdated = this.settings.lastUpdated ?? DEFAULT_SETTINGS.lastUpdated;
     this.settings.filterFreeModelsOnly = this.settings.filterFreeModelsOnly ?? DEFAULT_SETTINGS.filterFreeModelsOnly;
     this.settings.minContextLength = this.settings.minContextLength ?? DEFAULT_SETTINGS.minContextLength;

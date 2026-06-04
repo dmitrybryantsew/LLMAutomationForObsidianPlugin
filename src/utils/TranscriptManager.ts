@@ -244,6 +244,7 @@ class TranscriptManager {
         ...metadata, // Include existing metadata
         tags: this.tagManager.formatTags(tags), // Format tags for metadata
         summary_model: options.summaryModel, // Record model used for summary
+        tag_model: this.getTagModelForProvider(options.provider || this.settings?.defaultLLMProvider, options.summaryModel),
         summary_type: options.summaryType, // Record summary type
         parts_summarized: chunks.length // Add number of parts
       };
@@ -373,8 +374,10 @@ class TranscriptManager {
         throw new Error("LLM Client Service not initialized");
       }
       
-      const llmClient = options.provider
-        ? this.llmClientService.getClientForProvider(options.provider)
+      const tagProvider = options.provider || this.settings?.defaultLLMProvider;
+      const tagModel = this.getTagModelForProvider(tagProvider, options.summaryModel);
+      const llmClient = tagProvider
+        ? this.llmClientService.getClientForProvider(tagProvider)
         : this.llmClientService.getClient();
       if (!llmClient) {
         throw new Error("LLM client not initialized. Please check your settings and API keys.");
@@ -389,7 +392,7 @@ class TranscriptManager {
         ${transcript.substring(0, 4000)}...
 
         ${existingTagsPrompt}`, // Add existing tags to the prompt
-        model: options.summaryModel, // Use the specified summary model for tag generation too
+        model: tagModel,
         language: "english", // Generate tags in English for consistency
         files: [],
         temperature: 0.7,
@@ -588,6 +591,7 @@ class TranscriptManager {
         upload_date: videoData.upload_date,
         tags: this.tagManager.formatTags(tags), // Format tags for metadata
         summary_model: options.summaryModel, // Record model used for summary
+        tag_model: this.getTagModelForProvider(options.provider || this.settings?.defaultLLMProvider, options.summaryModel),
         summary_type: options.summaryType, // Record summary type
         video_language: options.videoLanguage,
         output_language: options.outputLanguage,
@@ -781,8 +785,10 @@ ${transcript}`;
         throw new Error("LLM Client Service not initialized");
       }
       
-      const llmClient = options.provider
-        ? this.llmClientService.getClientForProvider(options.provider)
+      const tagProvider = options.provider || this.settings?.defaultLLMProvider;
+      const tagModel = this.getTagModelForProvider(tagProvider, options.summaryModel);
+      const llmClient = tagProvider
+        ? this.llmClientService.getClientForProvider(tagProvider)
         : this.llmClientService.getClient();
       if (!llmClient) {
         throw new Error("LLM client not initialized. Please check your settings and API keys.");
@@ -797,7 +803,7 @@ ${transcript}`;
         ${transcript.substring(0, 4000)}...
 
         ${existingTagsPrompt}`,
-        model: options.summaryModel,
+        model: tagModel,
         language: "english", // Generate tags in English for consistency
         files: [],
         temperature: 0.7,
@@ -821,6 +827,14 @@ ${transcript}`;
       });
       return [];
     }
+  }
+
+  private getTagModelForProvider(provider: TextProviderId | undefined, fallbackModel: string): string {
+    if (provider === 'openrouter') {
+      return this.settings?.openrouterTagModel || 'google/gemma-4-31b-it';
+    }
+
+    return fallbackModel;
   }
 
   private formatLocalTranscriptContent(

@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
   ollamaModels: [],
   // Provider-specific summary models (NEW)
   openrouterSummaryModel: "openrouter/deepseek/deepseek-r1:free",
+  openrouterTagModel: "google/gemma-4-31b-it",
   chutesSummaryModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiSummaryModel: "glm-4.6",
   ollamaSummaryModel: "gemma4:31b-cloud",
