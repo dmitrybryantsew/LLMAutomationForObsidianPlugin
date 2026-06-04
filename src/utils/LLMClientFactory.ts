@@ -63,12 +63,16 @@ export class LLMClientFactory {
         apiKey: string,
         baseUrl?: string,
         referer?: string,
-        debugMode?: boolean
+        debugMode?: boolean,
+        timeout?: number,
+        maxRetries?: number
     ): OpenRouterProvider {
         const config: OpenRouterConfig = {
             apiKey,
             baseUrl,
             referer,
+            timeout,
+            maxRetries,
             provider: LLMProvider.OPENROUTER
         };
         return new OpenRouterProvider(config, debugMode || false);
@@ -84,11 +88,15 @@ export class LLMClientFactory {
     static createChutesClient(
         apiKey: string,
         baseUrl?: string,
-        debugMode?: boolean
+        debugMode?: boolean,
+        timeout?: number,
+        maxRetries?: number
     ): ChutesProvider {
         const config: ChutesConfig = {
             apiKey,
             baseUrl,
+            timeout,
+            maxRetries,
             provider: LLMProvider.CHUTES
         };
         const client = new ChutesProvider(config, debugMode || false);
@@ -108,11 +116,15 @@ export class LLMClientFactory {
     static createZAIClient(
         apiKey: string,
         baseUrl?: string,
-        debugMode?: boolean
+        debugMode?: boolean,
+        timeout?: number,
+        maxRetries?: number
     ): ZAIProvider {
         const config: ZAIConfig = {
             apiKey,
             baseUrl,
+            timeout,
+            maxRetries,
             provider: LLMProvider.ZAI
         };
         const client = new ZAIProvider(config, debugMode || false);
@@ -202,6 +214,8 @@ export function createLLMClientFromSettings(
         zaiBaseUrl?: string;
         ollamaBaseUrl?: string;
         ollamaTimeout?: number;
+        providerTimeout?: number;
+        providerRetryCount?: number;
         debugMode?: boolean;
     }
 ): LLMClient {
@@ -214,7 +228,9 @@ export function createLLMClientFromSettings(
                 settings.openRouterApiKey,
                 settings.openRouterBaseUrl,
                 "https://obsidian.md",
-                settings.debugMode
+                settings.debugMode,
+                settings.providerTimeout,
+                settings.providerRetryCount
             );
         
         case LLMProvider.CHUTES:
@@ -224,7 +240,9 @@ export function createLLMClientFromSettings(
             return LLMClientFactory.createChutesClient(
                 settings.chutesApiKey,
                 settings.chutesBaseUrl,
-                settings.debugMode
+                settings.debugMode,
+                settings.providerTimeout,
+                settings.providerRetryCount
             );
         
         case LLMProvider.ZAI:
@@ -234,7 +252,9 @@ export function createLLMClientFromSettings(
             return LLMClientFactory.createZAIClient(
                 settings.zaiApiKey,
                 settings.zaiBaseUrl,
-                settings.debugMode
+                settings.debugMode,
+                settings.providerTimeout,
+                settings.providerRetryCount
             );
 
         case LLMProvider.OLLAMA:

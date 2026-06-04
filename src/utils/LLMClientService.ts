@@ -33,6 +33,8 @@ export class LLMClientService {
         zaiBaseUrl: this.settings.zaiBaseUrl,
         ollamaBaseUrl: this.settings.ollamaBaseUrl,
         ollamaTimeout: this.settings.ollamaTimeout,
+        providerTimeout: this.settings.providerTimeout,
+        providerRetryCount: this.settings.providerRetryCount,
         debugMode: this.settings.debugMode
       });
       
@@ -72,6 +74,8 @@ export class LLMClientService {
         zaiBaseUrl: this.settings.zaiBaseUrl,
         ollamaBaseUrl: this.settings.ollamaBaseUrl,
         ollamaTimeout: this.settings.ollamaTimeout,
+        providerTimeout: this.settings.providerTimeout,
+        providerRetryCount: this.settings.providerRetryCount,
         debugMode: this.settings.debugMode
       });
     } catch (error) {

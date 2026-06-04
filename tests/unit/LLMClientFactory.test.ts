@@ -247,6 +247,48 @@ describe('createLLMClientFromSettings', () => {
         expect(client).toBeInstanceOf(OpenRouterProvider);
     });
 
+    it('should pass provider timeout and retry settings to OpenRouter clients', () => {
+        const client = createLLMClientFromSettings(
+            LLMProvider.OPENROUTER,
+            {
+                openRouterApiKey: 'test-key',
+                providerTimeout: 180000,
+                providerRetryCount: 5,
+            }
+        );
+
+        expect((client as any).timeout).toBe(180000);
+        expect((client as any).maxRetries).toBe(5);
+    });
+
+    it('should pass provider timeout and retry settings to Chutes clients', () => {
+        const client = createLLMClientFromSettings(
+            LLMProvider.CHUTES,
+            {
+                chutesApiKey: 'test-key',
+                providerTimeout: 180000,
+                providerRetryCount: 5,
+            }
+        );
+
+        expect((client as any).timeout).toBe(180000);
+        expect((client as any).maxRetries).toBe(5);
+    });
+
+    it('should pass provider timeout and retry settings to ZAI clients', () => {
+        const client = createLLMClientFromSettings(
+            LLMProvider.ZAI,
+            {
+                zaiApiKey: 'test-key',
+                providerTimeout: 180000,
+                providerRetryCount: 5,
+            }
+        );
+
+        expect((client as any).timeout).toBe(180000);
+        expect((client as any).maxRetries).toBe(5);
+    });
+
     it('should create Chutes client from settings', () => {
         const client = createLLMClientFromSettings(
             LLMProvider.CHUTES,
