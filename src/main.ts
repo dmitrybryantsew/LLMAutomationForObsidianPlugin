@@ -730,7 +730,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       ...DEFAULT_SETTINGS.spacedRepetition,
       ...(this.settings.spacedRepetition ?? {})
     };
-    this.settings.providerTimeout = this.settings.providerTimeout && this.settings.providerTimeout > 60000
+    this.settings.providerTimeout = this.settings.providerTimeout && this.settings.providerTimeout > 300000
       ? this.settings.providerTimeout
       : DEFAULT_SETTINGS.providerTimeout;
     this.settings.providerRetryCount = this.settings.providerRetryCount ?? DEFAULT_SETTINGS.providerRetryCount;

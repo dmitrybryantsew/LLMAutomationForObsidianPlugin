@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
   defaultLLMProvider: 'openrouter', // 'openrouter', 'chutes', 'zai', or 'ollama'
   chutesApiKey: "",
   zaiApiKey: "",
-  providerTimeout: 180000, // 180 seconds default timeout for long summary requests
+  providerTimeout: 600000, // 10 minutes default timeout for long paid summary requests
   providerRetryCount: 3, // Number of retries for failed requests
   ollamaBaseUrl: "http://localhost:11434",
   ollamaTimeout: 120000,

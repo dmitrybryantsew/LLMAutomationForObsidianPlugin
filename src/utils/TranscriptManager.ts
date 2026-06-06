@@ -509,9 +509,20 @@ class TranscriptManager {
             temperature: 0.7,
             maxTokens: options.numberOfOutputTokens
           };
-          
+
+          this.logSummaryRequest('chunk', {
+            chunkIndex: i + 1,
+            chunkCount: chunks.length,
+            model: options.summaryModel,
+            messageLength: chunkOptions.message.length,
+            maxTokens: chunkOptions.maxTokens
+          });
           const chunkResult = await llmClient.generateText(chunkOptions);
           const summary = chunkResult.output || `[Error summarizing chunk ${i+1}]`;
+          this.logSummaryResponse('chunk', summary, {
+            chunkIndex: i + 1,
+            chunkCount: chunks.length
+          });
           chunkSummaries.push(summary);
            new Notice(`Summarized part ${i+1} of ${chunks.length}.`); // Progress update
         }
@@ -532,9 +543,15 @@ class TranscriptManager {
           temperature: 0.7,
           maxTokens: options.numberOfOutputTokens
         };
-        
+
+        this.logSummaryRequest('meta-summary', {
+          model: options.summaryModel,
+          messageLength: metaOptions.message.length,
+          maxTokens: metaOptions.maxTokens
+        });
         const metaResult = await llmClient.generateText(metaOptions);
         finalSummary = metaResult.output || "Failed to generate meta-summary.";
+        this.logSummaryResponse('meta-summary', finalSummary);
         
       } else {
         // Single chunk - Generate summary directly
@@ -565,8 +582,14 @@ class TranscriptManager {
           maxTokens: options.numberOfOutputTokens
         };
 
+        this.logSummaryRequest('single', {
+          model: options.summaryModel,
+          messageLength: summaryOptions.message.length,
+          maxTokens: summaryOptions.maxTokens
+        });
         const summaryResult = await llmClient.generateText(summaryOptions);
         finalSummary = summaryResult.output || "No summary output received.";
+        this.logSummaryResponse('single', finalSummary);
       }
       
       // 5. Save the Summary Markdown file
@@ -615,6 +638,14 @@ class TranscriptManager {
         metadata,
         overwrite: true // Overwrite existing summary file
       });
+
+      if (this.debugEnabled) {
+        console.log('[TranscriptManager] Summary note saved', {
+          filePath,
+          summaryLength: finalSummary.length,
+          tagCount: tags.length
+        });
+      }
 
       // Save transcript, description, and detailed summaries to database based on settings
       if (this.databaseManager) {
@@ -835,6 +866,30 @@ ${transcript}`;
     }
 
     return fallbackModel;
+  }
+
+  private logSummaryRequest(kind: string, details: Record<string, unknown>): void {
+    if (!this.debugEnabled) {
+      return;
+    }
+
+    console.log('[TranscriptManager] Summary request started', {
+      kind,
+      providerTimeout: this.settings?.providerTimeout,
+      ...details
+    });
+  }
+
+  private logSummaryResponse(kind: string, summary: string, details: Record<string, unknown> = {}): void {
+    if (!this.debugEnabled) {
+      return;
+    }
+
+    console.log('[TranscriptManager] Summary request completed', {
+      kind,
+      outputLength: summary.length,
+      ...details
+    });
   }
 
   private formatLocalTranscriptContent(
