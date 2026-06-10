@@ -14,12 +14,10 @@ export class SpacedRepetitionNoteChatView extends ItemView {
   private prompt = '';
   private isSending = false;
   private isLoading = false;
-  private model: string;
 
   constructor(leaf: WorkspaceLeaf, plugin: GptFreeTextGeneratorPlugin) {
     super(leaf);
     this.plugin = plugin;
-    this.model = plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
   }
 
   getViewType(): string {
@@ -117,43 +115,6 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       return;
     }
 
-    new Setting(container)
-      .setName('Ollama model')
-      .addDropdown((dropdown) => {
-        const configuredModels = this.plugin.settings.ollamaModels ?? [];
-        const models = configuredModels.length
-          ? configuredModels
-          : [this.model];
-        for (const model of models) {
-          dropdown.addOption(model, model);
-        }
-        dropdown.setValue(this.model);
-        dropdown.onChange((value) => {
-          this.model = value;
-        });
-      });
-
-    new Setting(container)
-      .setName('Chat')
-      .setDesc(this.getSelectedChatLabel())
-      .addDropdown((dropdown) => {
-        for (const chat of this.chats) {
-          dropdown.addOption(chat.id, this.formatChatTitle(chat));
-        }
-        if (this.chatId) {
-          dropdown.setValue(this.chatId);
-        }
-        dropdown.onChange((value) => {
-          this.selectChat(value);
-        });
-      })
-      .addButton((button) => {
-        button
-          .setButtonText('New Chat')
-          .setDisabled(!this.noteId)
-          .onClick(() => this.createAndSelectNewChat());
-      });
-
     const history = container.createDiv({ cls: 'spaced-repetition-note-chat-history' });
     if (this.messages.length === 0) {
       history.createEl('div', {
@@ -191,7 +152,27 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       }
     });
 
-    new Setting(container)
+    const actionSetting = new Setting(container)
+      .setName('Chat');
+    actionSetting.settingEl.addClass('spaced-repetition-note-chat-actions');
+    actionSetting
+      .addDropdown((dropdown) => {
+        for (const chat of this.chats) {
+          dropdown.addOption(chat.id, this.formatChatTitle(chat));
+        }
+        if (this.chatId) {
+          dropdown.setValue(this.chatId);
+        }
+        dropdown.onChange((value) => {
+          this.selectChat(value);
+        });
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('New Chat')
+          .setDisabled(!this.noteId)
+          .onClick(() => this.createAndSelectNewChat());
+      })
       .addButton((button) => {
         button
           .setButtonText(this.isSending ? 'Sending...' : 'Send')
@@ -263,7 +244,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       }
 
       const response = await client.generateText({
-        model: this.model,
+        model: this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud',
         message: this.buildChatPrompt(prompt),
         temperature: 0.3,
         maxTokens: 2200,
@@ -386,17 +367,6 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     const dateLabel = Number.isNaN(updatedAt.getTime()) ? chat.updatedAt : updatedAt.toLocaleString();
     const title = chat.title || 'Untitled chat';
     return `${title} (${dateLabel})`;
-  }
-
-  private getSelectedChatLabel(): string {
-    const selected = this.chats.find((chat) => chat.id === this.chatId);
-    if (!selected) {
-      return 'No chat selected';
-    }
-
-    const updatedAt = new Date(selected.updatedAt);
-    const dateLabel = Number.isNaN(updatedAt.getTime()) ? selected.updatedAt : updatedAt.toLocaleString();
-    return `Updated ${dateLabel}`;
   }
 
   private buildChatPrompt(currentPrompt: string): string {

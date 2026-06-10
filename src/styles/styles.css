@@ -465,6 +465,22 @@
     color: var(--text-normal);
 }
 
+.spaced-repetition-note-chat-actions {
+    padding-top: 0;
+}
+
+.spaced-repetition-note-chat-actions .setting-item-control {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.spaced-repetition-note-chat-actions select.dropdown {
+    max-width: 100%;
+    flex: 1 1 180px;
+}
+
 @media (max-width: 520px) {
     .spaced-repetition-grade-buttons {
         grid-template-columns: 1fr;
