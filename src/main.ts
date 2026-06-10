@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
-import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, DEFAULT_SETTINGS } from './constants';
+import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import { GenerateTextView } from './views/GenerateTextView';
 import { GenerateImageView } from './views/GenerateImageView';
@@ -33,6 +33,7 @@ import { QuizGeneratorModal } from './modals/QuizGeneratorModal'; // Import the 
 import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // Import the FlashcardGeneratorModal
 import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
 import { SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
+import { SpacedRepetitionNoteChatView } from './views/SpacedRepetitionNoteChatView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
 import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
@@ -61,6 +62,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.registerView(VIEW_TYPE_GENERATE_IMAGE, (leaf) => new GenerateImageView(leaf, this));
     this.registerView(VIEW_TYPE_VIDEO_PROCESSING, (leaf) => new VideoProcessingView(leaf, this));
     this.registerView(VIEW_TYPE_SPACED_REPETITION_REVIEW, (leaf) => new SpacedRepetitionReviewView(leaf, this));
+    this.registerView(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, (leaf) => new SpacedRepetitionNoteChatView(leaf, this));
 
     // Initialize VideoQueueManager after plugin is fully initialized
     // It depends on TranscriptManager which might be doing async work internally
@@ -289,6 +291,20 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.addCommand({
       id: 'chat-with-current-note-ollama',
       name: 'Chat With Current Note Using Ollama',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('No active note');
+          return;
+        }
+
+        await this.activateNoteChatView(activeFile);
+      },
+    });
+
+    this.addCommand({
+      id: 'chat-with-current-note-ollama-modal',
+      name: 'Chat With Current Note Using Ollama (Modal)',
       callback: () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) {
@@ -797,12 +813,42 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     await this.activateView(VIEW_TYPE_VIDEO_PROCESSING);
   }
 
+  async activateNoteChatView(file: TFile) {
+    try {
+      let leaf: WorkspaceLeaf;
+      const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT);
+      if (existing.length > 0) {
+        leaf = existing[0];
+      } else {
+        leaf = this.app.workspace.getRightLeaf(false)
+          ?? this.app.workspace.createLeafBySplit(this.app.workspace.getLeaf(), 'vertical');
+        await leaf.setViewState({
+          type: VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT,
+          active: true,
+        });
+      }
+
+      this.app.workspace.revealLeaf(leaf);
+      const view = leaf.view;
+      if (view instanceof SpacedRepetitionNoteChatView) {
+        await view.setFile(file);
+      }
+    } catch (error: unknown) {
+      ErrorHandler.handleError(error, "VIEW_ACTIVATION_ERROR", {
+        operation: "activate-note-chat-view",
+        path: file.path
+      });
+      new Notice('Failed to open note chat view');
+    }
+  }
+
   onunload() {
     // Clean up services and views
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENERATE_TEXT);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENERATE_IMAGE);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_VIDEO_PROCESSING);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_REVIEW);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services

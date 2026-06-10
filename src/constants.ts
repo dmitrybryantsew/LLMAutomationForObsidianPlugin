@@ -1,6 +1,7 @@
 const VIEW_TYPE_GENERATE_TEXT = "gpt4free-text-panel";
 const VIEW_TYPE_GENERATE_IMAGE = "gpt4free-image-panel";
 const VIEW_TYPE_SPACED_REPETITION_REVIEW = "llm-automation-spaced-repetition-review";
+const VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT = "llm-automation-spaced-repetition-note-chat";
 const HIERARCHY_PLUGIN_ID = "obsidian-gpt4free-hierarchy-plugin";
 const DEFAULT_SETTINGS = {
   defaultTextModel: "gpt-4o",
@@ -66,4 +67,5 @@ export { VIEW_TYPE_GENERATE_TEXT };
 export { DEFAULT_SETTINGS };
 export { VIEW_TYPE_GENERATE_IMAGE };
 export { VIEW_TYPE_SPACED_REPETITION_REVIEW };
+export { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT };
 export {HIERARCHY_PLUGIN_ID};
