@@ -1,24 +1,29 @@
 
 import { App, SuggestModal, TFile } from "obsidian";
 
+export interface VaultFileSelectorOptions {
+  placeholder?: string;
+  filter?: (file: TFile) => boolean;
+}
+
 /**
- * Modal to select an existing Markdown file from the vault.
+ * Modal to select an existing vault file.
  */
 export class VaultFileSelectorModal extends SuggestModal<TFile> {
   private onSelect: (file: TFile) => void;
+  private filter: (file: TFile) => boolean;
 
-  constructor(app: App, onSelect: (file: TFile) => void) {
+  constructor(app: App, onSelect: (file: TFile) => void, options: VaultFileSelectorOptions = {}) {
     super(app);
     this.onSelect = onSelect;
-    this.setPlaceholder("Type to filter files...");
+    this.filter = options.filter ?? ((file) => file.extension === 'md' || file.extension === 'pdf');
+    this.setPlaceholder(options.placeholder ?? "Type to filter files...");
   }
 
-  // Returns all available markdown and PDF files
+  // Returns all available files accepted by the configured filter
   getSuggestions(query: string): TFile[] {
     const allFiles = this.app.vault.getFiles();
-    const supportedFiles = allFiles.filter(file => 
-      file.extension === 'md' || file.extension === 'pdf'
-    );
+    const supportedFiles = allFiles.filter((file) => this.filter(file));
     
     if (!query) {
       return supportedFiles;

@@ -1,7 +1,57 @@
 import { ItemView, MarkdownRenderer, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT } from '../constants';
 import type GptFreeTextGeneratorPlugin from '../main';
+import { VaultFileSelectorModal } from '../modals/VaultFileSelectorModal';
 import { NoteChatMessageRecord, NoteChatRecord } from '../types/spacedRepetition';
+import { PdfHelper } from '../utils/PdfHelper';
+
+const MAX_EXTRA_CONTEXT_CHARS = 18000;
+const MAX_CONTEXT_FILE_CHARS = 8000;
+const TEXT_CONTEXT_EXTENSIONS = new Set([
+  '',
+  'adoc',
+  'asm',
+  'bat',
+  'c',
+  'cfg',
+  'clj',
+  'cmd',
+  'cpp',
+  'cs',
+  'css',
+  'csv',
+  'dart',
+  'go',
+  'h',
+  'hpp',
+  'html',
+  'ini',
+  'java',
+  'js',
+  'json',
+  'jsx',
+  'kt',
+  'lua',
+  'md',
+  'mdx',
+  'php',
+  'ps1',
+  'py',
+  'rb',
+  'rs',
+  'scss',
+  'sh',
+  'sql',
+  'svelte',
+  'toml',
+  'ts',
+  'tsx',
+  'txt',
+  'vue',
+  'xml',
+  'yaml',
+  'yml',
+]);
 
 export class SpacedRepetitionNoteChatView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -9,6 +59,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
   private noteContent = '';
   private noteId: string | null = null;
   private chatId: string | null = null;
+  private contextFiles: Set<TFile> = new Set();
   private chats: NoteChatRecord[] = [];
   private messages: NoteChatMessageRecord[] = [];
   private prompt = '';
@@ -51,6 +102,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     this.noteContent = '';
     this.noteId = null;
     this.chatId = null;
+    this.contextFiles.clear();
     this.chats = [];
     this.messages = [];
     this.prompt = '';
@@ -103,6 +155,18 @@ export class SpacedRepetitionNoteChatView extends ItemView {
           .setButtonText('Open Source Note')
           .setDisabled(!this.file)
           .onClick(() => this.openSourceNote());
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Add Context File')
+          .setDisabled(!this.file)
+          .onClick(() => this.openContextFileSelector());
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Add Mentioned Files')
+          .setDisabled(!this.file)
+          .onClick(() => this.addMentionedContextFiles());
       });
 
     if (!this.file) {
@@ -114,6 +178,8 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       this.renderEmptyState(container, 'Loading note chat...');
       return;
     }
+
+    this.renderContextFiles(container);
 
     const history = container.createDiv({ cls: 'spaced-repetition-note-chat-history' });
     if (this.messages.length === 0) {
@@ -217,6 +283,89 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     await this.app.workspace.getLeaf(false).openFile(this.file);
   }
 
+  private openContextFileSelector(): void {
+    new VaultFileSelectorModal(
+      this.app,
+      (file: TFile) => this.addContextFile(file),
+      {
+        placeholder: 'Type to filter text, code, markdown, or PDF files...',
+        filter: (file) => this.isSupportedContextFile(file),
+      }
+    ).open();
+  }
+
+  private addContextFile(file: TFile): void {
+    if (this.file?.path === file.path) {
+      new Notice('The source note is already included');
+      return;
+    }
+
+    const existing = [...this.contextFiles].some((contextFile) => contextFile.path === file.path);
+    if (existing) {
+      new Notice('File already in context');
+      return;
+    }
+
+    this.contextFiles.add(file);
+    this.render();
+  }
+
+  private addMentionedContextFiles(): void {
+    if (!this.file) {
+      return;
+    }
+
+    const cache = this.app.metadataCache.getFileCache(this.file);
+    if (!cache) {
+      new Notice('No links found in this note');
+      return;
+    }
+
+    let addedCount = 0;
+    const candidates = [...(cache.links ?? []), ...(cache.embeds ?? [])];
+    for (const candidate of candidates) {
+      const linkedFile = this.app.metadataCache.getFirstLinkpathDest(candidate.link, this.file.path);
+      if (!linkedFile || linkedFile.path === this.file.path || !this.isSupportedContextFile(linkedFile)) {
+        continue;
+      }
+
+      const existing = [...this.contextFiles].some((contextFile) => contextFile.path === linkedFile.path);
+      if (!existing) {
+        this.contextFiles.add(linkedFile);
+        addedCount += 1;
+      }
+    }
+
+    this.render();
+    new Notice(addedCount > 0 ? `Added ${addedCount} context file(s)` : 'No new supported context files found');
+  }
+
+  private renderContextFiles(container: HTMLElement): void {
+    if (this.contextFiles.size === 0) {
+      return;
+    }
+
+    const contextContainer = container.createDiv({ cls: 'spaced-repetition-note-chat-context-files' });
+    for (const file of this.contextFiles) {
+      const chip = contextContainer.createDiv({ cls: 'spaced-repetition-note-chat-context-chip' });
+      chip.createSpan({
+        text: file.name,
+        cls: 'spaced-repetition-note-chat-context-name',
+      });
+      const removeButton = chip.createEl('button', {
+        text: 'x',
+        cls: 'spaced-repetition-note-chat-context-remove',
+        attr: {
+          'aria-label': `Remove ${file.path} from context`,
+        },
+      });
+      removeButton.addEventListener('click', () => {
+        this.contextFiles.delete(file);
+        this.render();
+      });
+    }
+  }
+
   private async sendMessage(): Promise<void> {
     if (!this.file || !this.chatId || !this.noteId) {
       new Notice('Note chat is not initialized');
@@ -245,7 +394,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
 
       const response = await client.generateText({
         model: this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud',
-        message: this.buildChatPrompt(prompt),
+        message: await this.buildChatPrompt(prompt),
         temperature: 0.3,
         maxTokens: 2200,
       });
@@ -369,11 +518,12 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     return `${title} (${dateLabel})`;
   }
 
-  private buildChatPrompt(currentPrompt: string): string {
+  private async buildChatPrompt(currentPrompt: string): Promise<string> {
     if (!this.file) {
       return currentPrompt;
     }
 
+    const extraContext = await this.buildExtraContextSection();
     const recentMessages = this.messages.slice(-8)
       .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
       .join('\n\n');
@@ -387,10 +537,56 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       '',
       `Source note:\n${this.noteContent.slice(0, 12000)}`,
       '',
+      extraContext,
+      '',
       recentMessages ? `Recent saved chat:\n${recentMessages}` : '',
       '',
       `Current user message:\n${currentPrompt}`,
     ].filter(Boolean).join('\n');
+  }
+
+  private async buildExtraContextSection(): Promise<string> {
+    if (this.contextFiles.size === 0) {
+      return '';
+    }
+
+    const sections: string[] = [];
+    let usedChars = 0;
+    let pdfHelper: PdfHelper | null = null;
+
+    for (const file of this.contextFiles) {
+      if (usedChars >= MAX_EXTRA_CONTEXT_CHARS) {
+        sections.push('[Additional context truncated to fit prompt budget.]');
+        break;
+      }
+
+      try {
+        const rawContent = file.extension.toLowerCase() === 'pdf'
+          ? await (pdfHelper ??= new PdfHelper(this.app)).extractText(file)
+          : await this.app.vault.read(file);
+        const remaining = MAX_EXTRA_CONTEXT_CHARS - usedChars;
+        const limit = Math.min(MAX_CONTEXT_FILE_CHARS, remaining);
+        const content = rawContent.slice(0, limit);
+        usedChars += content.length;
+        sections.push([
+          `Context file: ${file.path}`,
+          '```',
+          content,
+          rawContent.length > content.length ? '...[truncated]' : '',
+          '```',
+        ].filter(Boolean).join('\n'));
+      } catch (error) {
+        console.error('Failed to read note chat context file:', error);
+        sections.push(`Context file: ${file.path}\n[Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}]`);
+      }
+    }
+
+    return sections.length ? `Additional context files:\n\n${sections.join('\n\n')}` : '';
+  }
+
+  private isSupportedContextFile(file: TFile): boolean {
+    const extension = file.extension.toLowerCase();
+    return extension === 'pdf' || TEXT_CONTEXT_EXTENSIONS.has(extension);
   }
 
   private getLastUserMessage(): NoteChatMessageRecord | null {

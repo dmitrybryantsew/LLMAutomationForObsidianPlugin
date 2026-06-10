@@ -389,6 +389,42 @@
     white-space: nowrap;
 }
 
+.spaced-repetition-note-chat-context-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.spaced-repetition-note-chat-context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 24px;
+    padding: 2px 6px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary-alt);
+    font-size: var(--font-ui-small);
+}
+
+.spaced-repetition-note-chat-context-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.spaced-repetition-note-chat-context-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 4px;
+    line-height: 1;
+}
+
 .spaced-repetition-note-chat-history {
     display: flex;
     flex-direction: column;
