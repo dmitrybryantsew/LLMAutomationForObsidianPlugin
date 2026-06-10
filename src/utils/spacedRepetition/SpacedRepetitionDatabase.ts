@@ -408,6 +408,19 @@ export class SpacedRepetitionDatabase {
     return rows[0] ? this.mapNoteChat(rows[0]) : null;
   }
 
+  getNoteChats(noteId: string): NoteChatRecord[] {
+    return this.select<Record<string, unknown>>(
+      `
+      SELECT id, note_id as noteId, title, created_at as createdAt, updated_at as updatedAt,
+        metadata_json as metadataJson
+      FROM note_chats
+      WHERE note_id = ?
+      ORDER BY updated_at DESC
+      `,
+      [noteId]
+    ).map((row) => this.mapNoteChat(row));
+  }
+
   async createNoteChat(noteId: string, title?: string | null, metadata: Record<string, unknown> = {}): Promise<string> {
     const db = this.requireDb();
     const id = this.createId('chat');

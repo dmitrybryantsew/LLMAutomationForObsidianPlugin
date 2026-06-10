@@ -223,4 +223,27 @@ describe('SpacedRepetitionDatabase', () => {
 
     await database.close();
   });
+
+  it('lists all note chats newest first', async () => {
+    const { app } = createBinaryAdapterApp();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath,
+    });
+
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/MultiChat.md', basename: 'MultiChat' } as any, 'hash-chat');
+    const firstChatId = await database.createNoteChat(noteId, 'First chat');
+    const secondChatId = await database.createNoteChat(noteId, 'Second chat');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await database.addNoteChatMessage({ chatId: firstChatId, role: 'user', content: 'Older but active again' });
+
+    const chats = database.getNoteChats(noteId);
+
+    expect(chats).toHaveLength(2);
+    expect(chats.map((chat) => chat.id)).toEqual([firstChatId, secondChatId]);
+    expect(chats.map((chat) => chat.title)).toEqual(['First chat', 'Second chat']);
+
+    await database.close();
+  });
 });

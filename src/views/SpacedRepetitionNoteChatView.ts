@@ -1,7 +1,7 @@
 import { ItemView, MarkdownRenderer, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT } from '../constants';
 import type GptFreeTextGeneratorPlugin from '../main';
-import { NoteChatMessageRecord } from '../types/spacedRepetition';
+import { NoteChatMessageRecord, NoteChatRecord } from '../types/spacedRepetition';
 
 export class SpacedRepetitionNoteChatView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -9,6 +9,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
   private noteContent = '';
   private noteId: string | null = null;
   private chatId: string | null = null;
+  private chats: NoteChatRecord[] = [];
   private messages: NoteChatMessageRecord[] = [];
   private prompt = '';
   private isSending = false;
@@ -52,6 +53,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     this.noteContent = '';
     this.noteId = null;
     this.chatId = null;
+    this.chats = [];
     this.messages = [];
     this.prompt = '';
     this.isLoading = true;
@@ -73,10 +75,9 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     this.noteContent = await this.app.vault.read(file);
     this.noteId = await database.upsertNoteFromFile(file, this.createSimpleContentHash(this.noteContent));
 
-    const existingChat = database.getLatestNoteChat(this.noteId);
-    this.chatId = existingChat?.id ?? await database.createNoteChat(this.noteId, `Chat: ${file.basename}`, {
-      notePath: file.path,
-    });
+    this.chats = database.getNoteChats(this.noteId);
+    this.chatId = this.chats[0]?.id ?? await this.createChatForCurrentNote();
+    this.chats = database.getNoteChats(this.noteId);
     this.messages = database.getNoteChatMessages(this.chatId);
   }
 
@@ -130,6 +131,27 @@ export class SpacedRepetitionNoteChatView extends ItemView {
         dropdown.onChange((value) => {
           this.model = value;
         });
+      });
+
+    new Setting(container)
+      .setName('Chat')
+      .setDesc(this.getSelectedChatLabel())
+      .addDropdown((dropdown) => {
+        for (const chat of this.chats) {
+          dropdown.addOption(chat.id, this.formatChatTitle(chat));
+        }
+        if (this.chatId) {
+          dropdown.setValue(this.chatId);
+        }
+        dropdown.onChange((value) => {
+          this.selectChat(value);
+        });
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('New Chat')
+          .setDisabled(!this.noteId)
+          .onClick(() => this.createAndSelectNewChat());
       });
 
     const history = container.createDiv({ cls: 'spaced-repetition-note-chat-history' });
@@ -255,6 +277,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       });
 
       this.prompt = '';
+      this.chats = database.getNoteChats(this.noteId);
       this.messages = database.getNoteChatMessages(this.chatId);
     } catch (error) {
       console.error('Failed to send note chat message:', error);
@@ -304,6 +327,76 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       console.error('Failed to save chat reply as review question:', error);
       new Notice(`Failed to save review question: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private async createAndSelectNewChat(): Promise<void> {
+    if (!this.noteId || !this.file) {
+      new Notice('Note chat is not initialized');
+      return;
+    }
+
+    try {
+      this.chatId = await this.createChatForCurrentNote();
+      const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+      this.chats = database.getNoteChats(this.noteId);
+      this.messages = database.getNoteChatMessages(this.chatId);
+      this.prompt = '';
+      this.render();
+    } catch (error) {
+      console.error('Failed to create note chat:', error);
+      new Notice(`Failed to create note chat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async createChatForCurrentNote(): Promise<string> {
+    if (!this.noteId || !this.file) {
+      throw new Error('Note chat is not initialized');
+    }
+
+    const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+    return database.createNoteChat(this.noteId, this.buildNewChatTitle(), {
+      notePath: this.file.path,
+    });
+  }
+
+  private async selectChat(chatId: string): Promise<void> {
+    if (!this.noteId || chatId === this.chatId) {
+      return;
+    }
+
+    try {
+      const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+      this.chatId = chatId;
+      this.messages = database.getNoteChatMessages(chatId);
+      this.prompt = '';
+      this.render();
+    } catch (error) {
+      console.error('Failed to select note chat:', error);
+      new Notice(`Failed to select note chat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private buildNewChatTitle(): string {
+    const timestamp = new Date().toLocaleString();
+    return this.file ? `${this.file.basename} - ${timestamp}` : `Note chat - ${timestamp}`;
+  }
+
+  private formatChatTitle(chat: NoteChatRecord): string {
+    const updatedAt = new Date(chat.updatedAt);
+    const dateLabel = Number.isNaN(updatedAt.getTime()) ? chat.updatedAt : updatedAt.toLocaleString();
+    const title = chat.title || 'Untitled chat';
+    return `${title} (${dateLabel})`;
+  }
+
+  private getSelectedChatLabel(): string {
+    const selected = this.chats.find((chat) => chat.id === this.chatId);
+    if (!selected) {
+      return 'No chat selected';
+    }
+
+    const updatedAt = new Date(selected.updatedAt);
+    const dateLabel = Number.isNaN(updatedAt.getTime()) ? selected.updatedAt : updatedAt.toLocaleString();
+    return `Updated ${dateLabel}`;
   }
 
   private buildChatPrompt(currentPrompt: string): string {
