@@ -45,6 +45,14 @@ export class Modal {
   }
 }
 
+export class MarkdownRenderer {
+  static async renderMarkdown(markdown: string, el: any, sourcePath: string, component: any) {
+    if (el) {
+      el.textContent = markdown;
+    }
+  }
+}
+
 export class Setting {
   constructor(containerEl: any) {
     // Stub implementation

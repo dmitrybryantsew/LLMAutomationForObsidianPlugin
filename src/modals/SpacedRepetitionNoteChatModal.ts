@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, TFile } from 'obsidian';
+import { App, MarkdownRenderer, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { NoteChatMessageRecord } from '../types/spacedRepetition';
 
@@ -80,10 +80,8 @@ export class SpacedRepetitionNoteChatModal extends Modal {
         text: message.role === 'assistant' ? 'Ollama' : message.role,
         cls: 'spaced-repetition-note-chat-role',
       });
-      messageEl.createEl('div', {
-        text: message.content,
-        cls: 'spaced-repetition-note-chat-content',
-      });
+      const contentEl = messageEl.createDiv({ cls: 'spaced-repetition-note-chat-content' });
+      MarkdownRenderer.renderMarkdown(message.content, contentEl, this.file.path, this.plugin);
     }
 
     const input = container.createEl('textarea', {

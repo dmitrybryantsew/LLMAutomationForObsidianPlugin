@@ -426,6 +426,29 @@
     text-transform: capitalize;
 }
 
+.spaced-repetition-note-chat-content {
+    line-height: 1.5;
+}
+
+.spaced-repetition-note-chat-content > :first-child {
+    margin-top: 0;
+}
+
+.spaced-repetition-note-chat-content > :last-child {
+    margin-bottom: 0;
+}
+
+.spaced-repetition-note-chat-content pre {
+    overflow-x: auto;
+    padding: 10px;
+    border-radius: 4px;
+    background: var(--code-background);
+}
+
+.spaced-repetition-note-chat-content code {
+    white-space: pre-wrap;
+}
+
 .spaced-repetition-note-chat-empty {
     color: var(--text-muted);
 }

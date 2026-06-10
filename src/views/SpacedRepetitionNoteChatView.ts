@@ -1,4 +1,4 @@
-import { ItemView, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Notice, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT } from '../constants';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { NoteChatMessageRecord } from '../types/spacedRepetition';
@@ -148,10 +148,8 @@ export class SpacedRepetitionNoteChatView extends ItemView {
         text: message.role === 'assistant' ? 'Ollama' : message.role,
         cls: 'spaced-repetition-note-chat-role',
       });
-      messageEl.createEl('div', {
-        text: message.content,
-        cls: 'spaced-repetition-note-chat-content',
-      });
+      const contentEl = messageEl.createDiv({ cls: 'spaced-repetition-note-chat-content' });
+      MarkdownRenderer.renderMarkdown(message.content, contentEl, this.file?.path ?? '', this);
     }
 
     const input = container.createEl('textarea', {
