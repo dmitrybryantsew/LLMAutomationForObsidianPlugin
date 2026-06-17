@@ -27,6 +27,12 @@ export interface TextGenerationOptions {
     temperature?: number;
     /** Maximum tokens to generate, default 2000 */
     maxTokens?: number;
+    /** Nucleus sampling value, provider-dependent */
+    topP?: number;
+    /** Presence penalty, provider-dependent */
+    presencePenalty?: number;
+    /** Frequency penalty, provider-dependent */
+    frequencyPenalty?: number;
     /** Language for the response (e.g., "english", "russian") */
     language?: string;
 }
@@ -45,6 +51,12 @@ export interface VisionAnalysisOptions {
     temperature?: number;
     /** Maximum tokens to generate, default 2000 */
     maxTokens?: number;
+    /** Nucleus sampling value, provider-dependent */
+    topP?: number;
+    /** Presence penalty, provider-dependent */
+    presencePenalty?: number;
+    /** Frequency penalty, provider-dependent */
+    frequencyPenalty?: number;
 }
 
 /**

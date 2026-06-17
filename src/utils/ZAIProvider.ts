@@ -46,7 +46,10 @@ export class ZAIProvider extends BaseLLMClient {
             model: options.model,
             message: messageContent,
             temperature: options.temperature,
-            maxTokens: options.maxTokens
+            maxTokens: options.maxTokens,
+            topP: options.topP,
+            presencePenalty: options.presencePenalty,
+            frequencyPenalty: options.frequencyPenalty
         });
 
         // Prepare headers
@@ -209,7 +212,7 @@ export class ZAIProvider extends BaseLLMClient {
     protected buildPayload(options: TextGenerationOptions | VisionAnalysisOptions): ProviderRequestPayload {
         if ('message' in options) {
             // Text generation
-            return {
+            const payload: ProviderRequestPayload = {
                 model: options.model,
                 messages: [
                     {
@@ -220,6 +223,10 @@ export class ZAIProvider extends BaseLLMClient {
                 temperature: options.temperature ?? 0.7,
                 max_tokens: options.maxTokens ?? 2000
             };
+            if (options.topP !== undefined) payload.top_p = options.topP;
+            if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
+            if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
+            return payload;
         } else {
             // Vision analysis
             const visionOptions = options as VisionAnalysisOptions;

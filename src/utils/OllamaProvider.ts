@@ -52,7 +52,10 @@ export class OllamaProvider extends BaseLLMClient {
             model: options.model,
             message: messageContent,
             temperature: options.temperature,
-            maxTokens: options.maxTokens
+            maxTokens: options.maxTokens,
+            topP: options.topP,
+            presencePenalty: options.presencePenalty,
+            frequencyPenalty: options.frequencyPenalty
         });
 
         this.debug.logStart('Text generation', {
@@ -134,7 +137,7 @@ export class OllamaProvider extends BaseLLMClient {
 
     protected buildPayload(options: TextGenerationOptions | VisionAnalysisOptions): ProviderRequestPayload {
         if ('message' in options) {
-            return {
+            const payload: ProviderRequestPayload = {
                 model: options.model,
                 messages: [
                     {
@@ -142,12 +145,16 @@ export class OllamaProvider extends BaseLLMClient {
                         content: options.message
                     }
                 ],
-                temperature: options.temperature ?? 0.7,
                 stream: false,
                 options: {
+                    temperature: options.temperature ?? 0.7,
                     num_predict: options.maxTokens ?? 2000
                 }
             };
+            if (options.topP !== undefined) payload.options.top_p = options.topP;
+            if (options.presencePenalty !== undefined) payload.options.presence_penalty = options.presencePenalty;
+            if (options.frequencyPenalty !== undefined) payload.options.frequency_penalty = options.frequencyPenalty;
+            return payload;
         }
 
         return {

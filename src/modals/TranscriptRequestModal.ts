@@ -3,7 +3,7 @@ import type GptFreeTextGeneratorPlugin from '../main';
 import { TranscriptManager } from "../utils/TranscriptManager";
 import { ErrorHandler } from "../utils/ErrorHandler";
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 export class TranscriptRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -34,7 +34,8 @@ export class TranscriptRequestModal extends Modal {
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
           'zai': 'ZAI',
-          'ollama': 'Ollama'
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
         });
         dropdown
           .setValue(this.provider)

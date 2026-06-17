@@ -10,7 +10,8 @@ export enum LLMProvider {
     OPENROUTER = 'openrouter',
     CHUTES = 'chutes',
     ZAI = 'zai',
-    OLLAMA = 'ollama'
+    OLLAMA = 'ollama',
+    PROXY = 'proxy'
 }
 
 /**
@@ -65,6 +66,15 @@ export interface OllamaConfig extends ProviderConfig {
 }
 
 /**
+ * OpenAI-compatible proxy configuration
+ */
+export interface ProxyConfig extends ProviderConfig {
+    provider: LLMProvider.PROXY;
+    /** Proxy base URL, for example http://server:3000/v1 or http://server:3000 */
+    baseUrl: string;
+}
+
+/**
  * Provider-specific request payload
  */
 export interface ProviderRequestPayload {
@@ -81,6 +91,9 @@ export interface ProviderRequestPayload {
     }>;
     temperature?: number;
     max_tokens?: number;
+    top_p?: number;
+    presence_penalty?: number;
+    frequency_penalty?: number;
     [key: string]: any; // Allow provider-specific fields
 }
 

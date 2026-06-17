@@ -8,7 +8,7 @@ import {
   import type GptFreeTextGeneratorPlugin from '../main';
   import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
 
-  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
   class TextGeneratorModal extends Modal {
     plugin: GptFreeTextGeneratorPlugin;
@@ -17,6 +17,11 @@ import {
     language: string;
     textType: string;
     filePath: string = "";
+    temperature: number;
+    maxTokens: number;
+    topP: number;
+    presencePenalty: number;
+    frequencyPenalty: number;
     private provider: TextProviderId; // New: Use multi-provider system
     private modelDropdown: DropdownComponent | null = null; // Reference to model dropdown component
 
@@ -28,6 +33,11 @@ import {
     this.model = this.getTextModelForProvider(this.provider); // Initialize with provider-specific model
     this.language = plugin.settings.defaultLanguage;
     this.textType = plugin.settings.defaultTextType;
+    this.temperature = plugin.settings.defaultTemperature;
+    this.maxTokens = plugin.settings.defaultMaxTokens;
+    this.topP = plugin.settings.defaultTopP;
+    this.presencePenalty = plugin.settings.defaultPresencePenalty;
+    this.frequencyPenalty = plugin.settings.defaultFrequencyPenalty;
   }
 
   // Helper method to get text model for provider
@@ -41,6 +51,8 @@ import {
         return this.plugin.settings.zaiTextModel || 'glm-4.6';
       case 'ollama':
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
       default:
         return this.plugin.settings.defaultTextModel;
     }
@@ -61,7 +73,8 @@ import {
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
           'zai': 'ZAI',
-          'ollama': 'Ollama'
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
         });
         dropdown
           .setValue(this.provider)
@@ -107,14 +120,40 @@ import {
         });
       });
 
+    this.addNumberOption(contentEl, "Temperature", this.temperature, value => {
+      this.temperature = value;
+    }, 0, 2);
+
+    this.addNumberOption(contentEl, "Max Tokens", this.maxTokens, value => {
+      this.maxTokens = Math.max(1, Math.round(value));
+    }, 1);
+
+    this.addNumberOption(contentEl, "Top P", this.topP, value => {
+      this.topP = value;
+    }, 0, 1);
+
+    this.addNumberOption(contentEl, "Presence Penalty", this.presencePenalty, value => {
+      this.presencePenalty = value;
+    }, -2, 2);
+
+    this.addNumberOption(contentEl, "Frequency Penalty", this.frequencyPenalty, value => {
+      this.frequencyPenalty = value;
+    }, -2, 2);
+
     new Setting(contentEl)
       .addButton((btn) => {
         btn.setButtonText("Save Options").onClick(() => {
           this.onSave({
+            provider: this.provider,
             model: this.model,
             language: this.language,
             textType: this.textType,
             filePath: this.filePath,
+            temperature: this.temperature,
+            maxTokens: this.maxTokens,
+            topP: this.topP,
+            presencePenalty: this.presencePenalty,
+            frequencyPenalty: this.frequencyPenalty,
           });
           this.close();
         });
@@ -143,6 +182,33 @@ import {
     if (!models[this.model]) {
         this.model = firstModel;
     }
+  }
+
+  private addNumberOption(
+    containerEl: HTMLElement,
+    name: string,
+    value: number,
+    onValidChange: (value: number) => void,
+    min?: number,
+    max?: number
+  ): void {
+    new Setting(containerEl)
+      .setName(name)
+      .addText(text => text
+        .setValue(String(value))
+        .onChange(input => {
+          const parsed = Number(input);
+          if (Number.isNaN(parsed)) {
+            return;
+          }
+          if (min !== undefined && parsed < min) {
+            return;
+          }
+          if (max !== undefined && parsed > max) {
+            return;
+          }
+          onValidChange(parsed);
+        }));
   }
 }
 

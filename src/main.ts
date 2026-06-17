@@ -742,6 +742,16 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.minContextLength = this.settings.minContextLength ?? DEFAULT_SETTINGS.minContextLength;
     this.settings.defaultBackend = this.settings.defaultBackend ?? DEFAULT_SETTINGS.defaultBackend; // Initialize defaultBackend
     this.settings.flashcardFolder = this.settings.flashcardFolder ?? DEFAULT_SETTINGS.flashcardFolder; // Initialize flashcardFolder
+    this.settings.proxyApiKey = this.settings.proxyApiKey ?? DEFAULT_SETTINGS.proxyApiKey;
+    this.settings.proxyBaseUrl = this.settings.proxyBaseUrl ?? DEFAULT_SETTINGS.proxyBaseUrl;
+    this.settings.proxyModels = this.settings.proxyModels ?? DEFAULT_SETTINGS.proxyModels;
+    this.settings.proxyTextModel = this.settings.proxyTextModel ?? DEFAULT_SETTINGS.proxyTextModel;
+    this.settings.proxySummaryModel = this.settings.proxySummaryModel ?? DEFAULT_SETTINGS.proxySummaryModel;
+    this.settings.defaultTemperature = this.settings.defaultTemperature ?? DEFAULT_SETTINGS.defaultTemperature;
+    this.settings.defaultMaxTokens = this.settings.defaultMaxTokens ?? DEFAULT_SETTINGS.defaultMaxTokens;
+    this.settings.defaultTopP = this.settings.defaultTopP ?? DEFAULT_SETTINGS.defaultTopP;
+    this.settings.defaultPresencePenalty = this.settings.defaultPresencePenalty ?? DEFAULT_SETTINGS.defaultPresencePenalty;
+    this.settings.defaultFrequencyPenalty = this.settings.defaultFrequencyPenalty ?? DEFAULT_SETTINGS.defaultFrequencyPenalty;
     this.settings.spacedRepetition = {
       ...DEFAULT_SETTINGS.spacedRepetition,
       ...(this.settings.spacedRepetition ?? {})

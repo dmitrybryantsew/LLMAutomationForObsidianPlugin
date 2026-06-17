@@ -11,7 +11,7 @@ import {
   import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts';
   import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredOpenRouterModels
 
-  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
   
   export class VideoSummaryModal extends Modal {
     private plugin: GptFreeTextGeneratorPlugin;
@@ -46,6 +46,8 @@ import {
           return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
         case 'ollama':
           return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
+        case 'proxy':
+          return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
         default:
           return this.plugin.settings.summaryModel;
       }
@@ -77,7 +79,8 @@ import {
             'openrouter': 'OpenRouter',
             'chutes': 'Chutes',
             'zai': 'ZAI',
-            'ollama': 'Ollama'
+            'ollama': 'Ollama',
+            'proxy': 'OpenAI Proxy'
           });
           dropdown
             .setValue(this.provider)

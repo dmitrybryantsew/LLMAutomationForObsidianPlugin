@@ -31,25 +31,35 @@ const DEFAULT_SETTINGS = {
   descriptionStorageLocation: 'database', // 'database' or 'note'
   detailedSummariesStorageLocation: 'database', // 'database' or 'note'
   // Multi-provider settings
-  defaultLLMProvider: 'openrouter', // 'openrouter', 'chutes', 'zai', or 'ollama'
+  defaultLLMProvider: 'openrouter', // 'openrouter', 'chutes', 'zai', 'ollama', or 'proxy'
   chutesApiKey: "",
   zaiApiKey: "",
+  proxyApiKey: "",
   providerTimeout: 600000, // 10 minutes default timeout for long paid summary requests
   providerRetryCount: 3, // Number of retries for failed requests
+  defaultTemperature: 0.7,
+  defaultMaxTokens: 2000,
+  defaultTopP: 1,
+  defaultPresencePenalty: 0,
+  defaultFrequencyPenalty: 0,
   ollamaBaseUrl: "http://localhost:11434",
+  proxyBaseUrl: "http://localhost:3000/v1",
   ollamaTimeout: 120000,
   ollamaModels: [],
+  proxyModels: [],
   // Provider-specific summary models (NEW)
   openrouterSummaryModel: "openrouter/deepseek/deepseek-r1:free",
   openrouterTagModel: "google/gemma-4-31b-it",
   chutesSummaryModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiSummaryModel: "glm-4.6",
   ollamaSummaryModel: "gemma4:31b-cloud",
+  proxySummaryModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   // Provider-specific text models (NEW)
   openrouterTextModel: "openrouter/deepseek/deepseek-r1:free",
   chutesTextModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiTextModel: "glm-4.6",
   ollamaTextModel: "gemma4:31b-cloud",
+  proxyTextModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   // Debug settings
   debugMode: false, // Debug mode for detailed logging
   // Spaced repetition settings

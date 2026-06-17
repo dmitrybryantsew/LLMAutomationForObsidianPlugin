@@ -33,13 +33,21 @@ import {
     content?: string;
   }
 
+  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+
 class GenerateTextView extends ItemView {
   plugin: GptFreeTextGeneratorPlugin;
   inputMessage: string = "";
   filePath: string = "";
   model: string;
+  provider: TextProviderId;
   textType: string;
   language: string;
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  presencePenalty: number;
+  frequencyPenalty: number;
   queryHistory: string[] = [];
   private contextFiles: Map<string, ContextFile> = new Map();
   private fileManager: FileManager;
@@ -49,8 +57,14 @@ class GenerateTextView extends ItemView {
     super(leaf);
     this.plugin = plugin;
     this.model = plugin.settings.defaultTextModel;
+    this.provider = plugin.settings.defaultLLMProvider;
     this.textType = plugin.settings.defaultTextType;
     this.language = plugin.settings.defaultLanguage;
+    this.temperature = plugin.settings.defaultTemperature;
+    this.maxTokens = plugin.settings.defaultMaxTokens;
+    this.topP = plugin.settings.defaultTopP;
+    this.presencePenalty = plugin.settings.defaultPresencePenalty;
+    this.frequencyPenalty = plugin.settings.defaultFrequencyPenalty;
     this.fileManager = new FileManager(this.app);
     this.historyManager = new HistoryManager(this.app);
   }
@@ -132,9 +146,15 @@ private generateShortName(message: string): string {
         btn.setButtonText("Options").onClick(() => {
           new TextGeneratorModal(this.app, this.plugin, (options) => {
             this.model = options.model;
+            this.provider = options.provider;
             this.language = options.language;
             this.textType = options.textType;
             this.filePath = options.filePath;
+            this.temperature = options.temperature;
+            this.maxTokens = options.maxTokens;
+            this.topP = options.topP;
+            this.presencePenalty = options.presencePenalty;
+            this.frequencyPenalty = options.frequencyPenalty;
           }).open();
         });
       });
@@ -406,7 +426,7 @@ private createContextSection(containerEl: HTMLElement) {
 
     try {
       // Get LLM client from services
-      const llmClient = this.plugin.services.llmClientService.getClient();
+      const llmClient = this.plugin.services.llmClientService.getClientForProvider(this.provider);
       
       if (!llmClient) {
         new Notice("LLM client not initialized. Please check your settings and API keys.");
@@ -444,8 +464,11 @@ private createContextSection(containerEl: HTMLElement) {
         model: this.model,
         language: this.language,
         files: validFiles,
-        temperature: 0.7,
-        maxTokens: 2000
+        temperature: this.temperature,
+        maxTokens: this.maxTokens,
+        topP: this.topP,
+        presencePenalty: this.presencePenalty,
+        frequencyPenalty: this.frequencyPenalty
       };
 
       // Generate text using LLM client
@@ -463,6 +486,7 @@ private createContextSection(containerEl: HTMLElement) {
       // Create metadata block
       const metadataBlock = `
 provider_name: ${metadata.provider_name || 'Unknown'}
+provider_selected: ${this.provider}
 model_used: ${metadata.actual_model || this.model}
 request_time: ${metadata.request_time || new Date().toISOString()}
 completion_time: ${metadata.completion_time || new Date().toISOString()}

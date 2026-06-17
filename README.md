@@ -73,6 +73,17 @@ npm test
 
 Current baseline: `155` tests pass.
 
+## OpenAI-Compatible Proxy Provider
+
+The plugin can use the local/VPS `openai-nim-proxy` as an additional text provider. In plugin settings:
+
+- Set `Default LLM Provider` to `OpenAI Proxy`.
+- Set `Proxy Base URL` to `http://your-server:3000` or `http://your-server:3000/v1`. The plugin normalizes either form to the OpenAI-compatible `/v1` API.
+- Set `Proxy API Key` to the proxy server `PROXY_API_KEY`.
+- Click `Refresh Proxy Models` to load model IDs such as `nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, `ollama:<model>`, `chutes:<model>`, and `openrouter:<model>`.
+
+The same settings page also has default request controls for text generation: temperature, max tokens, top-p, presence penalty, and frequency penalty. The text generator options modal can override these values per run.
+
 ## Deploy To Obsidian
 
 Set the target install directory and deploy:

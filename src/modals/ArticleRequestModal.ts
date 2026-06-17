@@ -3,7 +3,7 @@ import { App, Modal, Setting, Notice, ButtonComponent, DropdownComponent } from 
 import type GptFreeTextGeneratorPlugin from '../main';
 import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 export class ArticleRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -33,6 +33,8 @@ export class ArticleRequestModal extends Modal {
         return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
       case 'ollama':
         return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
       default:
         return this.plugin.settings.summaryModel;
     }
@@ -64,7 +66,8 @@ export class ArticleRequestModal extends Modal {
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
           'zai': 'ZAI',
-          'ollama': 'Ollama'
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
         });
         dropdown
           .setValue(this.provider)

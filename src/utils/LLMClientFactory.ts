@@ -7,16 +7,18 @@ import { OpenRouterProvider } from './OpenRouterProvider';
 import { ChutesProvider } from './ChutesProvider';
 import { ZAIProvider } from './ZAIProvider';
 import { OllamaProvider } from './OllamaProvider';
+import { ProxyProvider } from './ProxyProvider';
 import {
     LLMProvider,
     ProviderConfig,
     OpenRouterConfig,
     ChutesConfig,
     ZAIConfig,
-    OllamaConfig
+    OllamaConfig,
+    ProxyConfig
 } from '../types/providers';
 
-export type LLMClient = OpenRouterProvider | ChutesProvider | ZAIProvider | OllamaProvider;
+export type LLMClient = OpenRouterProvider | ChutesProvider | ZAIProvider | OllamaProvider | ProxyProvider;
 
 /**
  * LLM Client Factory
@@ -45,6 +47,9 @@ export class LLMClientFactory {
 
             case LLMProvider.OLLAMA:
                 return new OllamaProvider(config as OllamaConfig);
+
+            case LLMProvider.PROXY:
+                return new ProxyProvider(config as ProxyConfig);
             
             default:
                 throw new Error(`Unsupported provider: ${provider}`);
@@ -155,6 +160,23 @@ export class LLMClientFactory {
         return new OllamaProvider(config, debugMode || false);
     }
 
+    static createProxyClient(
+        apiKey: string,
+        baseUrl?: string,
+        debugMode?: boolean,
+        timeout?: number,
+        maxRetries?: number
+    ): ProxyProvider {
+        const config: ProxyConfig = {
+            apiKey,
+            baseUrl: baseUrl || 'http://localhost:3000/v1',
+            timeout,
+            maxRetries,
+            provider: LLMProvider.PROXY
+        };
+        return new ProxyProvider(config, debugMode || false);
+    }
+
     /**
      * Parse provider from string
      * @param providerString - Provider string (e.g., "openrouter", "chutes", "zai")
@@ -172,6 +194,8 @@ export class LLMClientFactory {
                 return LLMProvider.ZAI;
             case 'ollama':
                 return LLMProvider.OLLAMA;
+            case 'proxy':
+                return LLMProvider.PROXY;
             default:
                 throw new Error(`Unknown provider: ${providerString}`);
         }
@@ -192,6 +216,8 @@ export class LLMClientFactory {
                 return 'ZAI';
             case LLMProvider.OLLAMA:
                 return 'Ollama';
+            case LLMProvider.PROXY:
+                return 'OpenAI Proxy';
         }
     }
 }
@@ -209,10 +235,12 @@ export function createLLMClientFromSettings(
         openRouterApiKey?: string;
         chutesApiKey?: string;
         zaiApiKey?: string;
+        proxyApiKey?: string;
         openRouterBaseUrl?: string;
         chutesBaseUrl?: string;
         zaiBaseUrl?: string;
         ollamaBaseUrl?: string;
+        proxyBaseUrl?: string;
         ollamaTimeout?: number;
         providerTimeout?: number;
         providerRetryCount?: number;
@@ -262,6 +290,18 @@ export function createLLMClientFromSettings(
                 settings.ollamaBaseUrl,
                 settings.debugMode,
                 settings.ollamaTimeout
+            );
+
+        case LLMProvider.PROXY:
+            if (!settings.proxyApiKey) {
+                throw new Error('Proxy API key is required');
+            }
+            return LLMClientFactory.createProxyClient(
+                settings.proxyApiKey,
+                settings.proxyBaseUrl,
+                settings.debugMode,
+                settings.providerTimeout,
+                settings.providerRetryCount
             );
         
         default:

@@ -12,7 +12,7 @@ import {
   import { LLMClientFactory } from '../utils/LLMClientFactory';
   import { LLMProvider } from '../types/providers';
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
@@ -50,6 +50,7 @@ class SettingTab extends PluginSettingTab {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy',
           'g4f': 'G4F (Local - Legacy)'
         });
         dropdown
@@ -107,6 +108,8 @@ class SettingTab extends PluginSettingTab {
         return this.plugin.settings.zaiTextModel || 'glm-4.6';
       case 'ollama':
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
       default:
         return this.plugin.settings.defaultTextModel;
     }
@@ -127,6 +130,9 @@ class SettingTab extends PluginSettingTab {
       case 'ollama':
         this.plugin.settings.ollamaTextModel = model;
         break;
+      case 'proxy':
+        this.plugin.settings.proxyTextModel = model;
+        break;
       default:
         this.plugin.settings.defaultTextModel = model;
     }
@@ -143,6 +149,8 @@ class SettingTab extends PluginSettingTab {
         return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
       case 'ollama':
         return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
       default:
         return this.plugin.settings.summaryModel;
     }
@@ -162,6 +170,9 @@ class SettingTab extends PluginSettingTab {
         break;
       case 'ollama':
         this.plugin.settings.ollamaSummaryModel = model;
+        break;
+      case 'proxy':
+        this.plugin.settings.proxySummaryModel = model;
         break;
       default:
         this.plugin.settings.summaryModel = model;
@@ -518,7 +529,8 @@ class SettingTab extends PluginSettingTab {
           'openrouter': 'OpenRouter',
           'chutes': 'Chutes',
           'zai': 'ZAI',
-          'ollama': 'Ollama'
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
         });
         dropdown
           .setValue(this.plugin.settings.defaultLLMProvider)
@@ -560,6 +572,53 @@ class SettingTab extends PluginSettingTab {
         .onChange(async value => {
           this.plugin.settings.ollamaBaseUrl = value.trim() || 'http://localhost:11434';
           await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Proxy Base URL")
+      .setDesc("OpenAI-compatible proxy endpoint. Use http://server:3000/v1 or http://server:3000.")
+      .addText(text => text
+        .setValue(this.plugin.settings.proxyBaseUrl || 'http://localhost:3000/v1')
+        .onChange(async value => {
+          this.plugin.settings.proxyBaseUrl = value.trim() || 'http://localhost:3000/v1';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Proxy API Key")
+      .setDesc("Bearer key configured as PROXY_API_KEY on the proxy server.")
+      .addText(text => text
+        .setValue(this.plugin.settings.proxyApiKey || '')
+        .onChange(async value => {
+          this.plugin.settings.proxyApiKey = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Refresh Proxy Models")
+      .setDesc("Load model IDs from the proxy /v1/models endpoint.")
+      .addButton(button => button
+        .setButtonText("Refresh Proxy")
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Refreshing...");
+          try {
+            const client = LLMClientFactory.createProxyClient(
+              this.plugin.settings.proxyApiKey,
+              this.plugin.settings.proxyBaseUrl,
+              this.plugin.settings.debugMode,
+              this.plugin.settings.providerTimeout,
+              this.plugin.settings.providerRetryCount
+            );
+            this.plugin.settings.proxyModels = await client.listModels();
+            await this.plugin.saveSettings();
+            new Notice(`Loaded ${this.plugin.settings.proxyModels.length} proxy model(s).`);
+            this.display();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            new Notice(`Failed to refresh proxy models: ${message}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Refresh Proxy");
+          }
         }));
 
     new Setting(containerEl)
@@ -626,6 +685,33 @@ class SettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }
         }));
+
+    containerEl.createEl('h3', { text: 'Default Generation Request Settings' });
+
+    this.addNumberSetting(containerEl, "Temperature", "Default sampling temperature for text generation.", this.plugin.settings.defaultTemperature, async value => {
+      this.plugin.settings.defaultTemperature = value;
+      await this.plugin.saveSettings();
+    }, 0, 2);
+
+    this.addNumberSetting(containerEl, "Max Tokens", "Default maximum output tokens for text generation.", this.plugin.settings.defaultMaxTokens, async value => {
+      this.plugin.settings.defaultMaxTokens = Math.max(1, Math.round(value));
+      await this.plugin.saveSettings();
+    }, 1);
+
+    this.addNumberSetting(containerEl, "Top P", "Default nucleus sampling value where supported.", this.plugin.settings.defaultTopP, async value => {
+      this.plugin.settings.defaultTopP = value;
+      await this.plugin.saveSettings();
+    }, 0, 1);
+
+    this.addNumberSetting(containerEl, "Presence Penalty", "Default presence penalty where supported.", this.plugin.settings.defaultPresencePenalty, async value => {
+      this.plugin.settings.defaultPresencePenalty = value;
+      await this.plugin.saveSettings();
+    }, -2, 2);
+
+    this.addNumberSetting(containerEl, "Frequency Penalty", "Default frequency penalty where supported.", this.plugin.settings.defaultFrequencyPenalty, async value => {
+      this.plugin.settings.defaultFrequencyPenalty = value;
+      await this.plugin.saveSettings();
+    }, -2, 2);
   }
 
   getFilteredOpenRouterModels(): OpenRouterModel[] {
@@ -680,6 +766,16 @@ class SettingTab extends PluginSettingTab {
           return acc;
         }, {});
       }
+
+      case 'proxy': {
+        const models = this.plugin.settings.proxyModels?.length
+          ? this.plugin.settings.proxyModels
+          : [this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
       
       default:
         // Fallback to G4F models for backward compatibility
@@ -714,6 +810,35 @@ class SettingTab extends PluginSettingTab {
           } else {
             new Notice("Debug mode disabled.");
           }
+        }));
+  }
+
+  private addNumberSetting(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    value: number,
+    onValidChange: (value: number) => Promise<void>,
+    min?: number,
+    max?: number
+  ): void {
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc)
+      .addText(text => text
+        .setValue(String(value))
+        .onChange(async input => {
+          const parsed = Number(input);
+          if (Number.isNaN(parsed)) {
+            return;
+          }
+          if (min !== undefined && parsed < min) {
+            return;
+          }
+          if (max !== undefined && parsed > max) {
+            return;
+          }
+          await onValidChange(parsed);
         }));
   }
 

@@ -6,7 +6,7 @@ import { TagManager } from "./TagManager"; // Import TagManager
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 interface ArticleData {
   title: string;

@@ -28,10 +28,12 @@ export class LLMClientService {
         openRouterApiKey: this.settings.openRouterApiKey,
         chutesApiKey: this.settings.chutesApiKey,
         zaiApiKey: this.settings.zaiApiKey,
+        proxyApiKey: this.settings.proxyApiKey,
         openRouterBaseUrl: this.settings.openRouterBaseUrl,
         chutesBaseUrl: this.settings.chutesBaseUrl,
         zaiBaseUrl: this.settings.zaiBaseUrl,
         ollamaBaseUrl: this.settings.ollamaBaseUrl,
+        proxyBaseUrl: this.settings.proxyBaseUrl,
         ollamaTimeout: this.settings.ollamaTimeout,
         providerTimeout: this.settings.providerTimeout,
         providerRetryCount: this.settings.providerRetryCount,
@@ -62,17 +64,19 @@ export class LLMClientService {
    * Get a client for a specific provider (ad-hoc provider selection)
    * This allows getting a specific client without changing global defaults
    */
-  getClientForProvider(providerId: 'openrouter' | 'chutes' | 'zai' | 'ollama'): LLMClient | null {
+  getClientForProvider(providerId: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy'): LLMClient | null {
     try {
       const provider = LLMClientFactory.parseProvider(providerId);
       return createLLMClientFromSettings(provider, {
         openRouterApiKey: this.settings.openRouterApiKey,
         chutesApiKey: this.settings.chutesApiKey,
         zaiApiKey: this.settings.zaiApiKey,
+        proxyApiKey: this.settings.proxyApiKey,
         openRouterBaseUrl: this.settings.openRouterBaseUrl,
         chutesBaseUrl: this.settings.chutesBaseUrl,
         zaiBaseUrl: this.settings.zaiBaseUrl,
         ollamaBaseUrl: this.settings.ollamaBaseUrl,
+        proxyBaseUrl: this.settings.proxyBaseUrl,
         ollamaTimeout: this.settings.ollamaTimeout,
         providerTimeout: this.settings.providerTimeout,
         providerRetryCount: this.settings.providerRetryCount,

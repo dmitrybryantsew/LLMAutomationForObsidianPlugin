@@ -48,7 +48,8 @@ class TestProviderConnectionModal extends Modal {
                     'openrouter': 'OpenRouter',
                     'chutes': 'Chutes',
                     'zai': 'ZAI',
-                    'ollama': 'Ollama'
+                    'ollama': 'Ollama',
+                    'proxy': 'OpenAI Proxy'
                 });
                 dropdown
                     .setValue(this.selectedProvider.toLowerCase())
@@ -124,8 +125,12 @@ class TestProviderConnectionModal extends Modal {
                 openRouterApiKey: this.plugin.settings.openRouterApiKey,
                 chutesApiKey: this.plugin.settings.chutesApiKey,
                 zaiApiKey: this.plugin.settings.zaiApiKey,
+                proxyApiKey: this.plugin.settings.proxyApiKey,
                 ollamaBaseUrl: this.plugin.settings.ollamaBaseUrl,
+                proxyBaseUrl: this.plugin.settings.proxyBaseUrl,
                 ollamaTimeout: this.plugin.settings.ollamaTimeout,
+                providerTimeout: this.plugin.settings.providerTimeout,
+                providerRetryCount: this.plugin.settings.providerRetryCount,
                 debugMode: true
             });
 
@@ -177,6 +182,8 @@ class TestProviderConnectionModal extends Modal {
                 return this.plugin.settings.zaiApiKey;
             case LLMProvider.OLLAMA:
                 return '';
+            case LLMProvider.PROXY:
+                return this.plugin.settings.proxyApiKey;
             default:
                 return undefined;
         }
@@ -192,6 +199,8 @@ class TestProviderConnectionModal extends Modal {
                 return this.plugin.settings.zaiTextModel || 'glm-4.6';
             case LLMProvider.OLLAMA:
                 return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+            case LLMProvider.PROXY:
+                return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
             default:
                 return this.plugin.settings.defaultTextModel;
         }

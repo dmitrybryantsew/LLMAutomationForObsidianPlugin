@@ -12,7 +12,7 @@ import { DatabaseManager } from "../database/DatabaseManager";
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama';
+type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 interface VideoData {
   title: string;
