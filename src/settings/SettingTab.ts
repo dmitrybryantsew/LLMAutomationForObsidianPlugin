@@ -661,7 +661,7 @@ class SettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Provider Timeout (seconds)")
-      .setDesc("Timeout for API requests in seconds")
+      .setDesc("Timeout for OpenRouter, Chutes, ZAI, and Proxy requests. Long video summaries often need 600-1200 seconds.")
       .addText(text => text
         .setValue(String(this.plugin.settings.providerTimeout / 1000))
         .onChange(async value => {

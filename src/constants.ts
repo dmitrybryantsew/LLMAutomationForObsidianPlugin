@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS = {
   chutesApiKey: "",
   zaiApiKey: "",
   proxyApiKey: "",
-  providerTimeout: 600000, // 10 minutes default timeout for long paid summary requests
+  providerTimeout: 1200000, // 20 minutes default timeout for long summary requests
   providerRetryCount: 3, // Number of retries for failed requests
   defaultTemperature: 0.7,
   defaultMaxTokens: 2000,

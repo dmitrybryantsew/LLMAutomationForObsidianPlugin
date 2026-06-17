@@ -84,6 +84,8 @@ The plugin can use the local/VPS `openai-nim-proxy` as an additional text provid
 
 The same settings page also has default request controls for text generation: temperature, max tokens, top-p, presence penalty, and frequency penalty. The text generator options modal can override these values per run.
 
+For long video summaries, increase `Provider Timeout (seconds)` in the same settings section. The current default is 1200 seconds, and older saved values at or below 600 seconds are upgraded automatically on plugin load.
+
 ## Deploy To Obsidian
 
 Set the target install directory and deploy:
