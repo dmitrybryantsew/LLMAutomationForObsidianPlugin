@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
-import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, DEFAULT_SETTINGS } from './constants';
+import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import { GenerateTextView } from './views/GenerateTextView';
 import { GenerateImageView } from './views/GenerateImageView';
@@ -32,8 +32,12 @@ import { QuickQueryModal } from './modals/QuickQueryModal'; // Import the QuickQ
 import { QuizGeneratorModal } from './modals/QuizGeneratorModal'; // Import the QuizGeneratorModal
 import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // Import the FlashcardGeneratorModal
 import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
-import { SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
+import { SpacedRepetitionReviewMode, SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
+import { SpacedRepetitionDeckBrowserView } from './views/SpacedRepetitionDeckBrowserView';
+import { SpacedRepetitionCardManagementView } from './views/SpacedRepetitionCardManagementView';
 import { SpacedRepetitionNoteChatView } from './views/SpacedRepetitionNoteChatView';
+import { FlashcardGenerationView } from './views/FlashcardGenerationView';
+import { CodingExerciseView } from './views/CodingExerciseView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
 import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
@@ -62,7 +66,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.registerView(VIEW_TYPE_GENERATE_IMAGE, (leaf) => new GenerateImageView(leaf, this));
     this.registerView(VIEW_TYPE_VIDEO_PROCESSING, (leaf) => new VideoProcessingView(leaf, this));
     this.registerView(VIEW_TYPE_SPACED_REPETITION_REVIEW, (leaf) => new SpacedRepetitionReviewView(leaf, this));
+    this.registerView(VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, (leaf) => new SpacedRepetitionDeckBrowserView(leaf, this));
+    this.registerView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, (leaf) => new SpacedRepetitionCardManagementView(leaf, this));
     this.registerView(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, (leaf) => new SpacedRepetitionNoteChatView(leaf, this));
+    this.registerView(VIEW_TYPE_FLASHCARD_GENERATION, (leaf) => new FlashcardGenerationView(leaf, this));
+    this.registerView(VIEW_TYPE_CODING_EXERCISES, (leaf) => new CodingExerciseView(leaf, this));
 
     // Initialize VideoQueueManager after plugin is fully initialized
     // It depends on TranscriptManager which might be doing async work internally
@@ -115,8 +123,19 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
 
     // Add ribbon icon for flashcard generation
     this.addRibbonIcon("layers", "Generate Flashcards", () => {
-      const modal = new FlashcardGeneratorModal(this.app, this);
-      modal.open();
+      this.activateView(VIEW_TYPE_FLASHCARD_GENERATION);
+    });
+
+    this.addRibbonIcon("library", "Flashcard Decks", () => {
+      this.activateView(VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER);
+    });
+
+    this.addRibbonIcon("copy-check", "Manage Flashcards", () => {
+      this.activateView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT);
+    });
+
+    this.addRibbonIcon("code", "Coding Exercises", () => {
+      this.activateView(VIEW_TYPE_CODING_EXERCISES);
     });
 
 
@@ -285,7 +304,56 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.addCommand({
       id: 'open-spaced-repetition-review',
       name: 'Open Spaced Repetition Review',
-      callback: () => this.activateView(VIEW_TYPE_SPACED_REPETITION_REVIEW),
+      callback: () => this.activateReviewView({
+        title: 'Due Review',
+        includeNotDue: false,
+      }),
+    });
+
+    this.addCommand({
+      id: 'open-spaced-repetition-decks',
+      name: 'Open Flashcard Decks',
+      callback: () => this.activateView(VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER),
+    });
+
+    this.addCommand({
+      id: 'open-spaced-repetition-card-management',
+      name: 'Open Flashcard Card Manager',
+      callback: () => this.activateView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT),
+    });
+
+    this.addCommand({
+      id: 'cram-current-note-flashcards',
+      name: 'Cram Flashcards From Current Note',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice('No active note');
+          return;
+        }
+
+        const database = await this.services.ensureSpacedRepetitionDatabase();
+        const noteId = database.getNoteIdByPath(activeFile.path);
+        if (!noteId) {
+          new Notice('No spaced repetition cards found for current note');
+          return;
+        }
+
+        await this.activateReviewView({
+          title: `Cram: ${activeFile.basename}`,
+          includeNotDue: true,
+          noteId,
+        });
+      },
+    });
+
+    this.addCommand({
+      id: 'cram-all-flashcards',
+      name: 'Cram All Flashcards',
+      callback: () => this.activateReviewView({
+        title: 'Cram: All Cards',
+        includeNotDue: true,
+      }),
     });
 
     this.addCommand({
@@ -621,10 +689,58 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.addCommand({
       id: 'generate-flashcards',
       name: 'Generate Flashcards from Context',
+      callback: () => this.activateView(VIEW_TYPE_FLASHCARD_GENERATION),
+    });
+
+    this.addCommand({
+      id: 'generate-flashcards-legacy-modal',
+      name: 'Generate Markdown Flashcards from Context (Legacy Modal)',
       callback: () => {
         const modal = new FlashcardGeneratorModal(this.app, this);
         modal.open();
       }
+    });
+
+    this.addCommand({
+      id: 'open-coding-exercises',
+      name: 'Open Coding Exercises',
+      callback: () => this.activateView(VIEW_TYPE_CODING_EXERCISES),
+    });
+
+    this.addCommand({
+      id: 'scan-study-source-library',
+      name: 'Scan Study Source Library',
+      callback: async () => {
+        try {
+          new Notice('Scanning study source library...');
+          const result = await this.services.studySourceLibrary.scan();
+          const file = await this.services.studySourceLibrary.createOrUpdateInventoryNote(result);
+          await this.app.workspace.getLeaf(false).openFile(file);
+          new Notice(`Study sources scanned: ${result.includedFiles}/${result.totalFiles} files, ~${result.includedEstimatedTokens} tokens included.`);
+        } catch (error) {
+          console.error('Failed to scan study source library:', error);
+          new Notice(`Failed to scan study source library: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      },
+    });
+
+    this.addCommand({
+      id: 'generate-csharp-study-path',
+      name: 'Generate C# Study Path Canvas',
+      callback: async () => {
+        try {
+          new Notice('Generating C# study path from configured sources...');
+          const result = await this.services.studyPathGenerator.generateCSharpStudyPath();
+          const canvasFile = this.app.vault.getAbstractFileByPath(result.canvasPath);
+          if (canvasFile instanceof TFile) {
+            await this.app.workspace.getLeaf(false).openFile(canvasFile);
+          }
+          new Notice(`Generated study path: ${result.plan.stages.length} stages from ${result.sourceFileCount} files (~${result.estimatedContextTokens} tokens).`);
+        } catch (error) {
+          console.error('Failed to generate C# study path:', error);
+          new Notice(`Failed to generate C# study path: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      },
     });
   }
 
@@ -742,6 +858,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.minContextLength = this.settings.minContextLength ?? DEFAULT_SETTINGS.minContextLength;
     this.settings.defaultBackend = this.settings.defaultBackend ?? DEFAULT_SETTINGS.defaultBackend; // Initialize defaultBackend
     this.settings.flashcardFolder = this.settings.flashcardFolder ?? DEFAULT_SETTINGS.flashcardFolder; // Initialize flashcardFolder
+    this.settings.flashcardGenerationProvider = this.settings.flashcardGenerationProvider ?? DEFAULT_SETTINGS.flashcardGenerationProvider;
+    this.settings.flashcardGenerationModel = this.settings.flashcardGenerationModel ?? DEFAULT_SETTINGS.flashcardGenerationModel;
+    this.settings.flashcardGenerationTemperature = this.settings.flashcardGenerationTemperature ?? DEFAULT_SETTINGS.flashcardGenerationTemperature;
+    this.settings.flashcardGenerationMaxTokens = this.settings.flashcardGenerationMaxTokens ?? DEFAULT_SETTINGS.flashcardGenerationMaxTokens;
+    this.settings.codingExercisesFolder = this.settings.codingExercisesFolder ?? DEFAULT_SETTINGS.codingExercisesFolder;
     this.settings.proxyApiKey = this.settings.proxyApiKey ?? DEFAULT_SETTINGS.proxyApiKey;
     this.settings.proxyBaseUrl = this.settings.proxyBaseUrl ?? DEFAULT_SETTINGS.proxyBaseUrl;
     this.settings.proxyModels = this.settings.proxyModels ?? DEFAULT_SETTINGS.proxyModels;
@@ -756,6 +877,23 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       ...DEFAULT_SETTINGS.spacedRepetition,
       ...(this.settings.spacedRepetition ?? {})
     };
+    this.settings.allowLocalCodeExecution = this.settings.allowLocalCodeExecution ?? DEFAULT_SETTINGS.allowLocalCodeExecution;
+    this.settings.linqPadLprunPath = this.settings.linqPadLprunPath ?? DEFAULT_SETTINGS.linqPadLprunPath;
+    this.settings.exerciseRunTimeoutMs = this.settings.exerciseRunTimeoutMs ?? DEFAULT_SETTINGS.exerciseRunTimeoutMs;
+    this.settings.codingExerciseProvider = this.settings.codingExerciseProvider ?? DEFAULT_SETTINGS.codingExerciseProvider;
+    this.settings.codingExerciseModel = this.settings.codingExerciseModel ?? DEFAULT_SETTINGS.codingExerciseModel;
+    this.settings.codingExerciseTemperature = this.settings.codingExerciseTemperature ?? DEFAULT_SETTINGS.codingExerciseTemperature;
+    this.settings.codingExerciseMaxTokens = this.settings.codingExerciseMaxTokens ?? DEFAULT_SETTINGS.codingExerciseMaxTokens;
+    this.settings.studyAssistantRootPath = this.settings.studyAssistantRootPath ?? DEFAULT_SETTINGS.studyAssistantRootPath;
+    this.settings.studySourceGroups = this.settings.studySourceGroups ?? DEFAULT_SETTINGS.studySourceGroups;
+    this.settings.studySourceInventoryNotePath = this.settings.studySourceInventoryNotePath ?? DEFAULT_SETTINGS.studySourceInventoryNotePath;
+    this.settings.studyPathProvider = this.settings.studyPathProvider ?? DEFAULT_SETTINGS.studyPathProvider;
+    this.settings.studyPathModel = this.settings.studyPathModel ?? DEFAULT_SETTINGS.studyPathModel;
+    this.settings.studyPathTemperature = this.settings.studyPathTemperature ?? DEFAULT_SETTINGS.studyPathTemperature;
+    this.settings.studyPathMaxTokens = this.settings.studyPathMaxTokens ?? DEFAULT_SETTINGS.studyPathMaxTokens;
+    this.settings.studyPathContextMaxTokens = this.settings.studyPathContextMaxTokens ?? DEFAULT_SETTINGS.studyPathContextMaxTokens;
+    this.settings.studyPathMarkdownPath = this.settings.studyPathMarkdownPath ?? DEFAULT_SETTINGS.studyPathMarkdownPath;
+    this.settings.studyPathCanvasPath = this.settings.studyPathCanvasPath ?? DEFAULT_SETTINGS.studyPathCanvasPath;
     this.settings.providerTimeout = this.settings.providerTimeout && this.settings.providerTimeout > 600000
       ? this.settings.providerTimeout
       : DEFAULT_SETTINGS.providerTimeout;
@@ -823,6 +961,15 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     await this.activateView(VIEW_TYPE_VIDEO_PROCESSING);
   }
 
+  async activateReviewView(mode?: SpacedRepetitionReviewMode) {
+    await this.activateView(VIEW_TYPE_SPACED_REPETITION_REVIEW);
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SPACED_REPETITION_REVIEW);
+    const view = leaves[0]?.view;
+    if (mode && view instanceof SpacedRepetitionReviewView) {
+      await view.setReviewMode(mode);
+    }
+  }
+
   async activateNoteChatView(file: TFile) {
     try {
       let leaf: WorkspaceLeaf;
@@ -858,7 +1005,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_GENERATE_IMAGE);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_VIDEO_PROCESSING);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_REVIEW);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_FLASHCARD_GENERATION);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_CODING_EXERCISES);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services

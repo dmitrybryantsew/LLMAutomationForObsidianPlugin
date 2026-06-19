@@ -9,6 +9,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
   private questionCount = 8;
   private includeSelfCheck = true;
   private includeTypedExact = true;
+  private includeTypedFieldsExact = false;
   private includeMultipleChoice = false;
   private includeLlmChecked = false;
   private additionalInstructions = '';
@@ -70,6 +71,13 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
       .setName('Typed exact')
       .addToggle((toggle) => toggle.setValue(this.includeTypedExact).onChange((value) => {
         this.includeTypedExact = value;
+      }));
+
+    new Setting(contentEl)
+      .setName('Typed exact fields')
+      .setDesc('Generates structured exact fields for syntax/function-call recall.')
+      .addToggle((toggle) => toggle.setValue(this.includeTypedFieldsExact).onChange((value) => {
+        this.includeTypedFieldsExact = value;
       }));
 
     new Setting(contentEl)
@@ -174,6 +182,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
     const types: QuestionType[] = [];
     if (this.includeSelfCheck) types.push('self_check');
     if (this.includeTypedExact) types.push('typed_exact');
+    if (this.includeTypedFieldsExact) types.push('typed_fields_exact');
     if (this.includeMultipleChoice) types.push('multiple_choice');
     if (this.includeLlmChecked) types.push('typed_llm_checked');
     return types;

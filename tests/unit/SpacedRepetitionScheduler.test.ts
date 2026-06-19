@@ -25,6 +25,17 @@ describe('SpacedRepetitionScheduler', () => {
     expect(scheduler.scheduleReview(initial, 4, now).schedule.intervalDays).toBe(5);
   });
 
+  it('schedules weak cards for later the same day', () => {
+    const scheduler = new SpacedRepetitionScheduler({ gradeZeroReaskDelay: 3, sameDayReviewDelayMinutes: 180 });
+    const result = scheduler.scheduleLaterToday(scheduler.createInitialState(now), now);
+
+    expect(result.nextRepeatAt).toBe('2026-06-03T11:00:00.000Z');
+    expect(result.shouldReask).toBe(false);
+    expect(result.reaskAfterCount).toBe(0);
+    expect(result.schedule.intervalDays).toBe(0);
+    expect(result.schedule.lastGrade).toBe(1);
+  });
+
   it('decrements reask counter without clearing reask flag', () => {
     const scheduler = new SpacedRepetitionScheduler({ gradeZeroReaskDelay: 3 });
     const reask = scheduler.scheduleReview(scheduler.createInitialState(now), 0, now);

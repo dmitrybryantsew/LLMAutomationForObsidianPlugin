@@ -40,6 +40,30 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the review view for due spaced repetition cards.',
   },
   {
+    id: 'open-spaced-repetition-decks',
+    name: 'Open Flashcard Decks',
+    group: 'Spaced Repetition',
+    description: 'Opens the flashcard deck browser with due counts, total counts, review, and cram actions.',
+  },
+  {
+    id: 'open-spaced-repetition-card-management',
+    name: 'Open Flashcard Card Manager',
+    group: 'Spaced Repetition',
+    description: 'Opens the flashcard card manager for filtering, editing, suspending, and restoring cards.',
+  },
+  {
+    id: 'cram-current-note-flashcards',
+    name: 'Cram Flashcards From Current Note',
+    group: 'Spaced Repetition',
+    description: 'Reviews all spaced repetition cards linked to the active note, ignoring due dates.',
+  },
+  {
+    id: 'cram-all-flashcards',
+    name: 'Cram All Flashcards',
+    group: 'Spaced Repetition',
+    description: 'Reviews all enabled spaced repetition cards, ignoring due dates.',
+  },
+  {
     id: 'chat-with-current-note-ollama',
     name: 'Chat With Current Note Using Ollama',
     group: 'Spaced Repetition',
@@ -158,7 +182,31 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     id: 'generate-flashcards',
     name: 'Generate Flashcards from Context',
     group: 'Learning',
-    description: 'Generates flashcards from the active note or selected context.',
+    description: 'Opens the flashcard generation side panel with editable context, prompt, preview, and spaced repetition save.',
+  },
+  {
+    id: 'generate-flashcards-legacy-modal',
+    name: 'Generate Markdown Flashcards from Context (Legacy Modal)',
+    group: 'Learning',
+    description: 'Opens the older modal that writes markdown flashcards to the flashcard folder.',
+  },
+  {
+    id: 'open-coding-exercises',
+    name: 'Open Coding Exercises',
+    group: 'Learning',
+    description: 'Opens the coding exercise side panel for AI-generated C# LINQPad exercises with local compile/run feedback.',
+  },
+  {
+    id: 'scan-study-source-library',
+    name: 'Scan Study Source Library',
+    group: 'Learning',
+    description: 'Scans configured study source groups and creates an inventory note with file counts and estimated token budgets.',
+  },
+  {
+    id: 'generate-csharp-study-path',
+    name: 'Generate C# Study Path Canvas',
+    group: 'Learning',
+    description: 'Uses configured study source groups to generate a structured C# study path as both markdown and an Obsidian canvas.',
   },
   {
     id: 'initialize-path-structure',

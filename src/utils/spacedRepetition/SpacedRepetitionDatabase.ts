@@ -34,6 +34,83 @@ export interface DueQuestionRecord {
   reaskAfterCount: number;
 }
 
+export interface ReviewQuestionQuery {
+  now?: Date;
+  limit?: number;
+  includeNotDue?: boolean;
+  noteId?: string | null;
+  studySetId?: string | null;
+}
+
+export interface StudySetReviewStats {
+  studySetId: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  totalCount: number;
+  dueCount: number;
+  suspendedCount: number;
+  archivedCount: number;
+}
+
+export interface ReviewGradeCount {
+  grade: number;
+  count: number;
+}
+
+export interface DueForecastDay {
+  date: string;
+  dueCount: number;
+}
+
+export interface HardCardStats {
+  questionId: string;
+  questionName: string | null;
+  questionText: string;
+  studySetName: string | null;
+  lapseCount: number;
+  reviewCount: number;
+  averageGrade: number;
+}
+
+export interface ReviewStats {
+  reviewedToday: number;
+  reviewedLast7Days: number;
+  lapsesLast30Days: number;
+  gradeDistributionLast30Days: ReviewGradeCount[];
+  dueForecast: DueForecastDay[];
+  hardestCards: HardCardStats[];
+}
+
+export interface CardManagementQuery {
+  search?: string;
+  enabled?: boolean | null;
+  archived?: boolean | null;
+  studySetId?: string | null;
+  questionType?: string | null;
+  limit?: number;
+}
+
+export interface CardManagementRecord {
+  id: string;
+  noteId: string | null;
+  notePath: string | null;
+  noteTitle: string | null;
+  studySetId: string | null;
+  studySetName: string | null;
+  questionName: string | null;
+  questionText: string;
+  questionType: string;
+  answerText: string | null;
+  metadata: Record<string, unknown>;
+  enabled: boolean;
+  archivedAt: string | null;
+  nextRepeatAt: string;
+  lastReviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class SpacedRepetitionDatabase {
   private app: App;
   private config: SpacedRepetitionDatabaseConfig;
@@ -211,6 +288,16 @@ export class SpacedRepetitionDatabase {
   }
 
   getDueQuestions(now: Date = new Date(), limit = 50): DueQuestionRecord[] {
+    return this.getReviewQuestions({ now, limit });
+  }
+
+  getReviewQuestions(query: ReviewQuestionQuery = {}): DueQuestionRecord[] {
+    const now = query.now ?? new Date();
+    const limit = query.limit ?? 50;
+    const filter = this.buildQuestionFilter(query, now);
+
+    filter.params.push(limit);
+
     const rows = this.select<Record<string, unknown>>(
       `
       SELECT
@@ -220,12 +307,11 @@ export class SpacedRepetitionDatabase {
         next_repeat_at as nextRepeatAt,
         should_reask as shouldReask, reask_after_count as reaskAfterCount
       FROM questions
-      WHERE enabled = 1
-        AND ((should_reask = 1 AND reask_after_count <= 0) OR (should_reask = 0 AND next_repeat_at <= ?))
-      ORDER BY should_reask DESC, next_repeat_at ASC
+      WHERE ${filter.conditions.join(' AND ')}
+      ORDER BY should_reask DESC, next_repeat_at ASC, created_at ASC
       LIMIT ?
       `,
-      [now.toISOString(), limit]
+      filter.params
     );
 
     return rows.map((row) => ({
@@ -243,6 +329,16 @@ export class SpacedRepetitionDatabase {
       shouldReask: Number(row.shouldReask) === 1,
       reaskAfterCount: Number(row.reaskAfterCount),
     }));
+  }
+
+  countReviewQuestions(query: Omit<ReviewQuestionQuery, 'limit'> = {}): number {
+    const filter = this.buildQuestionFilter(query, query.now ?? new Date());
+    const rows = this.select<{ count: number }>(
+      `SELECT COUNT(*) as count FROM questions WHERE ${filter.conditions.join(' AND ')}`,
+      filter.params
+    );
+
+    return Number(rows[0]?.count ?? 0);
   }
 
   getQuestionReviewState(questionId: string): QuestionReviewState | null {
@@ -373,6 +469,219 @@ export class SpacedRepetitionDatabase {
     await this.persist();
   }
 
+  async updateQuestionDueState(input: {
+    questionId: string;
+    nextRepeatAt: string;
+    shouldReask?: boolean;
+    reaskAfterCount?: number;
+  }): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+
+    db.run(
+      `
+      UPDATE questions
+      SET
+        next_repeat_at = ?,
+        should_reask = ?,
+        reask_after_count = ?,
+        updated_at = ?
+      WHERE id = ?
+      `,
+      [
+        input.nextRepeatAt,
+        input.shouldReask ? 1 : 0,
+        input.reaskAfterCount ?? 0,
+        now,
+        input.questionId,
+      ]
+    );
+
+    await this.persist();
+  }
+
+  async setQuestionEnabled(questionId: string, enabled: boolean): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+
+    db.run(
+      'UPDATE questions SET enabled = ?, updated_at = ? WHERE id = ?',
+      [enabled ? 1 : 0, now, questionId]
+    );
+
+    await this.persist();
+  }
+
+  async setQuestionArchived(questionId: string, archived: boolean): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+
+    db.run(
+      'UPDATE questions SET archived_at = ?, updated_at = ? WHERE id = ?',
+      [archived ? now : null, now, questionId]
+    );
+
+    await this.persist();
+  }
+
+  async setQuestionStudySet(questionId: string, studySetId: string | null): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    const questionRows = this.select<Record<string, unknown>>(
+      'SELECT note_id as noteId, metadata_json as metadataJson FROM questions WHERE id = ? LIMIT 1',
+      [questionId]
+    );
+    const question = questionRows[0];
+    if (!question) {
+      throw new Error(`Question not found: ${questionId}`);
+    }
+
+    const noteId = question.noteId ? String(question.noteId) : null;
+    if (!studySetId && !noteId) {
+      throw new Error('Cannot move a deck-only card to No deck because it is not linked to a note');
+    }
+
+    let deckName: string | null = null;
+    if (studySetId) {
+      const setRows = this.select<{ name: string }>('SELECT name FROM study_sets WHERE id = ? LIMIT 1', [studySetId]);
+      if (!setRows[0]) {
+        throw new Error(`Study set not found: ${studySetId}`);
+      }
+      deckName = String(setRows[0].name);
+    }
+
+    const metadata = this.parseJson<Record<string, unknown>>(question.metadataJson, {});
+    if (deckName) {
+      metadata.deckName = deckName;
+    } else {
+      delete metadata.deckName;
+    }
+
+    db.run(
+      'UPDATE questions SET study_set_id = ?, metadata_json = ?, updated_at = ? WHERE id = ?',
+      [studySetId, JSON.stringify(metadata), now, questionId]
+    );
+
+    if (studySetId && noteId) {
+      db.run(
+        `
+        INSERT INTO study_set_notes (study_set_id, note_id, added_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(study_set_id, note_id) DO NOTHING
+        `,
+        [studySetId, noteId, now]
+      );
+    }
+
+    await this.persist();
+  }
+
+  async updateStudySet(input: {
+    studySetId: string;
+    name: string;
+    description?: string | null;
+  }): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error('Deck name cannot be empty');
+    }
+
+    db.run(
+      'UPDATE study_sets SET name = ?, description = ?, updated_at = ? WHERE id = ?',
+      [name, input.description?.trim() || null, now, input.studySetId]
+    );
+
+    const rows = this.select<Record<string, unknown>>(
+      'SELECT id, metadata_json as metadataJson FROM questions WHERE study_set_id = ?',
+      [input.studySetId]
+    );
+    for (const row of rows) {
+      const metadata = this.parseJson<Record<string, unknown>>(row.metadataJson, {});
+      metadata.deckName = name;
+      db.run(
+        'UPDATE questions SET metadata_json = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(metadata), now, String(row.id)]
+      );
+    }
+
+    await this.persist();
+  }
+
+  async setStudySetEnabled(studySetId: string, enabled: boolean): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+
+    db.run(
+      'UPDATE study_sets SET enabled = ?, updated_at = ? WHERE id = ?',
+      [enabled ? 1 : 0, now, studySetId]
+    );
+
+    await this.persist();
+  }
+
+  async deleteEmptyStudySet(studySetId: string): Promise<void> {
+    const db = this.requireDb();
+    const countRows = this.select<{ count: number }>(
+      'SELECT COUNT(*) as count FROM questions WHERE study_set_id = ?',
+      [studySetId]
+    );
+    const questionCount = Number(countRows[0]?.count ?? 0);
+    if (questionCount > 0) {
+      throw new Error('Only empty decks can be deleted');
+    }
+
+    db.run('DELETE FROM study_sets WHERE id = ?', [studySetId]);
+    await this.persist();
+  }
+
+  async updateQuestionContent(input: {
+    questionId: string;
+    questionName?: string | null;
+    questionText: string;
+    answerText?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+
+    if (input.metadata) {
+      db.run(
+        `
+        UPDATE questions
+        SET question_name = ?, question_text = ?, answer_text = ?, metadata_json = ?, updated_at = ?
+        WHERE id = ?
+        `,
+        [
+          input.questionName ?? null,
+          input.questionText,
+          input.answerText ?? null,
+          JSON.stringify(input.metadata),
+          now,
+          input.questionId,
+        ]
+      );
+    } else {
+      db.run(
+        `
+        UPDATE questions
+        SET question_name = ?, question_text = ?, answer_text = ?, updated_at = ?
+        WHERE id = ?
+        `,
+        [
+          input.questionName ?? null,
+          input.questionText,
+          input.answerText ?? null,
+          now,
+          input.questionId,
+        ]
+      );
+    }
+
+    await this.persist();
+  }
+
   getStudySets(): SpacedRepetitionStudySetRecord[] {
     return this.select<Record<string, unknown>>(
       `
@@ -389,6 +698,116 @@ export class SpacedRepetitionDatabase {
       sourceRule: this.parseJson(row.sourceRuleJson, {}),
       tags: this.parseJson(row.tagsJson, []),
       enabled: Number(row.enabled) === 1,
+    }));
+  }
+
+  getStudySetReviewStats(now: Date = new Date()): StudySetReviewStats[] {
+    const sets = this.getStudySets();
+    return sets.map((set) => ({
+      studySetId: set.id,
+      name: set.name,
+      description: set.description ?? null,
+      enabled: set.enabled,
+      totalCount: this.countReviewQuestions({ studySetId: set.id, includeNotDue: true, now }),
+      dueCount: this.countReviewQuestions({ studySetId: set.id, now }),
+      suspendedCount: this.countQuestionsByState(set.id, { enabled: false, archived: false }),
+      archivedCount: this.countQuestionsByState(set.id, { archived: true }),
+    }));
+  }
+
+  getReviewStats(now: Date = new Date()): ReviewStats {
+    const todayStart = this.startOfLocalDay(now);
+    const tomorrowStart = this.addDays(todayStart, 1);
+    const sevenDaysAgo = this.addDays(todayStart, -6);
+    const thirtyDaysAgo = this.addDays(todayStart, -29);
+
+    const reviewedToday = this.countReviewsBetween(todayStart, tomorrowStart);
+    const reviewedLast7Days = this.countReviewsBetween(sevenDaysAgo, tomorrowStart);
+    const lapsesLast30Days = this.countReviewsBetween(thirtyDaysAgo, tomorrowStart, 0);
+
+    return {
+      reviewedToday,
+      reviewedLast7Days,
+      lapsesLast30Days,
+      gradeDistributionLast30Days: this.getGradeDistribution(thirtyDaysAgo, tomorrowStart),
+      dueForecast: this.getDueForecast(todayStart, 7),
+      hardestCards: this.getHardestCards(5),
+    };
+  }
+
+  getCardsForManagement(query: CardManagementQuery = {}): CardManagementRecord[] {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (query.enabled !== null && query.enabled !== undefined) {
+      conditions.push('q.enabled = ?');
+      params.push(query.enabled ? 1 : 0);
+    }
+
+    if (query.archived !== null && query.archived !== undefined) {
+      conditions.push(query.archived ? 'q.archived_at IS NOT NULL' : 'q.archived_at IS NULL');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(query, 'studySetId')) {
+      if (query.studySetId === null) {
+        conditions.push('q.study_set_id IS NULL');
+      } else if (query.studySetId) {
+        conditions.push('q.study_set_id = ?');
+        params.push(query.studySetId);
+      }
+    }
+
+    if (query.questionType) {
+      conditions.push('q.question_type = ?');
+      params.push(query.questionType);
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      conditions.push('(q.question_text LIKE ? OR q.answer_text LIKE ? OR q.question_name LIKE ? OR n.note_path LIKE ? OR ss.name LIKE ?)');
+      const pattern = `%${search}%`;
+      params.push(pattern, pattern, pattern, pattern, pattern);
+    }
+
+    params.push(query.limit ?? 200);
+
+    const rows = this.select<Record<string, unknown>>(
+      `
+      SELECT
+        q.id, q.note_id as noteId, n.note_path as notePath, n.note_title as noteTitle,
+        q.study_set_id as studySetId, ss.name as studySetName,
+        q.question_name as questionName, q.question_text as questionText,
+        q.question_type as questionType, q.answer_text as answerText,
+        q.metadata_json as metadataJson, q.enabled, q.archived_at as archivedAt, q.next_repeat_at as nextRepeatAt,
+        q.last_reviewed_at as lastReviewedAt, q.created_at as createdAt, q.updated_at as updatedAt
+      FROM questions q
+      LEFT JOIN notes n ON n.id = q.note_id
+      LEFT JOIN study_sets ss ON ss.id = q.study_set_id
+      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+      ORDER BY q.archived_at IS NOT NULL ASC, q.enabled ASC, q.next_repeat_at ASC, q.updated_at DESC
+      LIMIT ?
+      `,
+      params
+    );
+
+    return rows.map((row) => ({
+      id: String(row.id),
+      noteId: row.noteId ? String(row.noteId) : null,
+      notePath: row.notePath ? String(row.notePath) : null,
+      noteTitle: row.noteTitle ? String(row.noteTitle) : null,
+      studySetId: row.studySetId ? String(row.studySetId) : null,
+      studySetName: row.studySetName ? String(row.studySetName) : null,
+      questionName: row.questionName ? String(row.questionName) : null,
+      questionText: String(row.questionText),
+      questionType: String(row.questionType),
+      answerText: row.answerText ? String(row.answerText) : null,
+      metadata: this.parseJson(row.metadataJson, {}),
+      enabled: Number(row.enabled) === 1,
+      archivedAt: row.archivedAt ? String(row.archivedAt) : null,
+      nextRepeatAt: String(row.nextRepeatAt),
+      lastReviewedAt: row.lastReviewedAt ? String(row.lastReviewedAt) : null,
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt),
     }));
   }
 
@@ -571,6 +990,7 @@ export class SpacedRepetitionDatabase {
         should_reask INTEGER NOT NULL DEFAULT 0,
         reask_after_count INTEGER NOT NULL DEFAULT 0,
         enabled INTEGER NOT NULL DEFAULT 1,
+        archived_at TEXT,
         CHECK (note_id IS NOT NULL OR study_set_id IS NOT NULL)
       );
 
@@ -641,6 +1061,17 @@ export class SpacedRepetitionDatabase {
       `,
       [String(SCHEMA_VERSION)]
     );
+
+    this.ensureColumn('questions', 'archived_at', 'TEXT');
+  }
+
+  private ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {
+    const columns = this.select<{ name: string }>(`PRAGMA table_info(${tableName})`);
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    this.requireDb().run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private async ensureParentDirectory(): Promise<void> {
@@ -739,6 +1170,166 @@ export class SpacedRepetitionDatabase {
     } catch {
       return fallback;
     }
+  }
+
+  private buildQuestionFilter(query: Omit<ReviewQuestionQuery, 'limit'>, now: Date): { conditions: string[]; params: unknown[] } {
+    const conditions = ['enabled = 1', 'archived_at IS NULL'];
+    const params: unknown[] = [];
+
+    if (!query.includeNotDue) {
+      conditions.push('((should_reask = 1 AND reask_after_count <= 0) OR (should_reask = 0 AND next_repeat_at <= ?))');
+      params.push(now.toISOString());
+    }
+
+    if (query.noteId) {
+      conditions.push('note_id = ?');
+      params.push(query.noteId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(query, 'studySetId')) {
+      if (query.studySetId === null) {
+        conditions.push('study_set_id IS NULL');
+      } else if (query.studySetId) {
+        conditions.push('study_set_id = ?');
+        params.push(query.studySetId);
+        conditions.push('EXISTS (SELECT 1 FROM study_sets ss WHERE ss.id = study_set_id AND ss.enabled = 1)');
+      }
+    } else {
+      conditions.push('(study_set_id IS NULL OR EXISTS (SELECT 1 FROM study_sets ss WHERE ss.id = study_set_id AND ss.enabled = 1))');
+    }
+
+    return { conditions, params };
+  }
+
+  private countQuestionsByState(studySetId: string, filters: { enabled?: boolean; archived?: boolean }): number {
+    const conditions = ['study_set_id = ?'];
+    const params: unknown[] = [studySetId];
+
+    if (filters.enabled !== undefined) {
+      conditions.push('enabled = ?');
+      params.push(filters.enabled ? 1 : 0);
+    }
+
+    if (filters.archived !== undefined) {
+      conditions.push(filters.archived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL');
+    }
+
+    const rows = this.select<{ count: number }>(
+      `SELECT COUNT(*) as count FROM questions WHERE ${conditions.join(' AND ')}`,
+      params
+    );
+
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  private countReviewsBetween(start: Date, end: Date, grade?: number): number {
+    const conditions = ['reviewed_at >= ?', 'reviewed_at < ?'];
+    const params: unknown[] = [start.toISOString(), end.toISOString()];
+    if (grade !== undefined) {
+      conditions.push('grade = ?');
+      params.push(grade);
+    }
+
+    const rows = this.select<{ count: number }>(
+      `SELECT COUNT(*) as count FROM review_history WHERE ${conditions.join(' AND ')}`,
+      params
+    );
+
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  private getGradeDistribution(start: Date, end: Date): ReviewGradeCount[] {
+    const rows = this.select<{ grade: number; count: number }>(
+      `
+      SELECT grade, COUNT(*) as count
+      FROM review_history
+      WHERE reviewed_at >= ? AND reviewed_at < ?
+      GROUP BY grade
+      ORDER BY grade ASC
+      `,
+      [start.toISOString(), end.toISOString()]
+    );
+    const counts = new Map(rows.map((row) => [Number(row.grade), Number(row.count)]));
+
+    return [0, 1, 2, 3, 4].map((grade) => ({
+      grade,
+      count: counts.get(grade) ?? 0,
+    }));
+  }
+
+  private getDueForecast(start: Date, dayCount: number): DueForecastDay[] {
+    return Array.from({ length: dayCount }, (_, index) => {
+      const dayStart = this.addDays(start, index);
+      const dayEnd = this.addDays(dayStart, 1);
+      const rows = this.select<{ count: number }>(
+        `
+        SELECT COUNT(*) as count
+        FROM questions q
+        LEFT JOIN study_sets ss ON ss.id = q.study_set_id
+        WHERE q.enabled = 1
+          AND q.archived_at IS NULL
+          AND q.should_reask = 0
+          AND q.next_repeat_at >= ?
+          AND q.next_repeat_at < ?
+          AND (q.study_set_id IS NULL OR ss.enabled = 1)
+        `,
+        [dayStart.toISOString(), dayEnd.toISOString()]
+      );
+
+      return {
+        date: this.formatLocalDate(dayStart),
+        dueCount: Number(rows[0]?.count ?? 0),
+      };
+    });
+  }
+
+  private getHardestCards(limit: number): HardCardStats[] {
+    const rows = this.select<Record<string, unknown>>(
+      `
+      SELECT
+        q.id as questionId, q.question_name as questionName, q.question_text as questionText,
+        ss.name as studySetName, s.lapse_count as lapseCount,
+        COUNT(rh.id) as reviewCount, AVG(rh.grade) as averageGrade
+      FROM questions q
+      LEFT JOIN study_sets ss ON ss.id = q.study_set_id
+      LEFT JOIN schedules s ON s.question_id = q.id
+      LEFT JOIN review_history rh ON rh.question_id = q.id
+      WHERE q.archived_at IS NULL
+        AND (q.study_set_id IS NULL OR ss.enabled = 1)
+      GROUP BY q.id
+      HAVING reviewCount > 0
+      ORDER BY lapseCount DESC, averageGrade ASC, reviewCount DESC
+      LIMIT ?
+      `,
+      [limit]
+    );
+
+    return rows.map((row) => ({
+      questionId: String(row.questionId),
+      questionName: row.questionName ? String(row.questionName) : null,
+      questionText: String(row.questionText),
+      studySetName: row.studySetName ? String(row.studySetName) : null,
+      lapseCount: Number(row.lapseCount ?? 0),
+      reviewCount: Number(row.reviewCount ?? 0),
+      averageGrade: Number(row.averageGrade ?? 0),
+    }));
+  }
+
+  private startOfLocalDay(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  private addDays(value: Date, days: number): Date {
+    const next = new Date(value);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  private formatLocalDate(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private mapNoteChat(row: Record<string, unknown>): NoteChatRecord {

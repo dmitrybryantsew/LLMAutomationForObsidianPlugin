@@ -1,15 +1,19 @@
 import { TFile } from 'obsidian';
-import { AnswerCheckMode, QuestionType, SpacedRepetitionQuestionInput } from '../../types/spacedRepetition';
+import { AnswerCheckMode, ExactAnswerField, QuestionType, SpacedRepetitionQuestionInput } from '../../types/spacedRepetition';
 import { LLMClientService } from '../LLMClientService';
+import { normalizeExactAnswerField } from './ExactAnswerMatcher';
 
 export interface GenerateQuestionsForNoteOptions {
   file: TFile;
   noteContent: string;
+  provider?: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
   model: string;
   questionCount: number;
   questionTypes: QuestionType[];
   additionalInstructions?: string;
   outputLanguage?: string;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 export interface GeneratedQuestionSource {
@@ -30,11 +34,13 @@ interface RawGeneratedQuestion {
   answerCheckMode?: unknown;
   tags?: unknown;
   metadata?: unknown;
+  fields?: unknown;
+  exactFields?: unknown;
   sourceQuote?: unknown;
   sourceExcerpt?: unknown;
 }
 
-const QUESTION_TYPES: QuestionType[] = ['self_check', 'typed_exact', 'typed_llm_checked', 'multiple_choice'];
+const QUESTION_TYPES: QuestionType[] = ['self_check', 'typed_exact', 'typed_fields_exact', 'typed_llm_checked', 'multiple_choice'];
 
 export class SpacedRepetitionGenerator {
   private llmClientService: LLMClientService;
@@ -44,7 +50,9 @@ export class SpacedRepetitionGenerator {
   }
 
   async generateQuestionsForNote(options: GenerateQuestionsForNoteOptions): Promise<GeneratedSpacedRepetitionQuestion[]> {
-    const client = this.llmClientService.getClientForProvider('ollama') ?? this.llmClientService.getClient();
+    const client = options.provider
+      ? this.llmClientService.getClientForProvider(options.provider)
+      : this.llmClientService.getClientForProvider('ollama') ?? this.llmClientService.getClient();
     if (!client) {
       throw new Error('LLM client is not initialized');
     }
@@ -55,8 +63,8 @@ export class SpacedRepetitionGenerator {
       model: options.model,
       language: options.outputLanguage ?? 'english',
       files: [],
-      temperature: 0.2,
-      maxTokens: 3000,
+      temperature: options.temperature ?? 0.2,
+      maxTokens: options.maxTokens ?? 3000,
     });
 
     return this.parseGeneratedQuestions(response.output);
@@ -78,8 +86,8 @@ export class SpacedRepetitionGenerator {
 
       const question = raw as RawGeneratedQuestion;
       const questionText = this.cleanString(question.questionText);
-      const answerText = this.cleanString(question.answerText);
-      if (!questionText || !answerText) {
+      let answerText = this.cleanString(question.answerText);
+      if (!questionText) {
         continue;
       }
 
@@ -91,6 +99,21 @@ export class SpacedRepetitionGenerator {
       }
 
       const metadata = this.normalizeMetadata(question.metadata);
+      const exactFields = this.normalizeExactFields(question.fields)
+        || this.normalizeExactFields(question.exactFields)
+        || this.normalizeExactFields(metadata.exactFields);
+      if (questionType === 'typed_fields_exact') {
+        if (!exactFields?.length) {
+          continue;
+        }
+        metadata.exactFields = exactFields;
+        answerText = exactFields.map((field) => `${field.label}: ${field.answer}`).join('\n');
+      }
+
+      if (!answerText) {
+        continue;
+      }
+
       const tags = this.normalizeStringArray(question.tags);
       if (tags.length) {
         metadata.tags = tags;
@@ -155,6 +178,10 @@ Rules:
 - Allowed questionType values: ${typeList}.
 - For self_check, answerCheckMode must be "self".
 - For typed_exact, answerCheckMode must be "exact" and answerText should be concise.
+- For typed_fields_exact, answerCheckMode must be "exact"; include metadata.exactFields as an array of {"id","label","answer","placeholder"}.
+- typed_fields_exact fields may also include: aliases string array, regex string, caseSensitive boolean, normalizeWhitespace boolean, normalization "text" or "csharp".
+- Use normalization "csharp" for C# syntax cards where insignificant spacing should not matter.
+- Use typed_fields_exact when the learner must remember exact syntax pieces, method names, parameter order, flags, or function-call arguments.
 - For typed_llm_checked, answerCheckMode must be "llm" and metadata should include a short rubric.
 - For multiple_choice, choices must be exactly four strings and answerText must be the correct choice text.
 - Prefer questions that test durable understanding, definitions, distinctions, steps, and edge cases.
@@ -236,7 +263,7 @@ ${noteContent}`;
   }
 
   private normalizeAnswerCheckMode(value: unknown, questionType: QuestionType): AnswerCheckMode {
-    if (questionType === 'typed_exact') {
+    if (questionType === 'typed_exact' || questionType === 'typed_fields_exact') {
       return 'exact';
     }
 
@@ -268,6 +295,22 @@ ${noteContent}`;
     }
 
     return { ...(value as Record<string, unknown>) };
+  }
+
+  private normalizeExactFields(value: unknown): ExactAnswerField[] | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+
+    const fields: ExactAnswerField[] = [];
+    for (const item of value) {
+      const field = normalizeExactAnswerField(item, fields.length);
+      if (field) {
+        fields.push(field);
+      }
+    }
+
+    return fields.length ? fields : null;
   }
 
   private cleanString(value: unknown): string {

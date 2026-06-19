@@ -1,6 +1,6 @@
 export type ReviewGrade = 0 | 1 | 2 | 3 | 4;
 
-export type QuestionType = 'multiple_choice' | 'typed_exact' | 'typed_llm_checked' | 'self_check';
+export type QuestionType = 'multiple_choice' | 'typed_exact' | 'typed_fields_exact' | 'typed_llm_checked' | 'self_check';
 
 export type AnswerCheckMode = 'self' | 'exact' | 'llm';
 
@@ -12,6 +12,7 @@ export interface SpacedRepetitionSettings {
   maxReviewCardsPerSession: number;
   newCardsPerDay: number;
   gradeZeroReaskDelay: number;
+  sameDayReviewDelayMinutes: number;
   includeLinkedNotesByDefault: boolean;
 }
 
@@ -54,6 +55,20 @@ export interface AnswerCheckerResult {
   confidence: number;
   feedback: string;
   correctedAnswer?: string | null;
+}
+
+export type ExactAnswerNormalization = 'text' | 'csharp';
+
+export interface ExactAnswerField {
+  id: string;
+  label: string;
+  answer: string;
+  placeholder?: string | null;
+  caseSensitive?: boolean;
+  normalizeWhitespace?: boolean;
+  aliases?: string[];
+  regex?: string | null;
+  normalization?: ExactAnswerNormalization;
 }
 
 export interface SpacedRepetitionNoteRecord {

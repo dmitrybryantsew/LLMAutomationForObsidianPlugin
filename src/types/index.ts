@@ -4,6 +4,7 @@ export * from '../utils/ErrorHandler';
 export * from '../utils/TranscriptManager';
 import { SummaryType } from '../utils/summaryPrompts'; // Import SummaryType
 import { SpacedRepetitionSettings } from './spacedRepetition';
+import { StudySourceGroup } from './studySources';
 
 /**
  * PluginSettings Interface
@@ -39,6 +40,11 @@ export interface PluginSettings {
     summaryFolder: string;
     quizFolder: string; // Folder for storing generated quizzes
     flashcardFolder: string; // Folder for storing generated flashcards
+    flashcardGenerationProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    flashcardGenerationModel: string;
+    flashcardGenerationTemperature: number;
+    flashcardGenerationMaxTokens: number;
+    codingExercisesFolder: string; // Folder for storing generated coding exercises
     
     // Summary generation settings
     summaryModel: string;
@@ -115,6 +121,27 @@ export interface PluginSettings {
 
     // Spaced repetition settings
     spacedRepetition: SpacedRepetitionSettings;
+
+    // Local coding exercise runner settings
+    allowLocalCodeExecution: boolean;
+    linqPadLprunPath: string;
+    exerciseRunTimeoutMs: number;
+    codingExerciseProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    codingExerciseModel: string;
+    codingExerciseTemperature: number;
+    codingExerciseMaxTokens: number;
+    studyAssistantRootPath: string;
+
+    // Study path/canvas source library
+    studySourceGroups: StudySourceGroup[];
+    studySourceInventoryNotePath: string;
+    studyPathProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    studyPathModel: string;
+    studyPathTemperature: number;
+    studyPathMaxTokens: number;
+    studyPathContextMaxTokens: number;
+    studyPathMarkdownPath: string;
+    studyPathCanvasPath: string;
   }
   
   /**

@@ -16,6 +16,11 @@ import { SpacedRepetitionDatabase } from "./spacedRepetition/SpacedRepetitionDat
 import { SpacedRepetitionScheduler } from "./spacedRepetition/SpacedRepetitionScheduler";
 import { SpacedRepetitionGenerator } from "./spacedRepetition/SpacedRepetitionGenerator";
 import { AnswerChecker } from "./spacedRepetition/AnswerChecker";
+import { LocalCodeRunner } from "./LocalCodeRunner";
+import { CodingExerciseGenerator } from "./CodingExerciseGenerator";
+import { StudyAssistantImporter } from "./StudyAssistantImporter";
+import { StudySourceLibrary } from "./StudySourceLibrary";
+import { StudyPathGenerator } from "./StudyPathGenerator";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
 import type GptFreeTextGeneratorPlugin from "../main";
@@ -43,6 +48,11 @@ export class PluginServices {
   private _spacedRepetitionScheduler: SpacedRepetitionScheduler;
   private _spacedRepetitionGenerator: SpacedRepetitionGenerator;
   private _answerChecker: AnswerChecker;
+  private _localCodeRunner: LocalCodeRunner;
+  private _codingExerciseGenerator: CodingExerciseGenerator;
+  private _studyAssistantImporter: StudyAssistantImporter;
+  private _studySourceLibrary: StudySourceLibrary;
+  private _studyPathGenerator: StudyPathGenerator;
   
   // Settings
   private _settings: PluginSettings;
@@ -80,10 +90,16 @@ export class PluginServices {
     this._flashcardManager = new FlashcardManager(app, settings, this._llmClientService);
 
     this._spacedRepetitionScheduler = new SpacedRepetitionScheduler({
-      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
+      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay,
+      sameDayReviewDelayMinutes: settings.spacedRepetition.sameDayReviewDelayMinutes
     });
     this._spacedRepetitionGenerator = new SpacedRepetitionGenerator(this._llmClientService);
     this._answerChecker = new AnswerChecker(this._llmClientService);
+    this._localCodeRunner = new LocalCodeRunner(app, settings);
+    this._codingExerciseGenerator = new CodingExerciseGenerator(settings, this._llmClientService);
+    this._studyAssistantImporter = new StudyAssistantImporter(settings.studyAssistantRootPath);
+    this._studySourceLibrary = new StudySourceLibrary(app, settings);
+    this._studyPathGenerator = new StudyPathGenerator(app, settings, this._llmClientService, this._studySourceLibrary);
 
     if (settings.spacedRepetition.enabled) {
       this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(app, {
@@ -207,6 +223,26 @@ export class PluginServices {
     return this._answerChecker;
   }
 
+  public get localCodeRunner(): LocalCodeRunner {
+    return this._localCodeRunner;
+  }
+
+  public get codingExerciseGenerator(): CodingExerciseGenerator {
+    return this._codingExerciseGenerator;
+  }
+
+  public get studyAssistantImporter(): StudyAssistantImporter {
+    return this._studyAssistantImporter;
+  }
+
+  public get studySourceLibrary(): StudySourceLibrary {
+    return this._studySourceLibrary;
+  }
+
+  public get studyPathGenerator(): StudyPathGenerator {
+    return this._studyPathGenerator;
+  }
+
   public async ensureSpacedRepetitionDatabase(): Promise<SpacedRepetitionDatabase> {
     if (!this._spacedRepetitionDatabase) {
       this._spacedRepetitionDatabase = new SpacedRepetitionDatabase(this.app, {
@@ -230,9 +266,15 @@ export class PluginServices {
     
     // Update FlashcardManager
     this._flashcardManager.updateSettings(settings);
+    this._localCodeRunner.updateSettings(settings);
+    this._codingExerciseGenerator.updateSettings(settings);
+    this._studyAssistantImporter.updateRootPath(settings.studyAssistantRootPath);
+    this._studySourceLibrary.updateSettings(settings);
+    this._studyPathGenerator.updateSettings(settings);
 
     this._spacedRepetitionScheduler = new SpacedRepetitionScheduler({
-      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay
+      gradeZeroReaskDelay: settings.spacedRepetition.gradeZeroReaskDelay,
+      sameDayReviewDelayMinutes: settings.spacedRepetition.sameDayReviewDelayMinutes
     });
 
     

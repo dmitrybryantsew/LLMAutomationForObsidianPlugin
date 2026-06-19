@@ -6,6 +6,7 @@ const MAX_EASE = 3.0;
 
 export interface SchedulerOptions {
   gradeZeroReaskDelay: number;
+  sameDayReviewDelayMinutes?: number;
 }
 
 export class SpacedRepetitionScheduler {
@@ -43,6 +44,25 @@ export class SpacedRepetitionScheduler {
 
     return {
       nextRepeatAt: this.addDays(now, intervalDays).toISOString(),
+      shouldReask: false,
+      reaskAfterCount: 0,
+      schedule: nextSchedule,
+    };
+  }
+
+  scheduleLaterToday(previousState: QuestionReviewState | null, now: Date = new Date()): ScheduledReviewResult {
+    const previousSchedule = previousState?.schedule ?? this.createInitialSchedule();
+    const nextSchedule: ReviewScheduleState = {
+      ...previousSchedule,
+      algorithm: previousSchedule.algorithm || ALGORITHM_NAME,
+      lastGrade: 1,
+      intervalDays: 0,
+      ease: this.calculateEase(previousSchedule.ease, 1),
+      duePosition: null,
+    };
+
+    return {
+      nextRepeatAt: this.addMinutes(now, Math.max(1, this.options.sameDayReviewDelayMinutes ?? 180)).toISOString(),
       shouldReask: false,
       reaskAfterCount: 0,
       schedule: nextSchedule,
@@ -129,5 +149,9 @@ export class SpacedRepetitionScheduler {
     const next = new Date(date.getTime());
     next.setUTCDate(next.getUTCDate() + Math.floor(days));
     return next;
+  }
+
+  private addMinutes(date: Date, minutes: number): Date {
+    return new Date(date.getTime() + Math.floor(minutes) * 60 * 1000);
   }
 }

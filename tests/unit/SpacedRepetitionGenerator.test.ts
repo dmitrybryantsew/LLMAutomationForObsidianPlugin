@@ -69,6 +69,38 @@ Thinking about the note...
     expect(questions[0].choices).toEqual(['0', '1', '2', '4']);
   });
 
+  it('parses typed exact field questions', () => {
+    const questions = generator.validateGeneratedQuestions([
+      {
+        questionText: 'Fill the exact pieces of the LINQ call that filters adults.',
+        questionType: 'typed_fields_exact',
+        answerCheckMode: 'exact',
+        metadata: {
+          exactFields: [
+            { id: 'method', label: 'Method', answer: 'Where' },
+            { id: 'predicate', label: 'Predicate', answer: 'x => x.Age >= 18', normalization: 'csharp', aliases: ['person => person.Age >= 18'] },
+          ],
+        },
+      },
+    ]);
+
+    expect(questions).toHaveLength(1);
+    expect(questions[0].questionType).toBe('typed_fields_exact');
+    expect(questions[0].answerCheckMode).toBe('exact');
+    expect(questions[0].answerText).toContain('Method: Where');
+    expect(questions[0].metadata?.exactFields).toEqual([
+      { id: 'method', label: 'Method', answer: 'Where', placeholder: null },
+      {
+        id: 'predicate',
+        label: 'Predicate',
+        answer: 'x => x.Age >= 18',
+        placeholder: null,
+        aliases: ['person => person.Age >= 18'],
+        normalization: 'csharp',
+      },
+    ]);
+  });
+
   it('throws when no valid questions are present', () => {
     expect(() => generator.validateGeneratedQuestions([
       { questionText: 'Missing answer' },

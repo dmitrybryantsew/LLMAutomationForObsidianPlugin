@@ -1,6 +1,7 @@
 import { App, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
-import { AnswerCheckMode, QuestionType } from '../types/spacedRepetition';
+import { AnswerCheckMode, ExactAnswerField, QuestionType } from '../types/spacedRepetition';
+import { parseExactAnswerFieldsText } from '../utils/spacedRepetition/ExactAnswerMatcher';
 
 export class SpacedRepetitionManualQuestionModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -47,12 +48,13 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
           .addOptions({
             self_check: 'Self-check',
             typed_exact: 'Typed exact',
+            typed_fields_exact: 'Typed exact fields',
             multiple_choice: 'Multiple choice',
           })
           .setValue(this.questionType)
           .onChange((value) => {
             this.questionType = value as QuestionType;
-            this.answerCheckMode = this.questionType === 'typed_exact' ? 'exact' : 'self';
+            this.answerCheckMode = this.questionType === 'typed_exact' || this.questionType === 'typed_fields_exact' ? 'exact' : 'self';
           });
       });
 
@@ -70,6 +72,7 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
 
     new Setting(contentEl)
       .setName('Answer')
+      .setDesc('For typed exact fields, use one Label::Answer per line. Add optional JSON settings after a second ::.')
       .addTextArea((text) => {
         text
           .setPlaceholder('Expected answer')
@@ -105,12 +108,23 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
       return;
     }
 
+    const exactFields = this.questionType === 'typed_fields_exact'
+      ? this.parseExactFields(this.answerText)
+      : [];
+    if (this.questionType === 'typed_fields_exact' && exactFields.length === 0) {
+      new Notice('Add at least one exact field as Label::Answer');
+      return;
+    }
+
     try {
       this.plugin.settings.spacedRepetition.enabled = true;
       await this.plugin.saveSettings();
 
       const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
       const noteId = await database.upsertNoteFromFile(this.sourceFile);
+      const metadata = this.questionType === 'typed_fields_exact'
+        ? { exactFields }
+        : {};
       await database.createQuestions([
         {
           noteId,
@@ -119,6 +133,7 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
           questionType: this.questionType,
           answerText: this.answerText.trim(),
           answerCheckMode: this.answerCheckMode,
+          metadata,
         },
       ]);
 
@@ -132,5 +147,9 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+  }
+
+  private parseExactFields(value: string): ExactAnswerField[] {
+    return parseExactAnswerFieldsText(value);
   }
 }

@@ -2,12 +2,14 @@ import {
     App,
     Setting,
     PluginSettingTab,
-    Notice
+    Notice,
+    TFile
   } from "obsidian";
 
   import type GptFreeTextGeneratorPlugin from '../main';
   import { fetchOpenRouterModels } from '../utils/OpenRouterAPI';
   import { OpenRouterModel } from '../types';
+  import { StudySourceType } from '../types/studySources';
   import { TestProviderConnectionModal } from '../modals/TestProviderConnectionModal';
   import { LLMClientFactory } from '../utils/LLMClientFactory';
   import { LLMProvider } from '../types/providers';
@@ -30,6 +32,10 @@ class SettingTab extends PluginSettingTab {
     this.addOpenRouterSettings(containerEl);
     this.addGeneralSettings(containerEl);
     this.addFolderSettings(containerEl);
+    this.addFlashcardGenerationSettings(containerEl);
+    this.addCodingExerciseSettings(containerEl);
+    this.addStudySourceSettings(containerEl);
+    this.addStudyPathSettings(containerEl);
     this.addSummarySettings(containerEl);
     this.addLanguageSettings(containerEl);
     this.addContentStorageSettings(containerEl);
@@ -321,6 +327,380 @@ class SettingTab extends PluginSettingTab {
           this.plugin.settings.quizFolder = value;
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName("Coding Exercises Folder")
+      .setDesc("Folder where generated coding exercises will be saved")
+      .addText(text => text
+        .setValue(this.plugin.settings.codingExercisesFolder)
+        .onChange(async value => {
+          this.plugin.settings.codingExercisesFolder = value.trim() || 'Coding Exercises';
+          await this.plugin.saveSettings();
+        }));
+  }
+
+  addCodingExerciseSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Coding Exercise Settings' });
+
+    new Setting(containerEl)
+      .setName("Exercise Generation Provider")
+      .setDesc("Provider used only for generating coding exercises.")
+      .addDropdown(dropdown => {
+        dropdown.addOptions({
+          'openrouter': 'OpenRouter',
+          'chutes': 'Chutes',
+          'zai': 'ZAI',
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
+        });
+        dropdown
+          .setValue(this.plugin.settings.codingExerciseProvider)
+          .onChange(async value => {
+            this.plugin.settings.codingExerciseProvider = value as TextProviderId;
+            this.plugin.settings.codingExerciseModel = this.getTextModelForProvider(value as TextProviderId);
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Exercise Generation Model")
+      .setDesc("Model used only for coding exercise task generation.")
+      .addDropdown(dropdown => {
+        const provider = this.plugin.settings.codingExerciseProvider;
+        const models = this.getFilteredModelsForBackend(provider);
+        const currentModel = this.plugin.settings.codingExerciseModel || this.getTextModelForProvider(provider);
+        dropdown
+          .addOptions(models)
+          .setValue(currentModel)
+          .onChange(async value => {
+            this.plugin.settings.codingExerciseModel = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    this.addNumberSetting(containerEl, "Exercise Generation Temperature", "Sampling temperature for exercise task generation.", this.plugin.settings.codingExerciseTemperature, async value => {
+      this.plugin.settings.codingExerciseTemperature = value;
+      await this.plugin.saveSettings();
+    }, 0, 2);
+
+    this.addNumberSetting(containerEl, "Exercise Generation Max Tokens", "Maximum output tokens for generated exercise JSON.", this.plugin.settings.codingExerciseMaxTokens, async value => {
+      this.plugin.settings.codingExerciseMaxTokens = Math.max(500, Math.round(value));
+      await this.plugin.saveSettings();
+    }, 500);
+
+    new Setting(containerEl)
+      .setName("StudyAssistant Root Path")
+      .setDesc("Optional external StudyAssistant corpus root used for importing existing C# exercises.")
+      .addText(text => text
+        .setValue(this.plugin.settings.studyAssistantRootPath)
+        .onChange(async value => {
+          this.plugin.settings.studyAssistantRootPath = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Allow Local Code Execution")
+      .setDesc("Enable running generated exercise code through local tools. Only enable this if you trust the exercises and understand that code runs on this machine.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.allowLocalCodeExecution)
+        .onChange(async value => {
+          this.plugin.settings.allowLocalCodeExecution = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("LINQPad LPRun Path")
+      .setDesc("Path to LPRun9-x64.exe used for C# exercise compile/run.")
+      .addText(text => text
+        .setValue(this.plugin.settings.linqPadLprunPath)
+        .onChange(async value => {
+          this.plugin.settings.linqPadLprunPath = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Exercise Run Timeout")
+      .setDesc("Maximum local run time in milliseconds.")
+      .addText(text => text
+        .setValue(String(this.plugin.settings.exerciseRunTimeoutMs))
+        .onChange(async value => {
+          const parsed = parseInt(value, 10);
+          if (!Number.isNaN(parsed) && parsed >= 1000) {
+            this.plugin.settings.exerciseRunTimeoutMs = parsed;
+            await this.plugin.saveSettings();
+          }
+        }));
+  }
+
+  addFlashcardGenerationSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Flashcard Generation Settings' });
+
+    new Setting(containerEl)
+      .setName("Flashcard Generation Provider")
+      .setDesc("Provider used by the flashcard side panel.")
+      .addDropdown(dropdown => {
+        dropdown.addOptions({
+          'openrouter': 'OpenRouter',
+          'chutes': 'Chutes',
+          'zai': 'ZAI',
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
+        });
+        dropdown
+          .setValue(this.plugin.settings.flashcardGenerationProvider)
+          .onChange(async value => {
+            this.plugin.settings.flashcardGenerationProvider = value as TextProviderId;
+            this.plugin.settings.flashcardGenerationModel = this.getTextModelForProvider(value as TextProviderId);
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Flashcard Generation Model")
+      .setDesc("Model used by the flashcard side panel.")
+      .addDropdown(dropdown => {
+        const provider = this.plugin.settings.flashcardGenerationProvider;
+        const currentModel = this.plugin.settings.flashcardGenerationModel || this.getTextModelForProvider(provider);
+        dropdown
+          .addOptions(this.getFilteredModelsForBackend(provider))
+          .setValue(currentModel)
+          .onChange(async value => {
+            this.plugin.settings.flashcardGenerationModel = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    this.addNumberSetting(containerEl, "Flashcard Generation Temperature", "Sampling temperature for flashcard generation.", this.plugin.settings.flashcardGenerationTemperature, async value => {
+      this.plugin.settings.flashcardGenerationTemperature = value;
+      await this.plugin.saveSettings();
+    }, 0, 2);
+
+    this.addNumberSetting(containerEl, "Flashcard Generation Max Tokens", "Maximum output tokens for generated flashcard JSON.", this.plugin.settings.flashcardGenerationMaxTokens, async value => {
+      this.plugin.settings.flashcardGenerationMaxTokens = Math.max(500, Math.round(value));
+      await this.plugin.saveSettings();
+    }, 500);
+  }
+
+  addStudySourceSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Study Source Library' });
+
+    new Setting(containerEl)
+      .setName("Inventory Note Path")
+      .setDesc("Generated note showing configured study sources, included files, and approximate token budgets.")
+      .addText(text => text
+        .setValue(this.plugin.settings.studySourceInventoryNotePath)
+        .onChange(async value => {
+          this.plugin.settings.studySourceInventoryNotePath = value.trim() || 'WikiSynthesis/Study/Source Library/Study Source Inventory.md';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Scan Sources")
+      .setDesc("Scan enabled groups and create/update the inventory note.")
+      .addButton(button => button
+        .setButtonText("Scan")
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Scanning...");
+          try {
+            const result = await this.plugin.services.studySourceLibrary.scan();
+            const file = await this.plugin.services.studySourceLibrary.createOrUpdateInventoryNote(result);
+            await this.plugin.app.workspace.getLeaf(false).openFile(file);
+            new Notice(`Study sources scanned: ${result.includedFiles}/${result.totalFiles} files, ~${result.includedEstimatedTokens} tokens included.`);
+          } catch (error) {
+            new Notice(`Failed to scan study sources: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Scan");
+          }
+        }));
+
+    const addContainer = containerEl.createDiv({ cls: 'study-source-add-container' });
+    addContainer.createEl('h3', { text: 'Add Source Group' });
+
+    let newName = '';
+    let newPath = '';
+    let newType: StudySourceType = 'reference';
+
+    new Setting(addContainer)
+      .setName("Name")
+      .addText(text => text
+        .setPlaceholder("C# Reference Notes")
+        .onChange(value => {
+          newName = value.trim();
+        }));
+
+    new Setting(addContainer)
+      .setName("Path")
+      .addText(text => text
+        .setPlaceholder("H:\\Common\\foam\\knowledgeBase\\...")
+        .onChange(value => {
+          newPath = value.trim();
+        }));
+
+    new Setting(addContainer)
+      .setName("Type")
+      .addDropdown(dropdown => dropdown
+        .addOptions({
+          'reference': 'Reference',
+          'exercise-corpus': 'Exercise Corpus',
+          'summary': 'Summary',
+          'plan': 'Plan',
+          'docs': 'Docs',
+          'canvas': 'Canvas',
+          'other': 'Other'
+        })
+        .setValue(newType)
+        .onChange(value => {
+          newType = value as StudySourceType;
+        }));
+
+    new Setting(addContainer)
+      .setName("Add Group")
+      .addButton(button => button
+        .setButtonText("Add")
+        .onClick(async () => {
+          if (!newName || !newPath) {
+            new Notice("Enter both name and path.");
+            return;
+          }
+
+          this.plugin.settings.studySourceGroups.push({
+            id: `${Date.now()}-${newName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            name: newName,
+            path: newPath,
+            type: newType,
+            enabled: true,
+            recursive: true,
+            extensions: newType === 'canvas' ? ['canvas'] : ['md'],
+            maxFiles: 100,
+            maxEstimatedTokens: 100000,
+            priority: this.plugin.settings.studySourceGroups.length * 10 + 100,
+          });
+          await this.plugin.saveSettings();
+          this.display();
+        }));
+
+    containerEl.createEl('h3', { text: 'Configured Source Groups' });
+
+    for (const group of this.plugin.settings.studySourceGroups) {
+      new Setting(containerEl)
+        .setName(group.name)
+        .setDesc(`${group.type} | ${group.path} | extensions: ${group.extensions.join(', ')} | max ~${group.maxEstimatedTokens} tokens`)
+        .addToggle(toggle => toggle
+          .setValue(group.enabled)
+          .onChange(async value => {
+            group.enabled = value;
+            await this.plugin.saveSettings();
+          }))
+        .addButton(button => button
+          .setButtonText("Remove")
+          .onClick(async () => {
+            if (!confirm(`Remove study source group "${group.name}"?`)) {
+              return;
+            }
+            this.plugin.settings.studySourceGroups = this.plugin.settings.studySourceGroups.filter(candidate => candidate.id !== group.id);
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+    }
+  }
+
+  addStudyPathSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Study Path Generation' });
+
+    new Setting(containerEl)
+      .setName("Study Path Provider")
+      .setDesc("Provider used only for generating study plans and canvases from the source library.")
+      .addDropdown(dropdown => {
+        dropdown.addOptions({
+          'openrouter': 'OpenRouter',
+          'chutes': 'Chutes',
+          'zai': 'ZAI',
+          'ollama': 'Ollama',
+          'proxy': 'OpenAI Proxy'
+        });
+        dropdown
+          .setValue(this.plugin.settings.studyPathProvider)
+          .onChange(async value => {
+            this.plugin.settings.studyPathProvider = value as TextProviderId;
+            this.plugin.settings.studyPathModel = this.getTextModelForProvider(value as TextProviderId);
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Study Path Model")
+      .setDesc("Model used for generating structured study path JSON.")
+      .addDropdown(dropdown => {
+        const provider = this.plugin.settings.studyPathProvider;
+        const currentModel = this.plugin.settings.studyPathModel || this.getTextModelForProvider(provider);
+        dropdown
+          .addOptions(this.getFilteredModelsForBackend(provider))
+          .setValue(currentModel)
+          .onChange(async value => {
+            this.plugin.settings.studyPathModel = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    this.addNumberSetting(containerEl, "Study Path Temperature", "Sampling temperature for study path generation.", this.plugin.settings.studyPathTemperature, async value => {
+      this.plugin.settings.studyPathTemperature = value;
+      await this.plugin.saveSettings();
+    }, 0, 2);
+
+    this.addNumberSetting(containerEl, "Study Path Max Tokens", "Maximum output tokens for generated study path JSON.", this.plugin.settings.studyPathMaxTokens, async value => {
+      this.plugin.settings.studyPathMaxTokens = Math.max(1500, Math.round(value));
+      await this.plugin.saveSettings();
+    }, 1500);
+
+    this.addNumberSetting(containerEl, "Study Path Context Token Budget", "Approximate maximum source tokens fed to the model from included study sources.", this.plugin.settings.studyPathContextMaxTokens, async value => {
+      this.plugin.settings.studyPathContextMaxTokens = Math.max(10000, Math.round(value));
+      await this.plugin.saveSettings();
+    }, 10000);
+
+    new Setting(containerEl)
+      .setName("Study Path Markdown Path")
+      .setDesc("Vault path for the generated markdown study plan.")
+      .addText(text => text
+        .setValue(this.plugin.settings.studyPathMarkdownPath)
+        .onChange(async value => {
+          this.plugin.settings.studyPathMarkdownPath = value.trim() || 'WikiSynthesis/Study/Plans/CSharp/Generated CSharp Study Path.md';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Study Path Canvas Path")
+      .setDesc("Vault path for the generated Obsidian canvas.")
+      .addText(text => text
+        .setValue(this.plugin.settings.studyPathCanvasPath)
+        .onChange(async value => {
+          this.plugin.settings.studyPathCanvasPath = value.trim() || 'WikiSynthesis/Study/Plans/CSharp/Generated CSharp Study Path.canvas';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Generate C# Study Path")
+      .setDesc("Scan configured sources, generate a markdown plan and canvas, then open the canvas.")
+      .addButton(button => button
+        .setButtonText("Generate")
+        .setCta()
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Generating...");
+          try {
+            const result = await this.plugin.services.studyPathGenerator.generateCSharpStudyPath();
+            const canvasFile = this.plugin.app.vault.getAbstractFileByPath(result.canvasPath);
+            if (canvasFile instanceof TFile) {
+              await this.plugin.app.workspace.getLeaf(false).openFile(canvasFile);
+            }
+            new Notice(`Generated study path: ${result.plan.stages.length} stages from ${result.sourceFileCount} files.`);
+          } catch (error) {
+            new Notice(`Failed to generate study path: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Generate");
+          }
+        }));
   }
 
   addSummarySettings(containerEl: HTMLElement): void {
@@ -512,6 +892,19 @@ class SettingTab extends PluginSettingTab {
           const parsed = parseInt(value, 10);
           if (!Number.isNaN(parsed) && parsed >= 0) {
             this.plugin.settings.spacedRepetition.gradeZeroReaskDelay = parsed;
+            await this.plugin.saveSettings();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("Later Today Delay")
+      .setDesc("Minutes before a weak card marked Later Today becomes due again.")
+      .addText(text => text
+        .setValue(String(this.plugin.settings.spacedRepetition.sameDayReviewDelayMinutes))
+        .onChange(async value => {
+          const parsed = parseInt(value, 10);
+          if (!Number.isNaN(parsed) && parsed >= 1) {
+            this.plugin.settings.spacedRepetition.sameDayReviewDelayMinutes = parsed;
             await this.plugin.saveSettings();
           }
         }));
