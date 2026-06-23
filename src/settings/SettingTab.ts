@@ -1007,6 +1007,23 @@ import {
           await this.plugin.saveSettings();
         }));
 
+    // Helper Server (Article Fetch & YouTube Transcripts)
+    containerEl.createEl('h3', { text: 'Helper Server (Article Fetch & YouTube Transcripts)' });
+    containerEl.createEl('p', {
+      text: 'Article fetching and YouTube transcript retrieval are not LLM calls — they require a separate small helper server (not one of the LLM providers above). Point this at wherever that helper server is running.',
+      cls: 'setting-item-description',
+    });
+
+    new Setting(containerEl)
+      .setName("Helper Server URL")
+      .setDesc("Base URL for the article-fetch and transcript helper server. Default: http://127.0.0.1:8001")
+      .addText(text => text
+        .setValue(this.plugin.settings.helperServerUrl || 'http://127.0.0.1:8001')
+        .onChange(async value => {
+          this.plugin.settings.helperServerUrl = value.trim() || 'http://127.0.0.1:8001';
+          await this.plugin.saveSettings();
+        }));
+
     new Setting(containerEl)
       .setName("Refresh Proxy Models")
       .setDesc("Load model IDs from the proxy /v1/models endpoint.")

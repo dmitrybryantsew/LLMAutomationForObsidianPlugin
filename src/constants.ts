@@ -53,6 +53,7 @@ const DEFAULT_SETTINGS = {
   defaultFrequencyPenalty: 0,
   ollamaBaseUrl: "http://localhost:11434",
   proxyBaseUrl: "http://localhost:3000/v1",
+  helperServerUrl: "http://127.0.0.1:8001",
   ollamaTimeout: 120000,
   ollamaModels: [],
   proxyModels: [],

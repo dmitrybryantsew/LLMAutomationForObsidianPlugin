@@ -6,6 +6,7 @@ import { TagManager } from "./TagManager"; // Import TagManager
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
 import { TextProviderId } from '../types/providers';
+import type { PluginSettings } from '../types';
 
 interface ArticleData {
   title: string;
@@ -55,12 +56,14 @@ class ArticleManager {
   private fileManager: FileManager; // Use injected FileManager
   private tagManager: TagManager; // Use injected TagManager
   private llmClientService: LLMClientService | null = null; // LLM Client Service
+  private settings: PluginSettings;
 
-  constructor(app: App, fileManager: FileManager, tagManager: TagManager, llmClientService: LLMClientService | null = null) {
+  constructor(app: App, fileManager: FileManager, tagManager: TagManager, llmClientService: LLMClientService | null = null, settings: PluginSettings) {
     this.app = app;
     this.fileManager = fileManager; // Store injected instance
     this.tagManager = tagManager; // Store injected instance
     this.llmClientService = llmClientService;
+    this.settings = settings;
   }
 
   async fetchAndSummarizeArticle(options: ArticleSummaryOptions): Promise<string> {
@@ -107,7 +110,8 @@ class ArticleManager {
 
   private async fetchArticle(url: string): Promise<ArticleData> {
     try {
-      const response = await fetch("http://127.0.0.1:8001/fetch-article", {
+      const helperServerUrl = (this.settings.helperServerUrl || 'http://127.0.0.1:8001').replace(/\/+$/, '');
+      const response = await fetch(`${helperServerUrl}/fetch-article`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -127,12 +131,18 @@ class ArticleManager {
       }
       return data;
     } catch (error: unknown) {
+      const helperServerUrl = (this.settings.helperServerUrl || 'http://127.0.0.1:8001').replace(/\/+$/, '');
       ErrorHandler.handleError(error, "API_FETCH_ERROR", {
         operation: "fetch-article",
         url,
+        helperServerUrl,
         details: error instanceof Error ? error.message : String(error)
       });
-      throw error; // Re-throw to be handled by calling method
+      throw new Error(
+        `Could not reach the article-fetch helper server at ${helperServerUrl}. ` +
+        `Check that it is running and that "Helper Server URL" in Settings is correct. ` +
+        `Original error: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 

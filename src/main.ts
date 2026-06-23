@@ -865,6 +865,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.codingExercisesFolder = this.settings.codingExercisesFolder ?? DEFAULT_SETTINGS.codingExercisesFolder;
     this.settings.proxyApiKey = this.settings.proxyApiKey ?? DEFAULT_SETTINGS.proxyApiKey;
     this.settings.proxyBaseUrl = this.settings.proxyBaseUrl ?? DEFAULT_SETTINGS.proxyBaseUrl;
+    this.settings.helperServerUrl = this.settings.helperServerUrl ?? DEFAULT_SETTINGS.helperServerUrl;
     this.settings.proxyModels = this.settings.proxyModels ?? DEFAULT_SETTINGS.proxyModels;
     this.settings.proxyTextModel = this.settings.proxyTextModel ?? DEFAULT_SETTINGS.proxyTextModel;
     this.settings.proxySummaryModel = this.settings.proxySummaryModel ?? DEFAULT_SETTINGS.proxySummaryModel;

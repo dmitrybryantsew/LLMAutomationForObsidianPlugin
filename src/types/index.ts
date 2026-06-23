@@ -93,6 +93,8 @@ export interface PluginSettings {
     zaiBaseUrl?: string; // Custom ZAI endpoint
     ollamaBaseUrl: string; // Ollama local/server endpoint
     proxyBaseUrl: string; // OpenAI-compatible proxy endpoint
+    /** Base URL of the optional local/remote helper server used for article scraping and YouTube transcript fetching (e.g. http://127.0.0.1:8001 or http://your-remote-machine:8001). */
+    helperServerUrl: string;
     ollamaTimeout: number; // Ollama request timeout in milliseconds
     
     // Provider-specific model lists

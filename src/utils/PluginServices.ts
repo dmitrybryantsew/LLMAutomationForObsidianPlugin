@@ -110,7 +110,7 @@ export class PluginServices {
 
     // Initialize managers that depend on core services, passing dependencies
     this._transcriptManager = new TranscriptManager(app, this._fileManager, this._tagManager, this._pathManager, this._databaseManager, this._settings, this._llmClientService);
-    this._articleManager = new ArticleManager(app, this._fileManager, this._tagManager, this._llmClientService); // Pass TagManager and LLMClientService to ArticleManager
+    this._articleManager = new ArticleManager(app, this._fileManager, this._tagManager, this._llmClientService, this._settings); // Pass TagManager, LLMClientService, and settings to ArticleManager
     
     this._hierarchyManager = new HierarchyManager(this.plugin, this._pathManager, this._transcriptManager, this._llmClientService);
     

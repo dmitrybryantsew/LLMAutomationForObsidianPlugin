@@ -287,9 +287,10 @@ class TranscriptManager {
     saveToDatabase: boolean = false // New parameter to skip file saving
   ): Promise<{ filePath: string | null; videoData: VideoData; transcript: string }> {
     try {
-      // Note: Transcript fetching still uses Python server for now
-      // This could be migrated to use YouTube API directly in the future
-      const response = await fetch("http://127.0.0.1:8001/get-transcript", {
+      // Note: Transcript fetching still uses an external helper server (see settings.helperServerUrl),
+      // not one of the LLM providers. This could be migrated to use the YouTube API directly in the future.
+      const helperServerUrl = (this.settings.helperServerUrl || 'http://127.0.0.1:8001').replace(/\/+$/, '');
+      const response = await fetch(`${helperServerUrl}/get-transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
