@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
-import { AnswerCheckMode, ExactAnswerField, QuestionType } from '../types/spacedRepetition';
+import { AnswerCheckMode, ExactAnswerField, QuestionType, SpacedRepetitionStudySetRecord } from '../types/spacedRepetition';
 import { parseExactAnswerFieldsText } from '../utils/spacedRepetition/ExactAnswerMatcher';
 
 export class SpacedRepetitionManualQuestionModal extends Modal {
@@ -11,6 +11,12 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
   private answerText = '';
   private questionType: QuestionType = 'self_check';
   private answerCheckMode: AnswerCheckMode = 'self';
+  private studySets: SpacedRepetitionStudySetRecord[] = [];
+  private selectedStudySetId = '';
+  private newDeckName = '';
+  private choiceTexts = ['', '', '', ''];
+  private correctChoiceIndex = 0;
+  private keepOpenAfterSave = false;
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin, sourceFile: TFile) {
     super(app);
@@ -18,10 +24,33 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
     this.sourceFile = sourceFile;
   }
 
-  onOpen(): void {
+  async onOpen(): Promise<void> {
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.addClass('spaced-repetition-manual-question-modal');
+
+    contentEl.createEl('h2', { text: 'Add Review Question' });
+    contentEl.createEl('p', {
+      text: this.sourceFile.path,
+      cls: 'spaced-repetition-source-path',
+    });
+
+    await this.loadStudySets();
+    this.render();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private async loadStudySets(): Promise<void> {
+    const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+    this.studySets = database.getStudySets().filter((set) => set.enabled);
+  }
+
+  private render(): void {
+    const { contentEl } = this;
+    contentEl.empty();
 
     contentEl.createEl('h2', { text: 'Add Review Question' });
     contentEl.createEl('p', {
@@ -55,6 +84,10 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
           .onChange((value) => {
             this.questionType = value as QuestionType;
             this.answerCheckMode = this.questionType === 'typed_exact' || this.questionType === 'typed_fields_exact' ? 'exact' : 'self';
+            if (this.questionType === 'multiple_choice') {
+              this.answerCheckMode = 'self';
+            }
+            this.render();
           });
       });
 
@@ -70,17 +103,83 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
         text.inputEl.rows = 4;
       });
 
-    new Setting(contentEl)
-      .setName('Answer')
-      .setDesc('For typed exact fields, use one Label::Answer per line. Add optional JSON settings after a second ::.')
-      .addTextArea((text) => {
-        text
-          .setPlaceholder('Expected answer')
-          .setValue(this.answerText)
-          .onChange((value) => {
-            this.answerText = value;
+    if (this.questionType === 'multiple_choice') {
+      contentEl.createEl('h4', { text: 'Choices (mark the correct one)' });
+      for (let i = 0; i < 4; i += 1) {
+        new Setting(contentEl)
+          .addText((text) => {
+            text
+              .setPlaceholder(`Choice ${i + 1}`)
+              .setValue(this.choiceTexts[i])
+              .onChange((value) => {
+                this.choiceTexts[i] = value;
+              });
+          })
+          .addToggle((toggle) => {
+            toggle
+              .setValue(this.correctChoiceIndex === i)
+              .onChange((value) => {
+                if (value) {
+                  this.correctChoiceIndex = i;
+                }
+              });
           });
-        text.inputEl.rows = 4;
+      }
+    } else {
+      new Setting(contentEl)
+        .setName('Answer')
+        .setDesc('For typed exact fields, use one Label::Answer per line. Add optional JSON settings after a second ::.')
+        .addTextArea((text) => {
+          text
+            .setPlaceholder('Expected answer')
+            .setValue(this.answerText)
+            .onChange((value) => {
+              this.answerText = value;
+            });
+          text.inputEl.rows = 4;
+        });
+    }
+
+    // Deck / Study Set selector
+    const deckSetting = new Setting(contentEl)
+      .setName('Deck')
+      .setDesc('Which deck to add this question to.');
+
+    if (this.studySets.length > 0) {
+      deckSetting.addDropdown((dropdown) => {
+        dropdown.addOption('', 'No deck');
+        for (const set of this.studySets) {
+          dropdown.addOption(set.id, set.name);
+        }
+        dropdown
+          .setValue(this.selectedStudySetId)
+          .onChange((value) => {
+            this.selectedStudySetId = value;
+          });
+      });
+    } else {
+      deckSetting.setDesc('No decks available. Create one below or generate cards first.');
+    }
+
+    new Setting(contentEl)
+      .setName('New Deck Name')
+      .setDesc('Create a new deck for this question.')
+      .addText((text) => {
+        text
+          .setPlaceholder('My Deck')
+          .setValue(this.newDeckName)
+          .onChange((value) => {
+            this.newDeckName = value.trim();
+          });
+      });
+
+    new Setting(contentEl)
+      .setName('Keep Open')
+      .setDesc('Stay open to add another question after saving.')
+      .addToggle((toggle) => {
+        toggle.setValue(this.keepOpenAfterSave).onChange((value) => {
+          this.keepOpenAfterSave = value;
+        });
       });
 
     new Setting(contentEl)
@@ -103,7 +202,17 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
       return;
     }
 
-    if (!this.answerText.trim()) {
+    if (this.questionType === 'multiple_choice') {
+      const filledChoices = this.choiceTexts.filter((c) => c.trim());
+      if (filledChoices.length < 2) {
+        new Notice('Multiple choice needs at least 2 filled choices');
+        return;
+      }
+      if (!this.choiceTexts[this.correctChoiceIndex]?.trim()) {
+        new Notice('The correct choice cannot be empty');
+        return;
+      }
+    } else if (!this.answerText.trim()) {
       new Notice('Answer text is required');
       return;
     }
@@ -122,31 +231,69 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
 
       const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
       const noteId = await database.upsertNoteFromFile(this.sourceFile);
-      const metadata = this.questionType === 'typed_fields_exact'
+
+      let studySetId: string | null = this.selectedStudySetId || null;
+      let deckName: string | null = null;
+
+      if (this.newDeckName) {
+        const newSetId = await database.createStudySet({
+          name: this.newDeckName,
+          sourceType: 'manual',
+          sourceRule: {},
+          tags: [],
+        });
+        studySetId = newSetId;
+        deckName = this.newDeckName;
+        this.newDeckName = '';
+      } else if (studySetId) {
+        deckName = this.studySets.find((set) => set.id === studySetId)?.name ?? null;
+      }
+
+      const metadata: Record<string, unknown> = this.questionType === 'typed_fields_exact'
         ? { exactFields }
         : {};
+      if (deckName) {
+        metadata.deckName = deckName;
+      }
+
+      const choices = this.questionType === 'multiple_choice'
+        ? this.choiceTexts.filter((c) => c.trim())
+        : null;
+      const answerText = this.questionType === 'multiple_choice'
+        ? this.choiceTexts[this.correctChoiceIndex]?.trim() || ''
+        : this.answerText.trim();
+
       await database.createQuestions([
         {
           noteId,
+          studySetId,
           questionName: this.questionName.trim() || null,
           questionText: this.questionText.trim(),
           questionType: this.questionType,
-          answerText: this.answerText.trim(),
+          answerText,
+          choices,
           answerCheckMode: this.answerCheckMode,
           metadata,
         },
       ]);
 
       new Notice('Review question saved');
-      this.close();
+
+      if (this.keepOpenAfterSave) {
+        this.questionName = '';
+        this.questionText = '';
+        this.answerText = '';
+        this.choiceTexts = ['', '', '', ''];
+        this.correctChoiceIndex = 0;
+        await this.loadStudySets();
+        this.render();
+      } else {
+        this.close();
+      }
     } catch (error) {
       console.error('Failed to save review question:', error);
       new Notice(`Failed to save review question: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
   }
 
   private parseExactFields(value: string): ExactAnswerField[] {
