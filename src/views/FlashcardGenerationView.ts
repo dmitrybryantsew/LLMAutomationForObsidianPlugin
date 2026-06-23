@@ -4,6 +4,7 @@ import { VIEW_TYPE_FLASHCARD_GENERATION } from '../constants';
 import { GeneratedSpacedRepetitionQuestion } from '../utils/spacedRepetition/SpacedRepetitionGenerator';
 import { QuestionType, SpacedRepetitionStudySetRecord } from '../types/spacedRepetition';
 import { TextProviderId } from '../types/providers';
+import { SpacedRepetitionEditCardModal } from '../modals/SpacedRepetitionEditCardModal';
 
 export class FlashcardGenerationView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -21,6 +22,7 @@ export class FlashcardGenerationView extends ItemView {
   private newDeckName = '';
   private isGenerating = false;
   private generatedQuestions: GeneratedSpacedRepetitionQuestion[] = [];
+  private excludedIndices: Set<number> = new Set();
 
   constructor(leaf: WorkspaceLeaf, plugin: GptFreeTextGeneratorPlugin) {
     super(leaf);
@@ -229,11 +231,50 @@ export class FlashcardGenerationView extends ItemView {
       return;
     }
 
-    for (const question of this.generatedQuestions) {
-      const card = preview.createDiv({ cls: 'flashcard-generation-preview-card' });
-      card.createEl('div', { text: question.questionName ?? question.questionType, cls: 'flashcard-generation-preview-label' });
+    for (let index = 0; index < this.generatedQuestions.length; index += 1) {
+      const question = this.generatedQuestions[index];
+      const isExcluded = this.excludedIndices.has(index);
+      const card = preview.createDiv({
+        cls: `flashcard-generation-preview-card${isExcluded ? ' flashcard-generation-preview-card-excluded' : ''}`,
+      });
+
+      const header = card.createDiv({ cls: 'flashcard-generation-preview-header' });
+      header.createEl('div', { text: question.questionName ?? question.questionType, cls: 'flashcard-generation-preview-label' });
+
+      const actions = header.createDiv({ cls: 'flashcard-generation-preview-actions' });
+
+      // Edit button
+      actions.createEl('button', { text: 'Edit', cls: 'mod-cta' }).addEventListener('click', () => {
+        this.editCard(index);
+      });
+
+      // Exclude toggle button
+      const excludeBtn = actions.createEl('button', {
+        text: isExcluded ? 'Include' : 'Exclude',
+        cls: isExcluded ? 'mod-warning' : '',
+      });
+      excludeBtn.addEventListener('click', () => {
+        if (this.excludedIndices.has(index)) {
+          this.excludedIndices.delete(index);
+        } else {
+          this.excludedIndices.add(index);
+        }
+        this.render();
+      });
+
+      // Regenerate single card button
+      actions.createEl('button', { text: 'Regenerate' }).addEventListener('click', () => {
+        this.regenerateSingleCard(index);
+      });
+
       card.createEl('div', { text: question.questionText, cls: 'flashcard-generation-preview-question' });
       card.createEl('div', { text: question.answerText ?? '', cls: 'flashcard-generation-preview-answer' });
+      if (question.choices) {
+        const choicesEl = card.createEl('ul', { cls: 'flashcard-generation-preview-choices' });
+        for (const choice of question.choices) {
+          choicesEl.createEl('li', { text: choice });
+        }
+      }
       const fields = this.getExactFieldPreview(question.metadata);
       if (fields.length) {
         const fieldList = card.createEl('ul', { cls: 'flashcard-generation-preview-fields' });
@@ -329,7 +370,13 @@ export class FlashcardGenerationView extends ItemView {
         await database.setStudySetNotes(studySetId, [noteId]);
       }
 
-      const questionIds = await database.createQuestions(this.generatedQuestions.map((question) => ({
+      const questionsToSave = this.generatedQuestions.filter((_, index) => !this.excludedIndices.has(index));
+      if (questionsToSave.length === 0) {
+        new Notice('All cards are excluded — nothing to save');
+        return;
+      }
+
+      const questionIds = await database.createQuestions(questionsToSave.map((question) => ({
         ...question,
         noteId,
         studySetId,
@@ -358,6 +405,7 @@ export class FlashcardGenerationView extends ItemView {
 
       new Notice(`Saved ${questionIds.length} card(s) to spaced repetition`);
       this.generatedQuestions = [];
+      this.excludedIndices.clear();
       this.render();
     } catch (error) {
       console.error('Failed to save generated flashcards:', error);
@@ -453,5 +501,52 @@ export class FlashcardGenerationView extends ItemView {
     }
 
     return `simple_${Math.abs(hash).toString(16)}_${content.length}`;
+  }
+
+  private editCard(index: number): void {
+    const question = this.generatedQuestions[index];
+    const editModal = new SpacedRepetitionEditCardModal(
+      this.app,
+      question,
+      async (updated) => {
+        this.generatedQuestions[index] = updated;
+        this.excludedIndices.delete(index);
+        this.render();
+      },
+    );
+    editModal.open();
+  }
+
+  private async regenerateSingleCard(index: number): Promise<void> {
+    const questionTypes = [this.generatedQuestions[index].questionType];
+    try {
+      this.isGenerating = true;
+      this.render();
+      const file = this.sourceFile ?? ({ path: 'Pasted Flashcard Context.md', basename: 'Pasted Flashcard Context' } as TFile);
+      const newQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
+        file,
+        noteContent: this.context,
+        provider: this.plugin.settings.flashcardGenerationProvider,
+        model: this.plugin.settings.flashcardGenerationModel,
+        questionCount: 1,
+        questionTypes,
+        additionalInstructions: this.prompt,
+        outputLanguage: this.plugin.settings.defaultOutputLanguage || 'english',
+        temperature: this.plugin.settings.flashcardGenerationTemperature,
+        maxTokens: this.plugin.settings.flashcardGenerationMaxTokens,
+      });
+      if (newQuestions.length > 0) {
+        this.generatedQuestions[index] = newQuestions[0];
+        new Notice('Card regenerated');
+      } else {
+        new Notice('Regeneration returned no valid card');
+      }
+    } catch (error) {
+      console.error('Failed to regenerate card:', error);
+      new Notice(`Regeneration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      this.isGenerating = false;
+      this.render();
+    }
   }
 }
