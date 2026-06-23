@@ -100,6 +100,8 @@ const DEFAULT_SETTINGS = {
   studyPathCanvasPath: "WikiSynthesis/Study/Plans/CSharp/Generated CSharp Study Path.canvas",
   spacedRepetitionGenerationProvider: 'openrouter',
   spacedRepetitionGenerationModel: '',
+  noteChatProvider: 'openrouter',
+  noteChatModel: '',
   studySourceGroups: [
     {
       id: "csharp-reference",

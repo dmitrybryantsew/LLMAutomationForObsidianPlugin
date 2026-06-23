@@ -65,9 +65,9 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
   },
   {
     id: 'chat-with-current-note-ollama',
-    name: 'Chat With Current Note Using Ollama',
+    name: 'Chat With Current Note',
     group: 'Spaced Repetition',
-    description: 'Opens a side pane chat with Ollama using the active note as context and saves chat history in the spaced repetition database.',
+    description: 'Opens a side pane chat with your configured LLM provider using the active note as context and saves chat history in the spaced repetition database.',
   },
   {
     id: 'chat-with-current-note-ollama-modal',

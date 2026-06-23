@@ -1,6 +1,7 @@
 import { App, MarkdownRenderer, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { NoteChatMessageRecord } from '../types/spacedRepetition';
+import { TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
 
 export class SpacedRepetitionNoteChatModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -12,12 +13,16 @@ export class SpacedRepetitionNoteChatModal extends Modal {
   private prompt = '';
   private isSending = false;
   private model: string;
+  private provider: TextProviderId;
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin, file: TFile) {
     super(app);
     this.plugin = plugin;
     this.file = file;
-    this.model = plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+    this.provider = plugin.settings.noteChatProvider as TextProviderId
+      || plugin.settings.defaultLLMProvider as TextProviderId;
+    this.model = plugin.settings.noteChatModel
+      || this.getDefaultModelForProvider(this.provider);
   }
 
   async onOpen(): Promise<void> {
@@ -49,19 +54,31 @@ export class SpacedRepetitionNoteChatModal extends Modal {
     container.createEl('h2', { text: `Chat With ${this.file.basename}` });
 
     new Setting(container)
-      .setName('Ollama model')
+      .setName('Provider')
       .addDropdown((dropdown) => {
-        const configuredModels = this.plugin.settings.ollamaModels ?? [];
-        const models = configuredModels.length
-          ? configuredModels
-          : [this.model];
-        for (const model of models) {
-          dropdown.addOption(model, model);
-        }
-        dropdown.setValue(this.model);
-        dropdown.onChange((value) => {
-          this.model = value;
-        });
+        dropdown
+          .addOptions(TEXT_PROVIDER_LABELS)
+          .setValue(this.provider)
+          .onChange(async (value) => {
+            const newProvider = value as TextProviderId;
+            this.provider = newProvider;
+            this.plugin.settings.noteChatProvider = newProvider;
+            this.model = this.getDefaultModelForProvider(newProvider);
+            this.plugin.settings.noteChatModel = this.model;
+            await this.plugin.saveSettings();
+            this.render();
+          });
+      });
+
+    new Setting(container)
+      .setName('Model')
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions(this.getModelOptionsForProvider(this.provider))
+          .setValue(this.model)
+          .onChange((value) => {
+            this.model = value;
+          });
       });
 
     const history = container.createDiv({ cls: 'spaced-repetition-note-chat-history' });
@@ -77,7 +94,7 @@ export class SpacedRepetitionNoteChatModal extends Modal {
         cls: `spaced-repetition-note-chat-message spaced-repetition-note-chat-${message.role}`,
       });
       messageEl.createEl('div', {
-        text: message.role === 'assistant' ? 'Ollama' : message.role,
+        text: message.role === 'assistant' ? TEXT_PROVIDER_LABELS[this.provider] : message.role,
         cls: 'spaced-repetition-note-chat-role',
       });
       const contentEl = messageEl.createDiv({ cls: 'spaced-repetition-note-chat-content' });
@@ -131,10 +148,11 @@ export class SpacedRepetitionNoteChatModal extends Modal {
       await database.addNoteChatMessage({ chatId: this.chatId, role: 'user', content: prompt });
       this.messages = database.getNoteChatMessages(this.chatId);
 
-      const client = this.plugin.services.llmClientService.getClientForProvider('ollama')
+      const provider = this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider;
+      const client = this.plugin.services.llmClientService.getClientForProvider(provider as TextProviderId)
         ?? this.plugin.services.llmClientService.getClient();
       if (!client) {
-        throw new Error('Ollama client is not available');
+        throw new Error(`No LLM client available for provider "${provider}". Check the API key/base URL for this provider in Settings.`);
       }
 
       const response = await client.generateText({
@@ -171,7 +189,7 @@ export class SpacedRepetitionNoteChatModal extends Modal {
     const lastUser = this.getLastUserMessage();
     const lastAssistant = this.getLastAssistantMessage();
     if (!lastUser || !lastAssistant) {
-      new Notice('Need a user question and an Ollama reply first');
+      new Notice('Need a user question and an assistant reply first');
       return;
     }
 
@@ -221,6 +239,48 @@ export class SpacedRepetitionNoteChatModal extends Modal {
       '',
       `Current user message:\n${currentPrompt}`,
     ].filter(Boolean).join('\n');
+  }
+
+  private getDefaultModelForProvider(provider: TextProviderId): string {
+    switch (provider) {
+      case 'openrouter':
+        return this.plugin.settings.openrouterTextModel || 'openrouter/deepseek/deepseek-r1:free';
+      case 'chutes':
+        return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
+      case 'zai':
+        return this.plugin.settings.zaiTextModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      default:
+        return this.plugin.settings.defaultTextModel || 'gpt-4o';
+    }
+  }
+
+  private getModelOptionsForProvider(provider: TextProviderId): Record<string, string> {
+    switch (provider) {
+      case 'ollama': {
+        const models = this.plugin.settings.ollamaModels?.length
+          ? this.plugin.settings.ollamaModels
+          : [this.getDefaultModelForProvider('ollama')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      case 'proxy': {
+        const models = this.plugin.settings.proxyModels?.length
+          ? this.plugin.settings.proxyModels
+          : [this.getDefaultModelForProvider('proxy')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      default:
+        return { [this.getDefaultModelForProvider(provider)]: this.getDefaultModelForProvider(provider) };
+    }
   }
 
   private getLastUserMessage(): NoteChatMessageRecord | null {

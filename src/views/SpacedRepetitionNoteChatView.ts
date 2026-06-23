@@ -3,6 +3,7 @@ import { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT } from '../constants';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { VaultFileSelectorModal } from '../modals/VaultFileSelectorModal';
 import { NoteChatMessageRecord, NoteChatRecord } from '../types/spacedRepetition';
+import { TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
 import { PdfHelper } from '../utils/PdfHelper';
 
 const MAX_EXTRA_CONTEXT_CHARS = 18000;
@@ -181,6 +182,33 @@ export class SpacedRepetitionNoteChatView extends ItemView {
 
     this.renderContextFiles(container);
 
+    const providerSetting = new Setting(container)
+      .setName('Provider')
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions(TEXT_PROVIDER_LABELS)
+          .setValue(this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider)
+          .onChange(async (value) => {
+            const newProvider = value as TextProviderId;
+            this.plugin.settings.noteChatProvider = newProvider;
+            this.plugin.settings.noteChatModel = this.getDefaultModelForProvider(newProvider);
+            await this.plugin.saveSettings();
+            this.render();
+          });
+      });
+
+    providerSetting
+      .addDropdown((dropdown) => {
+        const provider = (this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider) as TextProviderId;
+        dropdown
+          .addOptions(this.getModelOptionsForProvider(provider))
+          .setValue(this.plugin.settings.noteChatModel || this.getDefaultModelForProvider(provider))
+          .onChange(async (value) => {
+            this.plugin.settings.noteChatModel = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
     const history = container.createDiv({ cls: 'spaced-repetition-note-chat-history' });
     if (this.messages.length === 0) {
       history.createEl('div', {
@@ -194,7 +222,9 @@ export class SpacedRepetitionNoteChatView extends ItemView {
         cls: `spaced-repetition-note-chat-message spaced-repetition-note-chat-${message.role}`,
       });
       messageEl.createEl('div', {
-        text: message.role === 'assistant' ? 'Ollama' : message.role,
+        text: message.role === 'assistant'
+          ? TEXT_PROVIDER_LABELS[(this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider) as TextProviderId]
+          : message.role,
         cls: 'spaced-repetition-note-chat-role',
       });
       const contentEl = messageEl.createDiv({ cls: 'spaced-repetition-note-chat-content' });
@@ -386,14 +416,15 @@ export class SpacedRepetitionNoteChatView extends ItemView {
       await database.addNoteChatMessage({ chatId: this.chatId, role: 'user', content: prompt });
       this.messages = database.getNoteChatMessages(this.chatId);
 
-      const client = this.plugin.services.llmClientService.getClientForProvider('ollama')
+      const provider = this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider;
+      const client = this.plugin.services.llmClientService.getClientForProvider(provider as TextProviderId)
         ?? this.plugin.services.llmClientService.getClient();
       if (!client) {
-        throw new Error('Ollama client is not available');
+        throw new Error(`No LLM client available for provider "${provider}". Check the API key/base URL for this provider in Settings.`);
       }
 
       const response = await client.generateText({
-        model: this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud',
+        model: this.plugin.settings.noteChatModel || this.getDefaultModelForProvider(provider as TextProviderId),
         message: await this.buildChatPrompt(prompt),
         temperature: 0.3,
         maxTokens: 2200,
@@ -427,7 +458,7 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     const lastUser = this.getLastUserMessage();
     const lastAssistant = this.getLastAssistantMessage();
     if (!lastUser || !lastAssistant) {
-      new Notice('Need a user question and an Ollama reply first');
+      new Notice('Need a user question and an assistant reply first');
       return;
     }
 
@@ -604,5 +635,47 @@ export class SpacedRepetitionNoteChatView extends ItemView {
     }
 
     return `simple_${Math.abs(hash)}_${content.length}`;
+  }
+
+  private getDefaultModelForProvider(provider: TextProviderId): string {
+    switch (provider) {
+      case 'openrouter':
+        return this.plugin.settings.openrouterTextModel || 'openrouter/deepseek/deepseek-r1:free';
+      case 'chutes':
+        return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
+      case 'zai':
+        return this.plugin.settings.zaiTextModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      default:
+        return this.plugin.settings.defaultTextModel || 'gpt-4o';
+    }
+  }
+
+  private getModelOptionsForProvider(provider: TextProviderId): Record<string, string> {
+    switch (provider) {
+      case 'ollama': {
+        const models = this.plugin.settings.ollamaModels?.length
+          ? this.plugin.settings.ollamaModels
+          : [this.getDefaultModelForProvider('ollama')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      case 'proxy': {
+        const models = this.plugin.settings.proxyModels?.length
+          ? this.plugin.settings.proxyModels
+          : [this.getDefaultModelForProvider('proxy')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      default:
+        return { [this.getDefaultModelForProvider(provider)]: this.getDefaultModelForProvider(provider) };
+    }
   }
 }

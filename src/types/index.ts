@@ -148,6 +148,10 @@ export interface PluginSettings {
     // Spaced repetition question generation provider
     spacedRepetitionGenerationProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
     spacedRepetitionGenerationModel: string;
+
+    // Note chat provider
+    noteChatProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    noteChatModel: string;
   }
   
   /**

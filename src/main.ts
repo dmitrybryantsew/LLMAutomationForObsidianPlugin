@@ -897,6 +897,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.studyPathCanvasPath = this.settings.studyPathCanvasPath ?? DEFAULT_SETTINGS.studyPathCanvasPath;
     this.settings.spacedRepetitionGenerationProvider = this.settings.spacedRepetitionGenerationProvider ?? DEFAULT_SETTINGS.spacedRepetitionGenerationProvider;
     this.settings.spacedRepetitionGenerationModel = this.settings.spacedRepetitionGenerationModel ?? DEFAULT_SETTINGS.spacedRepetitionGenerationModel;
+    this.settings.noteChatProvider = this.settings.noteChatProvider ?? DEFAULT_SETTINGS.noteChatProvider;
+    this.settings.noteChatModel = this.settings.noteChatModel ?? DEFAULT_SETTINGS.noteChatModel;
     this.settings.providerTimeout = this.settings.providerTimeout && this.settings.providerTimeout > 600000
       ? this.settings.providerTimeout
       : DEFAULT_SETTINGS.providerTimeout;
