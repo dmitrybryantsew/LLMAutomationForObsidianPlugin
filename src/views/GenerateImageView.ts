@@ -115,42 +115,43 @@ import {
         new Notice("Please enter an image prompt");
         return;
       }
-  
+
+      const llmClientService = this.plugin.services.llmClientService;
+      const client = llmClientService?.getClient();
+
+      if (!client || typeof (client as any).generateImage !== 'function') {
+        new Notice(
+          `Image generation is not supported by the current provider. ` +
+          `Only OpenRouter supports image generation at this time. Switch the default provider to OpenRouter in Settings, or use the Image Generator modal.`
+        );
+        return;
+      }
+
       try {
         new Notice("Generating images...");
-        
+
         // Generate 4 images in parallel
         const imagePromises = Array(4).fill(null).map(async () => {
-          const response = await fetch("http://127.0.0.1:8001/generate-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: this.promptInput,
-              model: this.selectedModel
-            }),
-          });
-  
-          if (!response.ok) {
-            throw new Error(response.statusText);
-          }
-  
-          const data = await response.json();
-          return {
-            url: data.image_url,
+          const response = await (client as any).generateImage({
             prompt: this.promptInput,
             model: this.selectedModel,
-            provider: data.provider
+          });
+          return {
+            url: response.imageUrl ?? response.url,
+            prompt: this.promptInput,
+            model: this.selectedModel,
+            provider: llmClientService?.getCurrentProvider(),
           };
         });
-  
+
         const newImages = await Promise.all(imagePromises);
         this.generatedImages.unshift(...newImages);
-        
+
         this.updateImageGrid();
         new Notice("Images generated successfully!");
       } catch (error) {
         console.error("Failed to generate images:", error);
-        new Notice("Failed to generate images");
+        new Notice(`Failed to generate images: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
   
