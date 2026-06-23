@@ -945,6 +945,17 @@ class SettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    // Chutes Base URL
+    new Setting(containerEl)
+      .setName("Chutes Base URL")
+      .setDesc("Chutes-compatible chat completions endpoint. Leave blank to use the default Chutes.ai cloud endpoint (https://llm.chutes.ai/v1/chat/completions). Point this at your own reverse proxy / remote machine if you route Chutes traffic through one.")
+      .addText(text => text
+        .setValue(this.plugin.settings.chutesBaseUrl || '')
+        .onChange(async value => {
+          this.plugin.settings.chutesBaseUrl = value.trim() || undefined;
+          await this.plugin.saveSettings();
+        }));
+
     // ZAI API Key
     new Setting(containerEl)
       .setName("ZAI API Key")
@@ -953,6 +964,17 @@ class SettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.zaiApiKey || '')
         .onChange(async value => {
           this.plugin.settings.zaiApiKey = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // ZAI Base URL
+    new Setting(containerEl)
+      .setName("ZAI Base URL")
+      .setDesc("ZAI-compatible chat completions endpoint. Leave blank to use the default Z.ai cloud endpoint (https://api.z.ai/api/paas/v4/chat/completions). Point this at your own reverse proxy / remote machine if you route ZAI traffic through one.")
+      .addText(text => text
+        .setValue(this.plugin.settings.zaiBaseUrl || '')
+        .onChange(async value => {
+          this.plugin.settings.zaiBaseUrl = value.trim() || undefined;
           await this.plugin.saveSettings();
         }));
 

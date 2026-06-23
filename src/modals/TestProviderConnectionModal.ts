@@ -122,10 +122,12 @@ class TestProviderConnectionModal extends Modal {
 
             // Create client
             const client = createLLMClientFromSettings(this.selectedProvider, {
-                openRouterApiKey: this.plugin.settings.openRouterApiKey,
-                chutesApiKey: this.plugin.settings.chutesApiKey,
-                zaiApiKey: this.plugin.settings.zaiApiKey,
-                proxyApiKey: this.plugin.settings.proxyApiKey,
+                openRouterApiKey: this.p...Key,
+                chutesApiKey: this.p...Key,
+                zaiApiKey: this.p...Key,
+                proxyApiKey: this.p...Key,
+                chutesBaseUrl: this.plugin.settings.chutesBaseUrl,
+                zaiBaseUrl: this.plugin.settings.zaiBaseUrl,
                 ollamaBaseUrl: this.plugin.settings.ollamaBaseUrl,
                 proxyBaseUrl: this.plugin.settings.proxyBaseUrl,
                 ollamaTimeout: this.plugin.settings.ollamaTimeout,
