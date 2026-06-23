@@ -1,11 +1,13 @@
 import { App, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { QuestionType } from '../types/spacedRepetition';
+import { TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
 
 export class SpacedRepetitionGenerateQuestionsModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
   private sourceFile: TFile;
   private model: string;
+  private provider: TextProviderId;
   private questionCount = 8;
   private includeSelfCheck = true;
   private includeTypedExact = true;
@@ -19,7 +21,10 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
     super(app);
     this.plugin = plugin;
     this.sourceFile = sourceFile;
-    this.model = plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+    this.provider = plugin.settings.spacedRepetitionGenerationProvider as TextProviderId
+      || plugin.settings.defaultLLMProvider as TextProviderId;
+    this.model = plugin.settings.spacedRepetitionGenerationModel
+      || this.getDefaultModelForProvider(this.provider);
   }
 
   onOpen(): void {
@@ -34,12 +39,26 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
     });
 
     new Setting(contentEl)
-      .setName('Ollama Model')
-      .setDesc('Used through the configured Ollama base URL.')
+      .setName('Provider')
       .addDropdown((dropdown) => {
-        const models = this.getOllamaModelOptions();
         dropdown
-          .addOptions(models)
+          .addOptions(TEXT_PROVIDER_LABELS)
+          .setValue(this.provider)
+          .onChange(async (value) => {
+            const newProvider = value as TextProviderId;
+            this.provider = newProvider;
+            this.plugin.settings.spacedRepetitionGenerationProvider = newProvider;
+            this.model = this.getDefaultModelForProvider(newProvider);
+            await this.plugin.saveSettings();
+            this.onOpen();
+          });
+      });
+
+    new Setting(contentEl)
+      .setName('Model')
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions(this.getModelOptionsForProvider(this.provider))
           .setValue(this.model)
           .onChange((value) => {
             this.model = value;
@@ -131,12 +150,12 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
     }
 
     this.isGenerating = true;
-    new Notice('Generating review questions with Ollama...');
+    new Notice(`Generating review questions with ${TEXT_PROVIDER_LABELS[this.provider]}...`);
 
     try {
       this.plugin.settings.spacedRepetition.enabled = true;
-      this.plugin.settings.defaultLLMProvider = 'ollama';
-      this.plugin.settings.ollamaTextModel = this.model;
+      this.plugin.settings.spacedRepetitionGenerationProvider = this.provider;
+      this.plugin.settings.spacedRepetitionGenerationModel = this.model;
       await this.plugin.saveSettings();
 
       const noteContent = await this.app.vault.read(this.sourceFile);
@@ -145,6 +164,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
       const generatedQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
         file: this.sourceFile,
         noteContent,
+        provider: this.provider,
         model: this.model,
         questionCount: this.questionCount,
         questionTypes,
@@ -188,15 +208,64 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
     return types;
   }
 
-  private getOllamaModelOptions(): Record<string, string> {
-    const models = this.plugin.settings.ollamaModels?.length
-      ? this.plugin.settings.ollamaModels
-      : [this.model || 'gemma4:31b-cloud'];
+  private getDefaultModelForProvider(provider: TextProviderId): string {
+    switch (provider) {
+      case 'openrouter':
+        return this.plugin.settings.openrouterTextModel || 'openrouter/deepseek/deepseek-r1:free';
+      case 'chutes':
+        return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
+      case 'zai':
+        return this.plugin.settings.zaiTextModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      default:
+        return this.plugin.settings.defaultTextModel || 'gpt-4o';
+    }
+  }
 
-    return models.reduce((acc: Record<string, string>, model) => {
-      acc[model] = model;
-      return acc;
-    }, {});
+  private getModelOptionsForProvider(provider: TextProviderId): Record<string, string> {
+    switch (provider) {
+      case 'openrouter': {
+        const models = this.plugin.settings.openRouterModels?.length
+          ? this.plugin.settings.openRouterModels
+          : [this.getDefaultModelForProvider('openrouter')];
+        return models.reduce((acc: Record<string, string>, id) => {
+          const name = this.plugin.settings.openRouterModels?.find(m => m === id) || id;
+          acc[id] = name;
+        }, {});
+      }
+      case 'chutes':
+        return {
+          'deepseek-ai/DeepSeek-V3.2-Speciale-TEE': 'DeepSeek V3.2 Speciale',
+        };
+      case 'zai':
+        return {
+          'glm-4.6': 'GLM 4.6',
+          'glm-4.7': 'GLM 4.7',
+        };
+      case 'ollama': {
+        const models = this.plugin.settings.ollamaModels?.length
+          ? this.plugin.settings.ollamaModels
+          : [this.getDefaultModelForProvider('ollama')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      case 'proxy': {
+        const models = this.plugin.settings.proxyModels?.length
+          ? this.plugin.settings.proxyModels
+          : [this.getDefaultModelForProvider('proxy')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      default:
+        return { [this.getDefaultModelForProvider(provider)]: this.getDefaultModelForProvider(provider) };
+    }
   }
 
   private createContentHash(content: string): string {

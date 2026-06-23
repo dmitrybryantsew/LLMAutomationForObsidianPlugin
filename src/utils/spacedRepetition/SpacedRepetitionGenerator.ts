@@ -52,7 +52,7 @@ export class SpacedRepetitionGenerator {
   async generateQuestionsForNote(options: GenerateQuestionsForNoteOptions): Promise<GeneratedSpacedRepetitionQuestion[]> {
     const client = options.provider
       ? this.llmClientService.getClientForProvider(options.provider)
-      : this.llmClientService.getClientForProvider('ollama') ?? this.llmClientService.getClient();
+      : this.llmClientService.getClient();
     if (!client) {
       throw new Error('LLM client is not initialized');
     }
@@ -137,7 +137,7 @@ export class SpacedRepetitionGenerator {
     }
 
     if (valid.length === 0) {
-      throw new Error('Ollama did not return any valid review questions');
+      throw new Error('The selected provider did not return any valid review questions');
     }
 
     return valid;

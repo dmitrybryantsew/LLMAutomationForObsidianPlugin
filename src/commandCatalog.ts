@@ -31,7 +31,7 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     id: 'generate-spaced-repetition-from-current-note',
     name: 'Generate Spaced Repetition Questions From Current Note',
     group: 'Spaced Repetition',
-    description: 'Uses Ollama to generate review questions from the active note and saves them to the spaced repetition database.',
+    description: 'Generates review questions from the active note using your configured LLM provider and saves them to the spaced repetition database.',
   },
   {
     id: 'open-spaced-repetition-review',

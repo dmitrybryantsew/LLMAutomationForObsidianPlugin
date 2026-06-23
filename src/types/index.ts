@@ -144,6 +144,10 @@ export interface PluginSettings {
     studyPathContextMaxTokens: number;
     studyPathMarkdownPath: string;
     studyPathCanvasPath: string;
+
+    // Spaced repetition question generation provider
+    spacedRepetitionGenerationProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    spacedRepetitionGenerationModel: string;
   }
   
   /**

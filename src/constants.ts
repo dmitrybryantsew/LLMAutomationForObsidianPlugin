@@ -98,6 +98,8 @@ const DEFAULT_SETTINGS = {
   studyPathContextMaxTokens: 120000,
   studyPathMarkdownPath: "WikiSynthesis/Study/Plans/CSharp/Generated CSharp Study Path.md",
   studyPathCanvasPath: "WikiSynthesis/Study/Plans/CSharp/Generated CSharp Study Path.canvas",
+  spacedRepetitionGenerationProvider: 'openrouter',
+  spacedRepetitionGenerationModel: '',
   studySourceGroups: [
     {
       id: "csharp-reference",
