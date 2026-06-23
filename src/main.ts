@@ -30,7 +30,6 @@ import { NoteDeleter } from './utils/NoteDeleter'; // Import the note deleter
 import { StandaloneTranscriptCleanupModal } from './modals/StandaloneTranscriptCleanupModal'; // Import the cleanup modal
 import { QuickQueryModal } from './modals/QuickQueryModal'; // Import the QuickQueryModal
 import { QuizGeneratorModal } from './modals/QuizGeneratorModal'; // Import the QuizGeneratorModal
-import { FlashcardGeneratorModal } from './modals/FlashcardGeneratorModal'; // Import the FlashcardGeneratorModal
 import { COMMAND_CHEATSHEET_NOTE_PATH, renderCommandCheatsheet } from './commandCatalog';
 import { SpacedRepetitionReviewMode, SpacedRepetitionReviewView } from './views/SpacedRepetitionReviewView';
 import { SpacedRepetitionDeckBrowserView } from './views/SpacedRepetitionDeckBrowserView';
@@ -693,12 +692,9 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'generate-flashcards-legacy-modal',
-      name: 'Generate Markdown Flashcards from Context (Legacy Modal)',
-      callback: () => {
-        const modal = new FlashcardGeneratorModal(this.app, this);
-        modal.open();
-      }
+      id: 'migrate-legacy-flashcards',
+      name: 'Migrate Legacy Flashcard Files to Spaced Repetition Database',
+      callback: () => this.migrateLegacyFlashcards(),
     });
 
     this.addCommand({
@@ -1001,6 +997,99 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         path: file.path
       });
       new Notice('Failed to open note chat view');
+    }
+  }
+
+  /**
+   * One-time migration: scan the legacy flashcard folder for Markdown files
+   * written by the old FlashcardGeneratorModal and import them into the
+   * spaced-repetition database as self_check questions.
+   */
+  private async migrateLegacyFlashcards(): Promise<void> {
+    const flashcardFolder = this.settings.flashcardFolder || 'Flashcards';
+    if (!(await this.app.vault.adapter.exists(flashcardFolder))) {
+      new Notice(`Legacy flashcard folder "${flashcardFolder}" not found. Nothing to migrate.`);
+      return;
+    }
+
+    try {
+      const database = await this.services.ensureSpacedRepetitionDatabase();
+      const noteFolders = await this.app.vault.adapter.list(flashcardFolder);
+      let totalCards = 0;
+      let totalDecks = 0;
+
+      for (const notePath of noteFolders.folders) {
+        const deckFiles = await this.app.vault.adapter.list(notePath);
+        for (const deckPath of deckFiles.files) {
+          if (!deckPath.endsWith('.md')) continue;
+
+          const deckName = deckPath.split('/').pop()!.replace(/\.md$/, '');
+          const studySet = database.getStudySets().find((s) => s.name === deckName);
+          let studySetId = studySet?.id || '';
+          if (!studySetId) {
+            studySetId = await database.createStudySet({
+              name: deckName,
+              sourceType: 'manual',
+              sourceRule: { type: 'legacy-migration' },
+              tags: ['migrated'],
+            });
+          }
+
+          const file = this.app.vault.getAbstractFileByPath(deckPath);
+          if (!(file instanceof TFile)) continue;
+          const content = await this.app.vault.read(file);
+
+          // Parse Question::Answer entries (basic and multiline)
+          const cardRegex = /^(.+?)::((?:(?!^::).)*)/gms;
+          let match;
+          const questions: Array<{
+            noteId: string;
+            studySetId: string;
+            questionName: string | null;
+            questionText: string;
+            questionType: 'self_check';
+            answerText: string;
+            answerCheckMode: 'self';
+            metadata: Record<string, unknown>;
+          }> = [];
+
+          while ((match = cardRegex.exec(content)) !== null) {
+            const qText = match[1]?.trim();
+            const aText = match[2]?.trim();
+            if (!qText || !aText) continue;
+
+            const noteId = await database.upsertNoteFromFile(file, `legacy_${deckName}_${totalCards}`);
+            questions.push({
+              noteId,
+              studySetId,
+              questionName: null,
+              questionText: qText,
+              questionType: 'self_check',
+              answerText: aText,
+              answerCheckMode: 'self',
+              metadata: {
+                createdFrom: 'legacy-migration',
+                originalDeck: deckName,
+                originalFile: deckPath,
+              },
+            });
+            totalCards++;
+          }
+
+          if (questions.length > 0) {
+            await database.createQuestions(questions);
+            totalDecks++;
+          }
+        }
+      }
+
+      new Notice(
+        `Migrated ${totalCards} card(s) from ${totalDecks} legacy deck file(s). ` +
+        `Original Markdown files were left untouched. Review them, then delete the "${flashcardFolder}" directory once confirmed.`
+      );
+    } catch (error) {
+      console.error('Legacy flashcard migration failed:', error);
+      new Notice(`Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

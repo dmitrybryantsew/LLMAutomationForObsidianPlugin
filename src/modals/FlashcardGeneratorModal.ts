@@ -1,4 +1,11 @@
 /**
+ * @deprecated Superseded by the database-backed flashcard pipeline (SpacedRepetitionDatabase,
+ * FlashcardGenerationView, SpacedRepetitionManualQuestionModal, SpacedRepetitionCardManagementView).
+ * Kept temporarily so the one-time migration command can still parse files this class's format
+ * produced. Safe to delete once migration tooling is no longer needed by any supported upgrade path.
+ */
+
+/**
  * FlashcardGeneratorModal - Deep Flashcard Generation
  * 
  * Provides a modal interface for generating high-quality flashcards using an iterative LLM approach.

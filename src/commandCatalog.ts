@@ -185,10 +185,10 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the flashcard generation side panel with editable context, prompt, preview, and spaced repetition save.',
   },
   {
-    id: 'generate-flashcards-legacy-modal',
-    name: 'Generate Markdown Flashcards from Context (Legacy Modal)',
+    id: 'migrate-legacy-flashcards',
+    name: 'Migrate Legacy Flashcard Files',
     group: 'Learning',
-    description: 'Opens the older modal that writes markdown flashcards to the flashcard folder.',
+    description: 'Scans the legacy flashcard folder and imports previously generated Markdown cards into the spaced-repetition database.',
   },
   {
     id: 'open-coding-exercises',
