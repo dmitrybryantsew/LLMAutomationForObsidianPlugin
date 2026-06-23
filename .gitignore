@@ -3,6 +3,7 @@ coverage/
 dist/
 build/
 android-build/
+plans/
 
 # Obsidian runtime state: local settings, keys, transcript database
 data.json
