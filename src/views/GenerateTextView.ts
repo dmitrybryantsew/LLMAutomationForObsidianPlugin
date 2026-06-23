@@ -20,6 +20,7 @@ import {
   import { HistoryManager } from "../utils/HistoryManager";
   import { ErrorHandler } from "../utils/ErrorHandler";
   import { TextGenerationOptions, OpenRouterError } from '../types/openrouter';
+  import { TextProviderId } from '../types/providers';
 
   interface SelectedFile {
     path: string;
@@ -32,8 +33,6 @@ import {
     name: string;
     content?: string;
   }
-
-  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 class GenerateTextView extends ItemView {
   plugin: GptFreeTextGeneratorPlugin;

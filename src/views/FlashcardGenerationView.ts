@@ -3,8 +3,7 @@ import type GptFreeTextGeneratorPlugin from '../main';
 import { VIEW_TYPE_FLASHCARD_GENERATION } from '../constants';
 import { GeneratedSpacedRepetitionQuestion } from '../utils/spacedRepetition/SpacedRepetitionGenerator';
 import { QuestionType, SpacedRepetitionStudySetRecord } from '../types/spacedRepetition';
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+import { TextProviderId } from '../types/providers';
 
 export class FlashcardGenerationView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;

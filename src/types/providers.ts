@@ -15,6 +15,22 @@ export enum LLMProvider {
 }
 
 /**
+ * String-literal form of LLMProvider, used by UI code (dropdowns, modal state)
+ * that works with plain strings rather than the enum. Keep this in sync with
+ * the LLMProvider enum above — if you add a provider, update both.
+ */
+export type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+
+/** Canonical display names, for any UI that needs a label for a TextProviderId. */
+export const TEXT_PROVIDER_LABELS: Record<TextProviderId, string> = {
+    openrouter: 'OpenRouter',
+    chutes: 'Chutes',
+    zai: 'ZAI',
+    ollama: 'Ollama',
+    proxy: 'OpenAI Proxy',
+};
+
+/**
  * Base provider configuration
  */
 export interface ProviderConfig {

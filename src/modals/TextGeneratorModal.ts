@@ -6,9 +6,8 @@ import {
   } from "obsidian";
 
   import type GptFreeTextGeneratorPlugin from '../main';
+  import { TextProviderId } from '../types/providers';
   import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
-
-  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
   class TextGeneratorModal extends Modal {
     plugin: GptFreeTextGeneratorPlugin;

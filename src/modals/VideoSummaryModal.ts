@@ -9,9 +9,8 @@ import {
   
   import type GptFreeTextGeneratorPlugin from '../main';
   import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts';
-  import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredOpenRouterModels
-
-  type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+  import { TextProviderId } from '../types/providers';
+  import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
   
   export class VideoSummaryModal extends Modal {
     private plugin: GptFreeTextGeneratorPlugin;

@@ -1,9 +1,8 @@
 // ArticleRequestModal.ts
 import { App, Modal, Setting, Notice, ButtonComponent, DropdownComponent } from "obsidian";
 import type GptFreeTextGeneratorPlugin from '../main';
+import { TextProviderId } from '../types/providers';
 import { SettingTab } from '../settings/SettingTab'; // Import SettingTab to access getFilteredModelsForBackend
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
 
 export class ArticleRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;

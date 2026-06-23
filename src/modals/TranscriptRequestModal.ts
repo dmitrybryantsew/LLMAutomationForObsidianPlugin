@@ -2,8 +2,7 @@ import { App, Modal, Setting } from "obsidian";
 import type GptFreeTextGeneratorPlugin from '../main';
 import { TranscriptManager } from "../utils/TranscriptManager";
 import { ErrorHandler } from "../utils/ErrorHandler";
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+import { TextProviderId } from '../types/providers';
 
 export class TranscriptRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;

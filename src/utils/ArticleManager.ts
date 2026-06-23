@@ -5,8 +5,7 @@ import { sanitizeFilename, sanitizeForMetadata } from "../utils/helpers"; // Imp
 import { TagManager } from "./TagManager"; // Import TagManager
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+import { TextProviderId } from '../types/providers';
 
 interface ArticleData {
   title: string;

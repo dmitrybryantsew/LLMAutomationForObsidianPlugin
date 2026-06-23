@@ -12,11 +12,9 @@ import {
   import { StudySourceType } from '../types/studySources';
   import { TestProviderConnectionModal } from '../modals/TestProviderConnectionModal';
   import { LLMClientFactory } from '../utils/LLMClientFactory';
-  import { LLMProvider } from '../types/providers';
+  import { LLMProvider, TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
 
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
-
-class SettingTab extends PluginSettingTab {
+  class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin) {

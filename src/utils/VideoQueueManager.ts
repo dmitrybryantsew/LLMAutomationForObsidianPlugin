@@ -6,8 +6,7 @@ import { Events } from "obsidian"; // Use Obsidian's Events
 import type GptFreeTextGeneratorPlugin from '../main';
 import { PathManager } from "./pathStructure/PathManager"; // Import PathManager
 import { HierarchyManager } from "./HierarchyManager"; // Import HierarchyManager
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+import { TextProviderId } from '../types/providers';
 
 export interface VideoProcessingOptions {
   summaryModel: string;

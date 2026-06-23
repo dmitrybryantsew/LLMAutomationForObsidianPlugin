@@ -11,8 +11,7 @@ import { ContentMetadata } from "./pathStructure/types";
 import { DatabaseManager } from "../database/DatabaseManager";
 import { LLMClientService } from "./LLMClientService";
 import { TextGenerationOptions, OpenRouterError } from "../types/openrouter";
-
-type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+import { TextProviderId } from '../types/providers';
 
 interface VideoData {
   title: string;
