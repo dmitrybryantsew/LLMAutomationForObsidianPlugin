@@ -5,7 +5,7 @@
 
 import { App } from 'obsidian';
 import { LLMClientFactory, createLLMClientFromSettings, LLMClient } from './LLMClientFactory';
-import { LLMProvider } from '../types/providers';
+import { LLMProvider, TextProviderId } from '../types/providers';
 import { PluginSettings } from '../types';
 
 export class LLMClientService {
@@ -64,7 +64,7 @@ export class LLMClientService {
    * Get a client for a specific provider (ad-hoc provider selection)
    * This allows getting a specific client without changing global defaults
    */
-  getClientForProvider(providerId: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy'): LLMClient | null {
+  getClientForProvider(providerId: TextProviderId): LLMClient | null {
     try {
       const provider = LLMClientFactory.parseProvider(providerId);
       return createLLMClientFromSettings(provider, {

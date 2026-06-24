@@ -1001,6 +1001,71 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   }
 
   /**
+   * Parse a legacy deck file into structured cards, supporting all three styles:
+   *   basic    → Question::Answer (single line)
+   *   multiline → Question::\nquestion text\nAnswer:\nanswer text
+   *   cloze    → sentence with {c1::answer} inline
+   */
+  private parseLegacyDeckFile(
+    content: string,
+    deckName: string,
+    deckPath: string,
+  ): Array<{ question: string; answer: string; style: string }> {
+    const cards: Array<{ question: string; answer: string; style: string }> = [];
+
+    // 1. Basic: Question::Answer on a single line
+    const basicRegex = /^(.+?)::(.+)$/gm;
+    let match;
+    while ((match = basicRegex.exec(content)) !== null) {
+      const q = match[1]?.trim();
+      const a = match[2]?.trim();
+      if (q && a) {
+        cards.push({ question: q, answer: a, style: 'basic' });
+      }
+    }
+
+    if (cards.length > 0) {
+      return cards;
+    }
+
+    // 2. Multiline: Question::\nquestion text\nAnswer:\nanswer text
+    const multilineBlocks = content.split(/(?=^Question::)/m);
+    for (const block of multilineBlocks) {
+      if (!block.startsWith('Question::')) continue;
+      const afterMarker = block.slice('Question::'.length);
+      const answerIdx = afterMarker.indexOf('Answer:');
+      if (answerIdx === -1) continue;
+      const q = afterMarker.slice(0, answerIdx).trim();
+      const a = afterMarker.slice(answerIdx + 'Answer:'.length).trim();
+      if (q && a) {
+        cards.push({ question: q, answer: a, style: 'multiline' });
+      }
+    }
+
+    if (cards.length > 0) {
+      return cards;
+    }
+
+    // 3. Cloze: sentences with {c1::answer} inline
+    const clozeRegex = /\{c\d+::([^}]+)\}/g;
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const clozeMatches = [...trimmed.matchAll(clozeRegex)];
+      if (clozeMatches.length === 0) continue;
+      for (const cm of clozeMatches) {
+        const answer = cm[1]?.trim();
+        if (!answer) continue;
+        const question = trimmed.replace(cm[0], '_____');
+        cards.push({ question, answer, style: 'cloze' });
+      }
+    }
+
+    return cards;
+  }
+
+  /**
    * One-time migration: scan the legacy flashcard folder for Markdown files
    * written by the old FlashcardGeneratorModal and import them into the
    * spaced-repetition database as self_check questions.
@@ -1039,9 +1104,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
           if (!(file instanceof TFile)) continue;
           const content = await this.app.vault.read(file);
 
-          // Parse Question::Answer entries — each card is on a single line
-          const cardRegex = /^(.+?)::(.+)$/gm;
-          let match;
+          // Parse flashcards supporting all three legacy styles:
+          //   basic    → Question::Answer (single line)
+          //   multiline → Question::\n...\nAnswer:\n...
+          //   cloze    → sentence with {c1::answer} inline
+          const parsedCards = this.parseLegacyDeckFile(content, deckName, deckPath);
           const questions: Array<{
             noteId: string;
             studySetId: string;
@@ -1053,24 +1120,21 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
             metadata: Record<string, unknown>;
           }> = [];
 
-          while ((match = cardRegex.exec(content)) !== null) {
-            const qText = match[1]?.trim();
-            const aText = match[2]?.trim();
-            if (!qText || !aText) continue;
-
+          for (const card of parsedCards) {
             const noteId = await database.upsertNoteFromFile(file, `legacy_${deckName}_${totalCards}`);
             questions.push({
               noteId,
               studySetId,
               questionName: null,
-              questionText: qText,
+              questionText: card.question,
               questionType: 'self_check',
-              answerText: aText,
+              answerText: card.answer,
               answerCheckMode: 'self',
               metadata: {
                 createdFrom: 'legacy-migration',
                 originalDeck: deckName,
                 originalFile: deckPath,
+                originalStyle: card.style,
               },
             });
             totalCards++;

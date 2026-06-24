@@ -243,6 +243,7 @@ export class SpacedRepetitionManualQuestionModal extends Modal {
           tags: [],
         });
         studySetId = newSetId;
+        this.selectedStudySetId = newSetId;  // persist so Keep Open assigns to the new deck
         deckName = this.newDeckName;
         this.newDeckName = '';
       } else if (studySetId) {

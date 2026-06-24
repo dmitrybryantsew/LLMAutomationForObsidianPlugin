@@ -1,12 +1,13 @@
 import { TFile } from 'obsidian';
 import { AnswerCheckMode, ExactAnswerField, QuestionType, SpacedRepetitionQuestionInput } from '../../types/spacedRepetition';
+import { TextProviderId } from '../../types/providers';
 import { LLMClientService } from '../LLMClientService';
 import { normalizeExactAnswerField } from './ExactAnswerMatcher';
 
 export interface GenerateQuestionsForNoteOptions {
   file: TFile;
   noteContent: string;
-  provider?: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+  provider?: TextProviderId;
   model: string;
   questionCount: number;
   questionTypes: QuestionType[];

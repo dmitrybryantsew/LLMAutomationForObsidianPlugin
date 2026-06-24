@@ -434,7 +434,10 @@ export class SpacedRepetitionNoteChatView extends ItemView {
         chatId: this.chatId,
         role: 'assistant',
         content: response.output,
-        metadata: response.metadata as unknown as Record<string, unknown>,
+        metadata: {
+          ...(response.metadata as unknown as Record<string, unknown>),
+          provider: this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider,
+        },
       });
 
       this.prompt = '';

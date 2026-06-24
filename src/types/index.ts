@@ -3,6 +3,7 @@ export * from '../utils/FileManager';
 export * from '../utils/ErrorHandler';
 export * from '../utils/TranscriptManager';
 import { SummaryType } from '../utils/summaryPrompts'; // Import SummaryType
+import { TextProviderId } from './providers';
 import { SpacedRepetitionSettings } from './spacedRepetition';
 import { StudySourceGroup } from './studySources';
 
@@ -40,7 +41,7 @@ export interface PluginSettings {
     summaryFolder: string;
     quizFolder: string; // Folder for storing generated quizzes
     flashcardFolder: string; // Folder for storing generated flashcards
-    flashcardGenerationProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    flashcardGenerationProvider: TextProviderId;
     flashcardGenerationModel: string;
     flashcardGenerationTemperature: number;
     flashcardGenerationMaxTokens: number;
@@ -75,7 +76,7 @@ export interface PluginSettings {
     detailedSummariesStorageLocation: 'database' | 'note'; // Where to store detailed summaries
     
     // Multi-provider settings
-    defaultLLMProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy'; // Default LLM provider
+    defaultLLMProvider: TextProviderId; // Default LLM provider
     chutesApiKey: string; // API key for Chutes provider
     zaiApiKey: string; // API key for ZAI provider
     proxyApiKey: string; // API key for OpenAI-compatible proxy
@@ -128,7 +129,7 @@ export interface PluginSettings {
     allowLocalCodeExecution: boolean;
     linqPadLprunPath: string;
     exerciseRunTimeoutMs: number;
-    codingExerciseProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    codingExerciseProvider: TextProviderId;
     codingExerciseModel: string;
     codingExerciseTemperature: number;
     codingExerciseMaxTokens: number;
@@ -137,7 +138,7 @@ export interface PluginSettings {
     // Study path/canvas source library
     studySourceGroups: StudySourceGroup[];
     studySourceInventoryNotePath: string;
-    studyPathProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    studyPathProvider: TextProviderId;
     studyPathModel: string;
     studyPathTemperature: number;
     studyPathMaxTokens: number;
@@ -146,11 +147,11 @@ export interface PluginSettings {
     studyPathCanvasPath: string;
 
     // Spaced repetition question generation provider
-    spacedRepetitionGenerationProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    spacedRepetitionGenerationProvider: TextProviderId;
     spacedRepetitionGenerationModel: string;
 
     // Note chat provider
-    noteChatProvider: 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+    noteChatProvider: TextProviderId;
     noteChatModel: string;
   }
   

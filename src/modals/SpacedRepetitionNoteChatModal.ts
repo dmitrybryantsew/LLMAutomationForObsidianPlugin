@@ -166,7 +166,10 @@ export class SpacedRepetitionNoteChatModal extends Modal {
         chatId: this.chatId,
         role: 'assistant',
         content: response.output,
-        metadata: response.metadata as unknown as Record<string, unknown>,
+        metadata: {
+          ...(response.metadata as unknown as Record<string, unknown>),
+          provider: this.plugin.settings.noteChatProvider || this.plugin.settings.defaultLLMProvider,
+        },
       });
 
       this.prompt = '';
@@ -260,6 +263,24 @@ export class SpacedRepetitionNoteChatModal extends Modal {
 
   private getModelOptionsForProvider(provider: TextProviderId): Record<string, string> {
     switch (provider) {
+      case 'openrouter': {
+        const models = this.plugin.settings.openRouterModels?.length
+          ? this.plugin.settings.openRouterModels
+          : [this.getDefaultModelForProvider('openrouter')];
+        return models.reduce((acc: Record<string, string>, model: string) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      case 'chutes':
+        return {
+          'deepseek-ai/DeepSeek-V3.2-Speciale-TEE': 'DeepSeek V3.2 Speciale',
+        };
+      case 'zai':
+        return {
+          'glm-4.6': 'GLM 4.6',
+          'glm-4.7': 'GLM 4.7',
+        };
       case 'ollama': {
         const models = this.plugin.settings.ollamaModels?.length
           ? this.plugin.settings.ollamaModels
