@@ -28,7 +28,10 @@ export class SpacedRepetitionEditCardModal extends Modal {
     this.questionType = question.questionType;
     this.answerCheckMode = question.answerCheckMode;
     this.choiceTexts = question.choices ? [...question.choices, ...Array(4 - question.choices.length).fill('')].slice(0, 4) : ['', '', '', ''];
-    this.correctChoiceIndex = 0;
+    // Derive correctChoiceIndex from the existing answerText (multiple_choice stores the correct choice text in answerText)
+    this.correctChoiceIndex = question.choices
+      ? Math.max(0, question.choices.indexOf(question.answerText || ''))
+      : 0;
   }
 
   onOpen(): void {

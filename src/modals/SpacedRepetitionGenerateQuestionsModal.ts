@@ -234,6 +234,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         return models.reduce((acc: Record<string, string>, id) => {
           const name = this.plugin.settings.openRouterModels?.find(m => m === id) || id;
           acc[id] = name;
+          return acc;
         }, {});
       }
       case 'chutes':

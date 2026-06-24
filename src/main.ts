@@ -1039,8 +1039,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
           if (!(file instanceof TFile)) continue;
           const content = await this.app.vault.read(file);
 
-          // Parse Question::Answer entries (basic and multiline)
-          const cardRegex = /^(.+?)::((?:(?!^::).)*)/gms;
+          // Parse Question::Answer entries — each card is on a single line
+          const cardRegex = /^(.+?)::(.+)$/gm;
           let match;
           const questions: Array<{
             noteId: string;
