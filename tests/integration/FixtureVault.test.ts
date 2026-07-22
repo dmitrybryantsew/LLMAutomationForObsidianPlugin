@@ -92,7 +92,7 @@ describe('Fixture vault end-to-end (testMdFiles)', () => {
 
     db = new RetrievalDatabase(mock.app as any, { dbPath: DEFAULT_DB_PATH, wasmPath: ADAPTER_WASM_PATH });
     coordinator = new IndexCoordinator(mock.app as any, db, () => settings, debugLogger);
-    service = new RetrievalService(db, {
+    service = new RetrievalService({ database: db }, {
       evidenceTokenBudget: settings.evidenceTokenBudget,
       defaultResultLimit: settings.defaultResultLimit,
     });

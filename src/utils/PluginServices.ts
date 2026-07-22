@@ -308,7 +308,7 @@ export class PluginServices {
       );
     }
     if (!this._retrievalService) {
-      this._retrievalService = new RetrievalService(this._retrievalDatabase, {
+      this._retrievalService = new RetrievalService({ database: this._retrievalDatabase }, {
         evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
         defaultResultLimit: this._settings.retrieval.defaultResultLimit,
       });

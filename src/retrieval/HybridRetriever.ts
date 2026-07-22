@@ -2,7 +2,7 @@ import { SearchHit, SearchRequest, VectorHit, VectorStore, VectorSearchFilters }
 import { PlannedQuery, QueryPlanner } from './QueryPlanner';
 import { RetrievalDatabase } from './RetrievalDatabase';
 import { EmbeddingProvider } from '../types/retrieval';
-import { LexicalRetriever } from './LexicalRetriever';
+import { LexicalRetriever, SqlLexicalRetriever } from './LexicalRetriever';
 
 const RRF_K = 60;
 const CANDIDATE_LIMIT = 40;
@@ -10,24 +10,38 @@ const CANDIDATE_LIMIT = 40;
 export interface HybridRetrieverOptions {
   minUsefulCandidates?: number;
   semanticThreshold?: number;
+  /** When true, if lexical search returns 0 hits, hybrid also returns 0 hits (semantic can't override lexical no-result). */
+  lexicalVeto?: boolean;
 }
 
 const DEFAULT_SEMANTIC_THRESHOLD = 0.3;
 
 export class HybridRetriever implements LexicalRetriever {
+  private lexicalRetriever: SqlLexicalRetriever;
+
   constructor(
     private database: RetrievalDatabase,
     private vectorStore: VectorStore | null,
     private embeddingProvider: EmbeddingProvider | null,
     private options: HybridRetrieverOptions = {}
-  ) {}
+  ) {
+    this.lexicalRetriever = new SqlLexicalRetriever(database, {
+      minUsefulCandidates: options.minUsefulCandidates,
+    });
+  }
 
   async search(request: SearchRequest): Promise<SearchHit[]> {
     const planned = QueryPlanner.plan(request.query);
-    const lexicalHits = this.searchLexical(planned, request);
+    const lexicalHits = this.lexicalRetriever.searchPlanned(planned, request);
 
     if (!this.vectorStore || !this.embeddingProvider) {
       return lexicalHits;
+    }
+
+    // Lexical veto: if lexical search found nothing, semantic can't override it.
+    // This prevents false positives on queries about topics not in the vault.
+    if (this.options.lexicalVeto && lexicalHits.length === 0) {
+      return [];
     }
 
     const queryVector = await this.embeddingProvider.embed([planned.normalizedQuery]);
@@ -49,27 +63,6 @@ export class HybridRetriever implements LexicalRetriever {
 
     const fused = this.fuseRrf(lexicalHits, filteredVectorHits, planned, request);
     return fused;
-  }
-
-  private searchLexical(planned: PlannedQuery, request: SearchRequest): SearchHit[] {
-    const strictRequest = { ...request, query: planned.originalQuery };
-    const strictHits = this.database.search(
-      { ...planned, ftsQuery: planned.strictFtsQuery },
-      strictRequest
-    );
-
-    if (strictHits.length >= (this.options.minUsefulCandidates ?? 3) || !planned.relaxedFtsQuery) {
-      return this.boostHits(strictHits, planned, request, 'strict-and', false);
-    }
-
-    const relaxedHits = this.database.search(
-      { ...planned, ftsQuery: planned.relaxedFtsQuery },
-      strictRequest
-    );
-
-    if (relaxedHits.length === 0) return this.boostHits(strictHits, planned, request, 'strict-and', false);
-
-    return this.boostHits(relaxedHits, planned, request, 'relaxed-lexical', true);
   }
 
   private fuseRrf(
@@ -139,63 +132,5 @@ export class HybridRetriever implements LexicalRetriever {
       matchedTerms: [],
       matchedTermFraction: 0,
     };
-  }
-
-  private boostHits(
-    hits: SearchHit[],
-    planned: PlannedQuery,
-    request: SearchRequest,
-    mode: 'strict-and' | 'relaxed-lexical',
-    fallbackUsed: boolean
-  ): SearchHit[] {
-    const perPathCounts = new Map<string, number>();
-    return hits
-      .map((hit) => {
-        let boost = 0;
-        const reasons = [...hit.matchReasons];
-        const finalHeading = hit.headingPath[hit.headingPath.length - 1]?.toLowerCase() ?? '';
-        const normalizedBasename = hit.basename.toLowerCase();
-        const normalizedQuery = planned.normalizedQuery;
-
-        if (normalizedQuery === normalizedBasename || normalizedQuery === finalHeading) {
-          boost -= 8;
-          reasons.push('title-exact');
-        }
-
-        for (const token of planned.exactTokens) {
-          const tokenLower = token.toLowerCase();
-          if (
-            hit.normalizedText.includes(tokenLower) ||
-            hit.basename.toLowerCase().includes(tokenLower) ||
-            finalHeading.includes(tokenLower)
-          ) {
-            boost -= 5;
-            reasons.push(`exact:${token}`);
-          }
-        }
-
-        if (request.includeCurrentNotePath && hit.path === request.includeCurrentNotePath) {
-          boost -= 2;
-          reasons.push('current-note');
-        }
-
-        const pathCount = perPathCounts.get(hit.path) ?? 0;
-        perPathCounts.set(hit.path, pathCount + 1);
-        if (pathCount >= 1) {
-          boost += 2 * pathCount;
-          reasons.push('duplicate-path-penalty');
-        }
-
-        reasons.push(`mode:${mode}`);
-
-        return {
-          ...hit,
-          finalScore: hit.lexicalScore + boost,
-          matchReasons: reasons,
-          retrievalMode: mode,
-          fallbackUsed,
-        };
-      })
-      .sort((a, b) => a.finalScore - b.finalScore || a.path.localeCompare(b.path));
   }
 }
