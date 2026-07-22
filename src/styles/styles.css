@@ -1031,3 +1031,234 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Knowledge Retrieval: SearchKnowledgeModal */
+.search-knowledge-modal .search-knowledge-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-secondary);
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.search-knowledge-modal .search-knowledge-status-error {
+    color: var(--text-error);
+    width: 100%;
+}
+
+.search-knowledge-modal .search-knowledge-query-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-family: var(--font-interface);
+    font-size: var(--font-ui-medium);
+    resize: vertical;
+}
+
+.search-knowledge-modal .search-knowledge-results {
+    margin-top: 12px;
+    max-height: 50vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.search-knowledge-modal .search-knowledge-results.empty {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 12px;
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 4px;
+}
+
+.search-knowledge-modal .search-knowledge-empty p {
+    margin: 4px 0;
+}
+
+.search-knowledge-modal .search-knowledge-summary {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.search-knowledge-modal .search-knowledge-card {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 10px;
+    background: var(--background-primary);
+}
+
+.search-knowledge-modal .search-knowledge-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.search-knowledge-modal .search-knowledge-card-title {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.search-knowledge-modal .search-knowledge-card-basename {
+    font-weight: var(--font-semibold);
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-knowledge-modal .search-knowledge-card-heading {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-knowledge-modal .search-knowledge-card-open {
+    padding: 2px 10px;
+    font-size: 0.85em;
+}
+
+.search-knowledge-modal .search-knowledge-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.search-knowledge-modal .search-knowledge-card-reasons {
+    color: var(--interactive-accent);
+}
+
+.search-knowledge-modal .search-knowledge-card-snippet {
+    font-family: var(--font-monospace);
+    font-size: 0.85em;
+    color: var(--text-normal);
+    background: var(--background-secondary);
+    padding: 6px 8px;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.search-knowledge-modal .search-knowledge-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+/* Knowledge Retrieval: QuickQuery retrieval controls */
+.quick-query-modal .retrieval-controls {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-secondary);
+}
+
+.quick-query-modal .quick-query-sources {
+    margin-top: 8px;
+    max-height: 30vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.quick-query-modal .quick-query-sources.empty {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 8px;
+}
+
+.quick-query-modal .quick-query-source-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 8px;
+    background: var(--background-primary);
+}
+
+.quick-query-modal .quick-query-source-card input[type='checkbox'] {
+    margin-top: 4px;
+}
+
+.quick-query-modal .quick-query-source-title {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.quick-query-modal .quick-query-source-basename {
+    font-weight: var(--font-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.quick-query-modal .quick-query-source-heading {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.quick-query-modal .quick-query-source-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.quick-query-modal .quick-query-source-reasons {
+    color: var(--interactive-accent);
+}
+
+.quick-query-modal .quick-query-source-open {
+    padding: 2px 8px;
+    font-size: 0.85em;
+}
+
+/* Knowledge Retrieval: SettingTab status + actions */
+.retrieval-status-container {
+    margin: 8px 0;
+    padding: 8px 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-secondary);
+}
+
+.retrieval-status-container p {
+    margin: 2px 0;
+}
+
+.retrieval-actions {
+    display: flex;
+    gap: 10px;
+    margin: 12px 0;
+    flex-wrap: wrap;
+}
+

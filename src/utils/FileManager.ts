@@ -1,5 +1,5 @@
 import { App, Notice, TFile } from "obsidian";
-import { sanitizeFilename } from "../utils/helpers";
+import { sanitizeFilename, yamlValue } from "../utils/helpers";
 import { ErrorHandler } from "./ErrorHandler";
 
 interface SaveImageOptions {
@@ -15,7 +15,7 @@ interface SaveFileOptions {
     folder: string;
     filename: string;
     metadata?: Record<string, any>;
-    overwrite?: boolean;  // New option
+    overwrite?: boolean;
   }
 
 class FileManager {
@@ -37,10 +37,8 @@ class FileManager {
       const sanitizedPrompt = sanitizeFilename(prompt.slice(0, 30));
       const folderPath = `${imageFolder}/${timestamp}/${sanitizedPrompt}`;
       
-      // Create folder if it doesn't exist
       await this.app.vault.adapter.mkdir(folderPath);
       
-      // Download and save image
       const imageResponse = await fetch(imageUrl);
       const imageBlob = await imageResponse.blob();
       const imageBuffer = await imageBlob.arrayBuffer();
@@ -48,7 +46,6 @@ class FileManager {
       const imagePath = `${folderPath}/image.png`;
       await this.app.vault.createBinary(imagePath, imageBuffer);
 
-      // Save metadata
       const fullMetadata = {
         prompt,
         model,
@@ -74,18 +71,15 @@ class FileManager {
 
   async saveFile({ content, folder, filename, metadata = {}, overwrite = false }: SaveFileOptions): Promise<string> {
     try {
-      // Ensure folder exists
       await this.app.vault.adapter.mkdir(folder);
       
       const filePath = `${folder}/${filename}`;
       
-      // Check if file exists and handle overwrite
       const existingFile = this.app.vault.getAbstractFileByPath(filePath);
       
       if (existingFile) {
         if (overwrite) {
           if (existingFile instanceof TFile) {
-            // Delete existing file before creating new one
             await this.app.vault.delete(existingFile);
           } else {
             throw new Error("Existing path is not a file");
@@ -97,12 +91,12 @@ class FileManager {
   
       let finalContent = content;
       
-      // Add metadata if provided
+      // Add metadata if provided — uses proper YAML serialization
       if (Object.keys(metadata).length > 0) {
         const yamlMetadata = Object.entries(metadata)
-          .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+          .map(([key, value]) => `${key}: ${yamlValue(value)}`)
           .join('\n');
-          
+        
         finalContent = `---\n${yamlMetadata}\n---\n\n${content}`;
       }
   
@@ -121,18 +115,24 @@ class FileManager {
   
   async readFile(path: string): Promise<string> {
     try {
-      const file = this.app.vault.getAbstractFileByPath(path);
+      // Normalize path: strip leading slashes, resolve double slashes, remove trailing slash
+      let normalized = path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').replace(/\/$/, '');
+      let file = this.app.vault.getAbstractFileByPath(normalized);
       if (file instanceof TFile) {
         return await this.app.vault.read(file);
       }
-      throw new Error("File not found");
+      // Fallback: try adapter.read() for files that may not be registered as TFile yet
+      if (await this.app.vault.adapter.exists(normalized)) {
+        return await this.app.vault.adapter.read(normalized);
+      }
+      throw new Error(`File not found: ${path}`);
     } catch (error: unknown) {
         ErrorHandler.handleError(error, "FILE_OPERATION", {
           operation: "read",
           path,
           timestamp: new Date().toISOString()
         });
-        throw error; // Re-throw to handle in calling code if needed
+        throw error;
       }
   }
 
@@ -153,10 +153,6 @@ class FileManager {
     }
   }
 
-  /**
-   * Get all markdown file paths in the vault
-   * @returns Array of markdown file paths
-   */
   async getVaultData(): Promise<string[]> {
     try {
       const markdownFiles = this.app.vault.getMarkdownFiles();

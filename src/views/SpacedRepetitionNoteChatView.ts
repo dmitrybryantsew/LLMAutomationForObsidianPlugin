@@ -2,6 +2,7 @@ import { ItemView, MarkdownRenderer, Notice, Setting, TFile, WorkspaceLeaf } fro
 import { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT } from '../constants';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { VaultFileSelectorModal } from '../modals/VaultFileSelectorModal';
+import { AuthorSelectorModal } from '../modals/AuthorSelectorModal';
 import { NoteChatMessageRecord, NoteChatRecord } from '../types/spacedRepetition';
 import { TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
 import { PdfHelper } from '../utils/PdfHelper';
@@ -168,6 +169,18 @@ export class SpacedRepetitionNoteChatView extends ItemView {
           .setButtonText('Add Mentioned Files')
           .setDisabled(!this.file)
           .onClick(() => this.addMentionedContextFiles());
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Add by This Author')
+          .setDisabled(!this.file)
+          .onClick(() => this.addContextFilesByThisAuthor());
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Add by Author...')
+          .setDisabled(!this.file)
+          .onClick(() => this.openAuthorSelector());
       });
 
     if (!this.file) {
@@ -368,6 +381,78 @@ export class SpacedRepetitionNoteChatView extends ItemView {
 
     this.render();
     new Notice(addedCount > 0 ? `Added ${addedCount} context file(s)` : 'No new supported context files found');
+  }
+
+  private addContextFilesByThisAuthor(): void {
+    if (!this.file) return;
+
+    const cache = this.app.metadataCache.getFileCache(this.file);
+    const frontmatter = cache?.frontmatter;
+    if (!frontmatter) {
+      new Notice('Current note has no frontmatter');
+      return;
+    }
+
+    const author = frontmatter.author ?? frontmatter.channel;
+    if (!author) {
+      new Notice('Current note has no "author" or "channel" property');
+      return;
+    }
+
+    // Handle string or array author values
+    const authors: string[] = Array.isArray(author)
+      ? author.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim())
+      : [String(author).trim()];
+
+    if (authors.length === 0 || !authors[0]) {
+      new Notice('Author property is empty');
+      return;
+    }
+
+    this.addContextFilesByAuthors(authors);
+  }
+
+  private openAuthorSelector(): void {
+    new AuthorSelectorModal(this.app, (author: string) => {
+      this.addContextFilesByAuthors([author]);
+    }).open();
+  }
+
+  private addContextFilesByAuthors(authors: string[]): void {
+    const files = this.app.vault.getMarkdownFiles();
+    let addedCount = 0;
+
+    for (const file of files) {
+      if (file.path === this.file?.path) continue;
+      if (!this.isSupportedContextFile(file)) continue;
+
+      // Already in context?
+      const alreadyAdded = Array.from(this.contextFiles).some((cf) => cf.path === file.path);
+      if (alreadyAdded) continue;
+
+      const cache = this.app.metadataCache.getFileCache(file);
+      const fm = cache?.frontmatter;
+      if (!fm) continue;
+
+      const fileAuthor = fm.author ?? fm.channel;
+      if (!fileAuthor) continue;
+
+      // Check if any of the target authors match this file's author
+      const fileAuthors: string[] = Array.isArray(fileAuthor)
+        ? fileAuthor.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim())
+        : [String(fileAuthor).trim()];
+
+      const matches = fileAuthors.some((fa) => authors.some((a) => a === fa));
+      if (matches) {
+        this.contextFiles.add(file);
+        addedCount += 1;
+      }
+    }
+
+    this.render();
+    new Notice(addedCount > 0
+      ? `Added ${addedCount} note(s) by ${authors.join(', ')}`
+      : `No notes found by ${authors.join(', ')}`);
   }
 
   private renderContextFiles(container: HTMLElement): void {

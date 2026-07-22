@@ -2,6 +2,10 @@ import { App, Modal, Notice, Setting, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { QuestionType } from '../types/spacedRepetition';
 import { TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
+import { AuthorSelectorModal } from './AuthorSelectorModal';
+
+const MAX_EXTRA_CONTEXT_CHARS = 18000;
+const MAX_CONTEXT_FILE_CHARS = 8000;
 
 export class SpacedRepetitionGenerateQuestionsModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -16,6 +20,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
   private includeLlmChecked = false;
   private additionalInstructions = '';
   private isGenerating = false;
+  private contextFiles: Set<TFile> = new Set();
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin, sourceFile: TFile) {
     super(app);
@@ -124,6 +129,22 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         text.inputEl.rows = 4;
       });
 
+    // Author-based context buttons
+    new Setting(contentEl)
+      .addButton((button) => {
+        button
+          .setButtonText('Add by This Author')
+          .onClick(() => this.addContextByThisAuthor());
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Add by Author...')
+          .onClick(() => this.openAuthorSelector());
+      });
+
+    // Render context file chips
+    this.renderContextFiles(contentEl);
+
     new Setting(contentEl)
       .addButton((button) => {
         button
@@ -161,6 +182,10 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
       const noteContent = await this.app.vault.read(this.sourceFile);
       const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
       const noteId = await database.upsertNoteFromFile(this.sourceFile, this.createContentHash(noteContent));
+
+      // Build extra context from selected author notes
+      const extraContext = await this.buildExtraContext();
+
       const generatedQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
         file: this.sourceFile,
         noteContent,
@@ -170,6 +195,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         questionTypes,
         additionalInstructions: this.additionalInstructions,
         outputLanguage: this.plugin.settings.defaultOutputLanguage || 'english',
+        extraContext,
       });
 
       const questionIds = await database.createQuestions(generatedQuestions.map((question) => ({
@@ -231,8 +257,9 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         const models = this.plugin.settings.openRouterModels?.length
           ? this.plugin.settings.openRouterModels
           : [this.getDefaultModelForProvider('openrouter')];
-        return models.reduce((acc: Record<string, string>, id) => {
-          const name = this.plugin.settings.openRouterModels?.find(m => m === id) || id;
+        return models.reduce((acc: Record<string, string>, model) => {
+          const id = typeof model === 'string' ? model : model.id;
+          const name = typeof model === 'string' ? model : model.name;
           acc[id] = name;
           return acc;
         }, {});
@@ -267,6 +294,128 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
       default:
         return { [this.getDefaultModelForProvider(provider)]: this.getDefaultModelForProvider(provider) };
     }
+  }
+
+  private addContextByThisAuthor(): void {
+    const cache = this.app.metadataCache.getFileCache(this.sourceFile);
+    const frontmatter = cache?.frontmatter;
+    if (!frontmatter) {
+      new Notice('Source note has no frontmatter');
+      return;
+    }
+
+    const author = frontmatter.author ?? frontmatter.channel;
+    if (!author) {
+      new Notice('Source note has no "author" or "channel" property');
+      return;
+    }
+
+    const authors: string[] = Array.isArray(author)
+      ? author.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim())
+      : [String(author).trim()];
+
+    if (authors.length === 0 || !authors[0]) {
+      new Notice('Author property is empty');
+      return;
+    }
+
+    this.addContextByAuthors(authors);
+  }
+
+  private openAuthorSelector(): void {
+    new AuthorSelectorModal(this.app, (author: string) => {
+      this.addContextByAuthors([author]);
+    }).open();
+  }
+
+  private addContextByAuthors(authors: string[]): void {
+    const files = this.app.vault.getMarkdownFiles();
+    let addedCount = 0;
+
+    for (const file of files) {
+      if (file.path === this.sourceFile.path) continue;
+
+      const alreadyAdded = Array.from(this.contextFiles).some((cf) => cf.path === file.path);
+      if (alreadyAdded) continue;
+
+      const cache = this.app.metadataCache.getFileCache(file);
+      const fm = cache?.frontmatter;
+      if (!fm) continue;
+
+      const fileAuthor = fm.author ?? fm.channel;
+      if (!fileAuthor) continue;
+
+      const fileAuthors: string[] = Array.isArray(fileAuthor)
+        ? fileAuthor.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim())
+        : [String(fileAuthor).trim()];
+
+      const matches = fileAuthors.some((fa) => authors.some((a) => a === fa));
+      if (matches) {
+        this.contextFiles.add(file);
+        addedCount += 1;
+      }
+    }
+
+    this.onOpen(); // Re-render modal
+    new Notice(addedCount > 0
+      ? `Added ${addedCount} note(s) by ${authors.join(', ')}`
+      : `No notes found by ${authors.join(', ')}`);
+  }
+
+  private renderContextFiles(container: HTMLElement): void {
+    if (this.contextFiles.size === 0) return;
+
+    const contextContainer = container.createDiv({ cls: 'spaced-repetition-note-chat-context-files' });
+    for (const file of Array.from(this.contextFiles)) {
+      const chip = contextContainer.createDiv({ cls: 'spaced-repetition-note-chat-context-chip' });
+      chip.createSpan({
+        text: file.name,
+        cls: 'spaced-repetition-note-chat-context-name',
+      });
+      const removeButton = chip.createEl('button', {
+        text: 'x',
+        cls: 'spaced-repetition-note-chat-context-remove',
+        attr: { 'aria-label': `Remove ${file.path} from context` },
+      });
+      removeButton.addEventListener('click', () => {
+        this.contextFiles.delete(file);
+        this.onOpen(); // Re-render modal
+      });
+    }
+  }
+
+  private async buildExtraContext(): Promise<string> {
+    if (this.contextFiles.size === 0) return '';
+
+    const sections: string[] = [];
+    let usedChars = 0;
+
+    for (const file of Array.from(this.contextFiles)) {
+      if (usedChars >= MAX_EXTRA_CONTEXT_CHARS) {
+        sections.push('[Additional context truncated to fit prompt budget.]');
+        break;
+      }
+
+      try {
+        const rawContent = await this.app.vault.read(file);
+        const remaining = MAX_EXTRA_CONTEXT_CHARS - usedChars;
+        const limit = Math.min(MAX_CONTEXT_FILE_CHARS, remaining);
+        const content = rawContent.slice(0, limit);
+        usedChars += content.length;
+        sections.push([
+          `Context file: ${file.path}`,
+          '```',
+          content,
+          rawContent.length > content.length ? '...[truncated]' : '',
+          '```',
+        ].filter(Boolean).join('\n'));
+      } catch (error) {
+        console.error('Failed to read context file:', error);
+        sections.push(`Context file: ${file.path}\n[Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}]`);
+      }
+    }
+
+    return sections.length ? sections.join('\n\n') : '';
   }
 
   private createContentHash(content: string): string {

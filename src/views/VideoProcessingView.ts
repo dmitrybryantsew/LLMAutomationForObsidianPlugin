@@ -24,6 +24,8 @@ export class VideoProcessingView extends ItemView {
     return "Video Processing Queue";
   }
 
+  private eventRefs: Array<{ name: string; callback: (...args: any[]) => void }> = [];
+
   async onOpen(): Promise<void> {
     const container = this.contentEl;
     container.empty();
@@ -91,27 +93,31 @@ export class VideoProcessingView extends ItemView {
       if (this.logContainer) this.logContainer.style.display = "block";
     });
     
-    // Setup event listeners for queue updates
-    this.plugin.videoQueueManager.on('queueUpdated', (queue) => { // Remove type annotation
-      // Assert type inside the callback
+    // Setup event listeners for queue updates (with cleanup tracking)
+    const queueUpdatedCb = (queue: unknown) => {
       this.updateQueueDisplay(queue as QueuedVideo[]); 
-    });
+    };
+    this.plugin.videoQueueManager.on('queueUpdated', queueUpdatedCb);
+    this.eventRefs.push({ name: 'queueUpdated', callback: queueUpdatedCb });
     
-    this.plugin.videoQueueManager.on('videoStatusChanged', (video, index) => { // Remove type annotations
-      // Assert types inside the callback
+    const videoStatusChangedCb = (video: unknown, index: unknown) => {
       const typedVideo = video as QueuedVideo;
       const typedIndex = index as number;
       this.updateVideoStatus(typedVideo, typedIndex);
       this.addLogEntry(`Video ${typedIndex + 1}: ${typedVideo.status} - ${typedVideo.url}`);
       if (typedVideo.error) {
-        this.addLogEntry(`Error: ${typedVideo.error}`, 'error'); // Use typedVideo here
+        this.addLogEntry(`Error: ${typedVideo.error}`, 'error');
       }
-    });
+    };
+    this.plugin.videoQueueManager.on('videoStatusChanged', videoStatusChangedCb);
+    this.eventRefs.push({ name: 'videoStatusChanged', callback: videoStatusChangedCb });
     
-    this.plugin.videoQueueManager.on('processingComplete', () => {
+    const processingCompleteCb = () => {
       this.addLogEntry('All videos processed', 'success');
       new Notice("Video processing complete!");
-    });
+    };
+    this.plugin.videoQueueManager.on('processingComplete', processingCompleteCb);
+    this.eventRefs.push({ name: 'processingComplete', callback: processingCompleteCb });
     
     // Initial queue display
     this.updateQueueDisplay(this.plugin.videoQueueManager.getQueue());
@@ -495,10 +501,9 @@ export class VideoProcessingView extends ItemView {
 
   private addStyles(): void {
     // Add CSS for the processing view
-    document.head.appendChild(
-      createEl("style", {
-        attr: { id: "video-processing-styles" },
-        text: `
+    const styleEl = document.createElement("style");
+    styleEl.id = "video-processing-styles";
+    styleEl.textContent = `
           .video-processing-layout {
             display: flex;
             flex-direction: column;
@@ -742,12 +747,21 @@ export class VideoProcessingView extends ItemView {
           .log-success .log-message {
             color: var(--text-success);
           }
-        `
-      })
-    );
+        `;
+    document.head.appendChild(styleEl);
   }
 
   async onClose(): Promise<void> {
-    // Cleanup if needed
+    // Remove event listeners from videoQueueManager to prevent duplicates on re-open
+    for (const ref of this.eventRefs) {
+      this.plugin.videoQueueManager.off(ref.name, ref.callback);
+    }
+    this.eventRefs = [];
+
+    // Remove injected style element
+    const styleEl = document.getElementById("video-processing-styles");
+    if (styleEl) {
+      styleEl.remove();
+    }
   }
 }

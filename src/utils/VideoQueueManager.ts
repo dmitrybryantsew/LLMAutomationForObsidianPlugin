@@ -18,14 +18,23 @@ export interface VideoProcessingOptions {
   skipExisting: boolean;
   provider?: TextProviderId; // New: Use multi-provider system
   enableChunking?: boolean; // New: Enable chunking for long videos
+  saveToDatabase?: boolean; // Save transcript to database instead of note file
+  // Local-transcript batch fields (only used when queue items have kind='local')
+  localTranscript?: {
+    sourceFolder: string; // Vault folder containing .txt transcripts
+    defaultAuthor: string; // Default author/course for all transcripts
+    targetFolder: string; // Where to save summaries
+    flatFolder?: boolean; // If true, save directly in targetFolder; if false, under Author/Title
+  };
 }
 
 export interface QueuedVideo {
-  url: string;
+  url: string; // Either a YouTube URL or a vault-relative .txt path
   status: 'queued' | 'processing' | 'completed' | 'failed';
   title?: string;
   error?: string;
   filePath?: string;
+  kind?: 'video' | 'local'; // Defaults to 'video' for backwards compat
 }
 
 export class VideoQueueManager extends Events { // Extend Obsidian's Events
@@ -54,14 +63,35 @@ export class VideoQueueManager extends Events { // Extend Obsidian's Events
       url,
       status: 'queued' as const
     }));
-    
+
     this.queue.push(...newVideos);
     this.options = options;
-    
+
     // Emit event for UI update
     this.trigger('queueUpdated', this.queue); // Use trigger instead of emit
-    
+
     // Start processing if not already running
+    if (!this.isProcessing) {
+      this.processNextVideo();
+    }
+  }
+
+  /**
+   * Add a batch of local transcript files to the queue.
+   * Each item is processed via TranscriptManager.processLocalTranscript().
+   */
+  public addLocalTranscriptsToQueue(
+    paths: string[],
+    options: VideoProcessingOptions
+  ): void {
+    const newItems = paths.map(p => ({
+      url: p,
+      status: 'queued' as const,
+      kind: 'local' as const
+    }));
+    this.queue.push(...newItems);
+    this.options = options;
+    this.trigger('queueUpdated', this.queue);
     if (!this.isProcessing) {
       this.processNextVideo();
     }
@@ -83,91 +113,161 @@ export class VideoQueueManager extends Events { // Extend Obsidian's Events
     this.trigger('videoStatusChanged', currentVideo, this.currentIndex); // Use trigger instead of emit
     
     try {
+      if (!this.options) {
+        throw new Error("Processing options not set");
+      }
+
+      // Branch on kind: local transcript vs YouTube video
+      const isLocal = currentVideo.kind === 'local';
+
       // Check if summary already exists
       if (this.options?.skipExisting) {
-        const exists = await this.checkSummaryExists(currentVideo.url);
+        const exists = isLocal
+          ? await this.checkLocalSummaryExists(currentVideo.url)
+          : await this.checkSummaryExists(currentVideo.url);
         if (exists.exists) {
           currentVideo.status = 'completed';
           currentVideo.title = exists.title || "Existing Summary";
           currentVideo.filePath = exists.filePath;
-          this.trigger('videoStatusChanged', currentVideo, this.currentIndex); // Use trigger instead of emit
-          this.trigger('logMessage', `Video ${this.currentIndex + 1}: Skipped - Summary already exists`); // Use trigger instead of emit
-          
-          // Process next video
+          this.trigger('videoStatusChanged', currentVideo, this.currentIndex);
+          this.trigger('logMessage', `Item ${this.currentIndex + 1}: Skipped - Summary already exists`);
           setTimeout(() => this.processNextVideo(), 100);
           return;
         }
       }
-      
-      // Process video
-      if (!this.options) {
-        throw new Error("Processing options not set");
-      }
-      // Get summary prompts based on summary type
-      const summaryTypeConfig = SUMMARY_PROMPTS[this.options!.summaryType];
-
 
       // Ensure transcriptManager is initialized
       if (!this.transcriptManager) {
         throw new Error("TranscriptManager is not initialized");
       }
 
-      const result = await this.transcriptManager.createLongVideoSummary({
-        videoUrl: currentVideo.url,
-        summaryModel: this.options!.summaryModel,
-        summaryPrompt: summaryTypeConfig.summaryPrompt,
-        tagPrompt: summaryTypeConfig.tagPrompt,
-        summaryType: this.options!.summaryType,
-        summaryFolder: this.plugin.settings.summaryFolder,
-        videoLanguage: this.options!.videoLanguage,
-        outputLanguage: this.options!.outputLanguage,
-        numberOfOutputTokens: this.options!.numberOfOutputTokens,
-        topic: this.options!.topic,
-        overwriteExisting: true,
-        enableChunking: this.options!.enableChunking, // Pass the chunking option
-        provider: this.options!.provider // Pass the selected provider
-      });
+      const summaryTypeConfig = SUMMARY_PROMPTS[this.options!.summaryType];
+      let result: string;
+
+      if (isLocal) {
+        // --- Local transcript processing ---
+        const lt = this.options!.localTranscript;
+        if (!lt) {
+          throw new Error("Local transcript options not set");
+        }
+        const fileName = currentVideo.url.split('/').pop() || currentVideo.url;
+        const derivedTitle = fileName.replace(/\.txt$/i, '') || 'Untitled Transcript';
+        result = await this.transcriptManager.processLocalTranscript({
+          filePath: currentVideo.url,
+          title: derivedTitle,
+          authorOrCourse: lt.defaultAuthor || 'Unknown Author',
+          transcriptLanguage: this.options!.videoLanguage,
+          outputLanguage: this.options!.outputLanguage,
+          targetFolder: lt.targetFolder || this.plugin.settings.summaryFolder,
+          summaryModel: this.options!.summaryModel,
+          summaryPrompt: summaryTypeConfig.summaryPrompt,
+          tagPrompt: summaryTypeConfig.tagPrompt,
+          summaryType: this.options!.summaryType,
+          numberOfOutputTokens: this.options!.numberOfOutputTokens,
+          topic: this.options!.topic,
+          provider: this.options!.provider,
+          saveToDatabase: this.options!.saveToDatabase !== false, // default: true
+          enableChunking: this.options!.enableChunking === true, // default: false
+          flatFolder: lt.flatFolder === true, // default: false
+        });
+      } else {
+        // --- YouTube video processing ---
+        result = await this.transcriptManager.createLongVideoSummary({
+          videoUrl: currentVideo.url,
+          summaryModel: this.options!.summaryModel,
+          summaryPrompt: summaryTypeConfig.summaryPrompt,
+          tagPrompt: summaryTypeConfig.tagPrompt,
+          summaryType: this.options!.summaryType,
+          summaryFolder: this.plugin.settings.summaryFolder,
+          videoLanguage: this.options!.videoLanguage,
+          outputLanguage: this.options!.outputLanguage,
+          numberOfOutputTokens: this.options!.numberOfOutputTokens,
+          topic: this.options!.topic,
+          overwriteExisting: true,
+          enableChunking: this.options!.enableChunking,
+          saveToDatabase: this.options!.saveToDatabase,
+          provider: this.options!.provider,
+        });
+      }
 
       // Check if summary creation returned a valid file path
       if (!result || typeof result !== 'string' || result.trim() === '') {
         throw new Error(`Summary creation failed or returned an invalid path for ${currentVideo.url}. Result: ${result}`);
       }
-      
+
       // Update queue item
       currentVideo.filePath = result;
-      // Extract title from filePath
       const pathParts = result.split('/');
       currentVideo.title = pathParts[pathParts.length - 1].replace('.md', '');
-      
-      this.trigger('videoStatusChanged', currentVideo, this.currentIndex); // Use trigger instead of emit
 
-      // --- Start Hierarchy Determination ---
-      try {
-        await this.hierarchyManager.determineAndApplyHierarchy(currentVideo.filePath, currentVideo.url, this.options.summaryModel);
-        currentVideo.status = 'completed';
-        this.trigger('logMessage', `Video ${this.currentIndex + 1}: Hierarchy determined and file linked`, 'success');
-      } catch (hierarchyError) {
-        currentVideo.status = 'failed';
-        currentVideo.error = hierarchyError instanceof Error ? hierarchyError.message : 'Unknown hierarchy determination error';
-        this.trigger('logMessage', `Video ${this.currentIndex + 1}: Hierarchy determination failed - ${currentVideo.error}`, 'error');
+      this.trigger('videoStatusChanged', currentVideo, this.currentIndex);
+
+      // --- Hierarchy Determination (only for YouTube videos) ---
+      if (!isLocal) {
+        try {
+          await this.hierarchyManager.determineAndApplyHierarchy(currentVideo.filePath, currentVideo.url, this.options.summaryModel);
+          currentVideo.status = 'completed';
+          this.trigger('logMessage', `Video ${this.currentIndex + 1}: Hierarchy determined and file linked`, 'success');
+        } catch (hierarchyError) {
+          currentVideo.status = 'failed';
+          currentVideo.error = hierarchyError instanceof Error ? hierarchyError.message : 'Unknown hierarchy determination error';
+          this.trigger('logMessage', `Video ${this.currentIndex + 1}: Hierarchy determination failed - ${currentVideo.error}`, 'error');
+        }
+      } else {
+        // Local transcripts: apply hierarchy with file:// URL
+        try {
+          const fileUrl = `file://${currentVideo.url}`;
+          await this.hierarchyManager.determineAndApplyHierarchy(currentVideo.filePath, fileUrl, this.options.summaryModel);
+          currentVideo.status = 'completed';
+          this.trigger('logMessage', `Transcript ${this.currentIndex + 1}: Hierarchy determined and file linked`, 'success');
+        } catch (hierarchyError) {
+          currentVideo.status = 'failed';
+          currentVideo.error = hierarchyError instanceof Error ? hierarchyError.message : 'Unknown hierarchy determination error';
+          this.trigger('logMessage', `Transcript ${this.currentIndex + 1}: Hierarchy determination failed - ${currentVideo.error}`, 'error');
+        }
       }
-      // --- End Hierarchy Determination ---
-
-      // The log message for completion/failure is now handled after hierarchy determination
 
       // Process next video
       setTimeout(() => this.processNextVideo(), 500);
-      
+
     } catch (error) {
       // Handle error during transcript/summary generation
       currentVideo.status = 'failed';
       currentVideo.error = error instanceof Error ? error.message : 'Unknown error';
-      this.trigger('videoStatusChanged', currentVideo, this.currentIndex); // Use trigger instead of emit
-      this.trigger('logMessage', `Error: ${currentVideo.error}`, 'error'); // Use trigger instead of emit
-      
+      this.trigger('videoStatusChanged', currentVideo, this.currentIndex);
+      this.trigger('logMessage', `Error: ${currentVideo.error}`, 'error');
+
       // Continue with next video despite error
       setTimeout(() => this.processNextVideo(), 500);
+    }
   }
+
+  /**
+   * Check if a summary already exists for a local transcript file.
+   * Looks for a .md file with the same base name in the target folder.
+   */
+  private async checkLocalSummaryExists(transcriptPath: string): Promise<{exists: boolean, filePath?: string, title?: string}> {
+    try {
+      const lt = this.options?.localTranscript;
+      const targetFolder = lt?.targetFolder || this.plugin.settings.summaryFolder;
+      const fileName = transcriptPath.split('/').pop() || transcriptPath;
+      const baseName = fileName.replace(/\.txt$/i, '');
+      const author = lt?.defaultAuthor || 'Unknown Author';
+      const flatFolder = lt?.flatFolder === true;
+
+      // Check in the same folder structure that processLocalTranscript would use
+      const expectedPath = flatFolder
+        ? `${targetFolder}/${baseName}.md`
+        : `${targetFolder}/${author}/${baseName}.md`;
+      const exists = await this.plugin.app.vault.adapter.exists(expectedPath);
+      if (exists) {
+        return { exists: true, filePath: expectedPath, title: baseName };
+      }
+      return { exists: false };
+    } catch (error) {
+      console.error("Error checking for existing local summary:", error);
+      return { exists: false };
+    }
   }
 
 
@@ -408,6 +508,7 @@ export class VideoQueueManager extends Events { // Extend Obsidian's Events
         topic: this.options!.topic,
         overwriteExisting: true,
         enableChunking: this.options!.enableChunking, // Pass the chunking option
+        saveToDatabase: this.options!.saveToDatabase, // Pass the database storage option
         provider: this.options!.provider // Pass the selected provider
       });
       

@@ -125,7 +125,7 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
   },
   {
     id: 'init-tags',
-    name: 'Init=tags',
+    name: 'Init Tags',
     group: 'Tags',
     description: 'Initializes the managed tag set and shows the known tags.',
   },
@@ -171,6 +171,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     group: 'Generation',
     description: 'Asks an LLM a quick question using the current note as context.',
     hotkeys: ['Mod+Shift+Q'],
+  },
+  {
+    id: 'search-knowledge-base',
+    name: 'Search Knowledge Base',
+    group: 'Retrieval',
+    description: 'Searches the local indexed vault for relevant note chunks and shows ranked, linkable results. No LLM required.',
   },
   {
     id: 'generate-quiz',

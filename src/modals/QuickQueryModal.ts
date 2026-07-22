@@ -1,29 +1,68 @@
-import { App, Modal, TFile, MarkdownView, Editor, ButtonComponent, Notice, TextAreaComponent } from 'obsidian';
+import { App, Modal, TFile, MarkdownView, Editor, ButtonComponent, Notice, TextAreaComponent, Setting, DropdownComponent } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../main';
 import { VaultFileSelectorModal } from './VaultFileSelectorModal';
 import { ErrorHandler } from '../utils/ErrorHandler';
 import { FileContext, TextGenerationOptions } from '../types/openrouter';
 import { PdfHelper } from '../utils/PdfHelper';
+import { EvidenceItem, EvidencePack, SearchHit, SearchRequest } from '../types/retrieval';
+import {
+  GROUNDED_ANSWER_INSTRUCTION,
+  formatEvidenceFileContextName,
+  formatEvidenceForModel,
+} from '../retrieval/EvidencePackBuilder';
+
+type QuickQueryScope = 'current-note' | 'linked-notes' | 'indexed-knowledge-base' | 'selected-folders';
+
+export interface QuickQueryModalOptions {
+  /**
+   * Initial scope. Defaults to 'current-note' to preserve the legacy flow.
+   */
+  mode?: QuickQueryScope;
+  /**
+   * Pre-seeded query (used when hand-off from SearchKnowledgeModal).
+   */
+  preselectedQuery?: string;
+  /**
+   * Pre-seeded, already-retrieved hits to use as evidence without re-running search.
+   * Only used when mode === 'indexed-knowledge-base'.
+   */
+  preselectedHits?: SearchHit[];
+}
 
 /**
  * QuickQueryModal - Contextual Learning Assistant
- * 
+ *
  * Allows users to query an LLM directly from within an active note using a modal.
  * Automatically aggregates context from the active note and all files linked within it
  * ("mentioned files") to answer questions without leaving the editor.
+ *
+ * Scopes:
+ *  - current-note: legacy behaviour (active note + manually selected files)
+ *  - linked-notes: legacy behaviour (mentioned files)
+ *  - indexed-knowledge-base: retrieval-augmented; builds an EvidencePack and grounds the answer
+ *  - selected-folders: retrieval over a folder prefix (falls back to indexed-knowledge-base logic)
  */
 export class QuickQueryModal extends Modal {
     // Dependencies
     private plugin: GptFreeTextGeneratorPlugin;
-    
+    private readonly options: QuickQueryModalOptions;
+
     // State
     private activeFile: TFile | null;
     private contextFiles: Set<TFile> = new Set();
     private prompt: string = "";
     private isProcessing: boolean = false;
     private includeCurrentNote: boolean = true;
+    private includeManualFilesWithRetrieval: boolean = false;
+    private queryScope: QuickQueryScope;
+    private folderPrefix: string = '';
     private generatedResponse: string = "";
-    
+
+    // Retrieval state
+    private retrievedHits: SearchHit[] = [];
+    private selectedHitIds = new Set<string>();
+    private lastEvidencePack: EvidencePack | null = null;
+
     // UI References
     private fileListContainer!: HTMLElement;
     private outputArea!: HTMLElement;
@@ -32,19 +71,33 @@ export class QuickQueryModal extends Modal {
     private insertButton!: ButtonComponent;
     private appendButton!: ButtonComponent;
     private toggleContainer!: HTMLElement;
+    private scopeDropdown!: DropdownComponent;
+    private sourcesContainer!: HTMLElement;
+    private previewSourcesButton!: ButtonComponent;
+    private retrievalControlsContainer!: HTMLElement;
 
-    constructor(app: App, plugin: GptFreeTextGeneratorPlugin) {
+    constructor(app: App, plugin: GptFreeTextGeneratorPlugin, options?: QuickQueryModalOptions) {
         super(app);
         this.plugin = plugin;
+        this.options = options ?? {};
+        this.queryScope = this.options.mode ?? 'current-note';
         this.activeFile = app.workspace.getActiveFile();
-        
+
+        if (this.options.preselectedQuery) {
+            this.prompt = this.options.preselectedQuery;
+        }
+        if (this.options.preselectedHits?.length) {
+            this.retrievedHits = this.options.preselectedHits;
+            this.selectedHitIds = new Set(this.retrievedHits.map((hit) => hit.id));
+        }
+
         // Validate active file
         if (!this.activeFile) {
             new Notice('No active file. Please open a note first.');
             this.close();
             return;
         }
-        
+
         this.modalEl.addClass('quick-query-modal');
     }
 
@@ -94,6 +147,64 @@ export class QuickQueryModal extends Modal {
         const contextHeader = container.createEl('div', { cls: 'section-header' });
         contextHeader.setText('Context Files');
 
+        // Scope dropdown: controls whether retrieval is used.
+        const scopeSetting = new Setting(container)
+            .setName('Scope')
+            .setDesc('Choose where to look for evidence. "Indexed knowledge base" uses retrieval + grounding.');
+        this.scopeDropdown = new DropdownComponent(scopeSetting.controlEl);
+        this.scopeDropdown.addOptions({
+            'current-note': 'Current note + selected files',
+            'linked-notes': 'Linked notes',
+            'indexed-knowledge-base': 'Indexed knowledge base',
+            'selected-folders': 'Selected folders (indexed)',
+        });
+        this.scopeDropdown.setValue(this.queryScope);
+        this.scopeDropdown.onChange((value) => {
+            this.queryScope = value as QuickQueryScope;
+            this.refreshRetrievalControlsVisibility();
+        });
+
+        // Folder prefix (only relevant for 'selected-folders').
+        this.retrievalControlsContainer = container.createEl('div', { cls: 'retrieval-controls' });
+        new Setting(this.retrievalControlsContainer)
+            .setName('Folder prefix')
+            .setDesc('Restrict retrieval to paths starting with this prefix.')
+            .addText((text) =>
+                text
+                    .setPlaceholder('e.g. Networking/')
+                    .onChange((value) => {
+                        this.folderPrefix = value.trim();
+                    })
+            );
+
+        // Preview sources button.
+        this.previewSourcesButton = new ButtonComponent(this.retrievalControlsContainer);
+        this.previewSourcesButton
+            .setButtonText('Preview sources')
+            .setTooltip('Run retrieval now and show candidate chunks before generating.')
+            .onClick(() => {
+                void this.runRetrievalPreview();
+            });
+
+        // Sources list (populated after a preview or hand-off).
+        this.sourcesContainer = this.retrievalControlsContainer.createEl('div', { cls: 'quick-query-sources empty' });
+        this.sourcesContainer.createEl('div', {
+            cls: 'context-empty-message',
+            text: 'Click "Preview sources" to retrieve candidates.',
+        });
+
+        // Toggle: include manually selected files in addition to retrieved evidence.
+        const includeManual = this.retrievalControlsContainer.createEl('div', { cls: 'toggle-container' });
+        includeManual.createSpan({ text: 'Include manually selected files too: ' });
+        const manualToggle = includeManual.createEl('input', { type: 'checkbox' });
+        manualToggle.checked = this.includeManualFilesWithRetrieval;
+        manualToggle.addEventListener('change', (e) => {
+            this.includeManualFilesWithRetrieval = (e.target as HTMLInputElement).checked;
+        });
+
+        this.refreshRetrievalControlsVisibility();
+        this.renderSources();
+
         // Context chips container
         this.fileListContainer = container.createEl('div', { cls: 'context-chips-container' });
         this.refreshFileList();
@@ -125,6 +236,98 @@ export class QuickQueryModal extends Modal {
         toggle.addEventListener('change', (e) => {
             this.includeCurrentNote = (e.target as HTMLInputElement).checked;
         });
+    }
+
+    private refreshRetrievalControlsVisibility(): void {
+        const isRetrieval = this.queryScope === 'indexed-knowledge-base' || this.queryScope === 'selected-folders';
+        this.retrievalControlsContainer.style.display = isRetrieval ? '' : 'none';
+    }
+
+    private renderSources(): void {
+        this.sourcesContainer.empty();
+        if (this.retrievedHits.length === 0) {
+            this.sourcesContainer.addClass('empty');
+            this.sourcesContainer.createEl('div', {
+                cls: 'context-empty-message',
+                text: 'Click "Preview sources" to retrieve candidates.',
+            });
+            return;
+        }
+        this.sourcesContainer.removeClass('empty');
+
+        for (const hit of this.retrievedHits) {
+            const card = this.sourcesContainer.createEl('div', { cls: 'quick-query-source-card' });
+
+            const checkbox = card.createEl('input', { type: 'checkbox' });
+            checkbox.checked = this.selectedHitIds.has(hit.id);
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    this.selectedHitIds.add(hit.id);
+                } else {
+                    this.selectedHitIds.delete(hit.id);
+                }
+            });
+
+            const titleArea = card.createEl('div', { cls: 'quick-query-source-title' });
+            titleArea.createEl('span', { cls: 'quick-query-source-basename', text: hit.basename });
+            const heading = hit.headingPath.length > 0 ? hit.headingPath.join(' > ') : '(preamble)';
+            titleArea.createEl('span', { cls: 'quick-query-source-heading', text: heading });
+
+            const meta = card.createEl('div', { cls: 'quick-query-source-meta' });
+            meta.createEl('span', { text: hit.path });
+            meta.createEl('span', { text: `Lines ${hit.startLine}-${hit.endLine}` });
+            meta.createEl('span', { text: `score ${hit.finalScore.toFixed(3)}` });
+            if (hit.matchReasons.length > 0) {
+                meta.createEl('span', { cls: 'quick-query-source-reasons', text: hit.matchReasons.join(', ') });
+            }
+
+            const openBtn = card.createEl('button', { cls: 'quick-query-source-open' });
+            openBtn.setText('Open');
+            openBtn.addEventListener('click', () => {
+                void this.openSourceHit(hit);
+            });
+        }
+    }
+
+    private async openSourceHit(hit: SearchHit): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(hit.path);
+        if (!(file instanceof TFile)) {
+            new Notice(`Could not find file: ${hit.path}.`);
+            return;
+        }
+        await this.app.workspace.openLinkText(hit.path, '', false);
+    }
+
+    private async runRetrievalPreview(): Promise<void> {
+        const service = this.plugin.services.retrievalService;
+        if (!service) {
+            new Notice('Retrieval is not initialized. Enable it in Settings → Knowledge Retrieval.');
+            return;
+        }
+        const query = this.prompt.trim();
+        if (!query) {
+            new Notice('Enter a question first.');
+            return;
+        }
+        const request: SearchRequest = {
+            query,
+            folderPrefix: this.queryScope === 'selected-folders' ? this.folderPrefix || undefined : undefined,
+            includeCurrentNotePath: this.activeFile?.path,
+            limit: this.plugin.settings.retrieval.defaultResultLimit,
+        };
+        try {
+            this.previewSourcesButton.setButtonText('Searching...').setDisabled(true);
+            this.retrievedHits = await service.search(request);
+            this.selectedHitIds = new Set(this.retrievedHits.map((hit) => hit.id));
+            this.renderSources();
+            if (this.retrievedHits.length === 0) {
+                new Notice('No results found in the indexed sources.');
+            }
+        } catch (error) {
+            ErrorHandler.handleError(error, 'FILE_OPERATION', { operation: 'retrievalPreview' });
+        } finally {
+            this.previewSourcesButton.setButtonText('Preview sources').setDisabled(false);
+        }
     }
 
     /**
@@ -326,6 +529,8 @@ export class QuickQueryModal extends Modal {
             return;
         }
 
+        const isRetrievalScope = this.queryScope === 'indexed-knowledge-base' || this.queryScope === 'selected-folders';
+
         this.isProcessing = true;
         this.generateButton.setButtonText('Generating...');
         this.generateButton.setDisabled(true);
@@ -334,57 +539,106 @@ export class QuickQueryModal extends Modal {
         this.outputArea.setText('Generating response...');
         this.insertButton.buttonEl.style.display = 'none';
         this.appendButton.buttonEl.style.display = 'none';
+        this.lastEvidencePack = null;
 
         try {
-            // Build file contexts
             const fileContexts: FileContext[] = [];
+            let systemInstruction = 'Analyze the provided context files to answer the user request. Highlight connections between the documents.';
+            let temperature = 0.7;
+            let evidencePack: EvidencePack | null = null;
 
-            // Add active note content if toggled
-            if (this.includeCurrentNote && this.activeFile) {
-                try {
-                    const activeNoteContent = await this.app.vault.read(this.activeFile);
+            if (isRetrievalScope) {
+                const retrievalService = this.plugin.services.retrievalService;
+                if (!retrievalService) {
+                    new Notice('Retrieval is not initialized. Enable it in Settings → Knowledge Retrieval.');
+                    return;
+                }
+
+                // If the user pre-selected hits (hand-off or preview), reuse them; otherwise run search now.
+                let hits = this.retrievedHits;
+                if (hits.length === 0) {
+                    const request: SearchRequest = {
+                        query: this.prompt.trim(),
+                        folderPrefix: this.queryScope === 'selected-folders' ? this.folderPrefix || undefined : undefined,
+                        includeCurrentNotePath: this.activeFile?.path,
+                        limit: this.plugin.settings.retrieval.defaultResultLimit,
+                    };
+                    hits = await retrievalService.search(request);
+                    this.retrievedHits = hits;
+                    this.selectedHitIds = new Set(hits.map((hit) => hit.id));
+                    this.renderSources();
+                }
+
+                // Filter to user-selected hits only.
+                const selectedHits = hits.filter((hit) => this.selectedHitIds.has(hit.id));
+                if (selectedHits.length === 0) {
+                    new Notice('No sources selected. Click "Preview sources" and select at least one chunk.');
+                    return;
+                }
+
+                evidencePack = this.buildEvidencePackFromHits(selectedHits);
+                this.lastEvidencePack = evidencePack;
+
+                for (const item of evidencePack.items) {
                     fileContexts.push({
-                        path: this.activeFile.path,
-                        name: this.activeFile.basename,
-                        content: activeNoteContent
-                    });
-                } catch (error) {
-                    ErrorHandler.handleError(error, 'FILE_OPERATION', {
-                        operation: 'readActiveNote',
-                        filePath: this.activeFile.path
+                        path: item.path,
+                        name: formatEvidenceFileContextName(item),
+                        content: formatEvidenceForModel(item),
                     });
                 }
-            }
 
-            // Add context files content
-            for (const file of this.contextFiles) {
-                try {
-                    let content: string;
-                    
-                    if (file.extension === 'pdf') {
-                        // Use PdfHelper for PDF files
-                        const pdfHelper = new PdfHelper(this.app);
-                        content = await pdfHelper.extractText(file);
-                    } else {
-                        // Read markdown files directly
-                        content = await this.app.vault.read(file);
+                systemInstruction = GROUNDED_ANSWER_INSTRUCTION;
+                temperature = 0.3;
+
+                // Optionally include manually selected files alongside the evidence pack.
+                if (this.includeManualFilesWithRetrieval) {
+                    await this.appendManualFileContexts(fileContexts);
+                }
+
+                // Optionally include the active note too (clearly marked as non-evidence).
+                if (this.includeCurrentNote && this.activeFile) {
+                    try {
+                        const activeNoteContent = await this.app.vault.read(this.activeFile);
+                        fileContexts.push({
+                            path: this.activeFile.path,
+                            name: `[Active note] ${this.activeFile.basename}`,
+                            content: activeNoteContent,
+                        });
+                    } catch (error) {
+                        ErrorHandler.handleError(error, 'FILE_OPERATION', {
+                            operation: 'readActiveNote',
+                            filePath: this.activeFile.path
+                        });
                     }
-                    
-                    fileContexts.push({
-                        path: file.path,
-                        name: file.basename,
-                        content: content
-                    });
-                } catch (error) {
-                    ErrorHandler.handleError(error, 'FILE_OPERATION', {
-                        operation: 'readContextFile',
-                        filePath: file.path
-                    });
+                }
+            } else {
+                // Legacy manual-context path: active note + manually selected files.
+                if (this.includeCurrentNote && this.activeFile) {
+                    try {
+                        const activeNoteContent = await this.app.vault.read(this.activeFile);
+                        fileContexts.push({
+                            path: this.activeFile.path,
+                            name: this.activeFile.basename,
+                            content: activeNoteContent
+                        });
+                    } catch (error) {
+                        ErrorHandler.handleError(error, 'FILE_OPERATION', {
+                            operation: 'readActiveNote',
+                            filePath: this.activeFile.path
+                        });
+                    }
+                }
+
+                await this.appendManualFileContexts(fileContexts);
+
+                if (this.queryScope === 'linked-notes') {
+                    // Make sure mentioned files are present in the context set before reading.
+                    this.addMentionedFiles();
+                    await this.appendManualFileContexts(fileContexts, /* skipAlreadyAdded */ true);
                 }
             }
 
             // Build the message with prompt engineering
-            const systemInstruction = 'Analyze the provided context files to answer the user request. Highlight connections between the documents.';
             const message = `${systemInstruction}\n\n${this.prompt}`;
 
             // Prepare generation options
@@ -392,7 +646,7 @@ export class QuickQueryModal extends Modal {
                 model: this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel,
                 message: message,
                 files: fileContexts.length > 0 ? fileContexts : undefined,
-                temperature: 0.7,
+                temperature,
                 maxTokens: 2000,
                 language: this.plugin.settings.defaultLanguage
             };
@@ -400,8 +654,17 @@ export class QuickQueryModal extends Modal {
             // Call LLM service
             const response = await client.generateText(options);
 
+            // Append a Sources section parsed only from the known evidence-pack IDs.
+            let display = response.output;
+            if (evidencePack && evidencePack.items.length > 0) {
+                const sourcesSection = this.renderSourcesSection(evidencePack);
+                if (sourcesSection) {
+                    display = `${response.output}\n\n${sourcesSection}`;
+                }
+            }
+
             // Store and display response
-            this.generatedResponse = response.output;
+            this.generatedResponse = display;
             this.outputArea.empty();
             this.outputArea.removeClass('empty');
             this.outputArea.setText(this.generatedResponse);
@@ -416,7 +679,8 @@ export class QuickQueryModal extends Modal {
             ErrorHandler.handleError(error, 'API_GENERATE_ERROR', {
                 operation: 'generateText',
                 contextFilesCount: this.contextFiles.size,
-                includeCurrentNote: this.includeCurrentNote
+                includeCurrentNote: this.includeCurrentNote,
+                scope: this.queryScope,
             });
             
             this.outputArea.empty();
@@ -429,6 +693,91 @@ export class QuickQueryModal extends Modal {
             this.generateButton.setButtonText('Generate');
             this.generateButton.setDisabled(false);
         }
+    }
+
+    /**
+     * Build an EvidencePack from a pre-filtered list of selected hits.
+     * Stable citation IDs (S1, S2, ...) are assigned in rank order.
+     */
+    private buildEvidencePackFromHits(hits: SearchHit[]): EvidencePack {
+        const items: EvidenceItem[] = hits.map((hit, index) => ({
+            ...hit,
+            citationId: `S${index + 1}`,
+            estimatedTokens: Math.ceil(hit.text.length / 4),
+        }));
+        const totalEstimatedTokens = items.reduce((sum, item) => sum + item.estimatedTokens, 0);
+        return {
+            query: this.prompt.trim(),
+            items,
+            totalEstimatedTokens,
+            omittedHitCount: 0,
+        };
+    }
+
+    /**
+     * Read each manually selected file and append it to the file contexts list.
+     * @param skipAlreadyAdded when true, only add files not already represented
+     *   in fileContexts (used by the 'linked-notes' scope to avoid duplicates).
+     */
+    private async appendManualFileContexts(
+        fileContexts: FileContext[],
+        skipAlreadyAdded = false
+    ): Promise<void> {
+        const existingPaths = new Set(fileContexts.map((ctx) => ctx.path));
+        for (const file of this.contextFiles) {
+            if (skipAlreadyAdded && existingPaths.has(file.path)) {
+                continue;
+            }
+            try {
+                let content: string;
+                if (file.extension === 'pdf') {
+                    const pdfHelper = new PdfHelper(this.app);
+                    content = await pdfHelper.extractText(file);
+                } else {
+                    content = await this.app.vault.read(file);
+                }
+                fileContexts.push({
+                    path: file.path,
+                    name: file.basename,
+                    content,
+                });
+            } catch (error) {
+                ErrorHandler.handleError(error, 'FILE_OPERATION', {
+                    operation: 'readContextFile',
+                    filePath: file.path
+                });
+            }
+        }
+    }
+
+    /**
+     * Render a "Sources" section using only the known evidence-pack citation IDs.
+     * Never parses free-form model text for paths.
+     */
+    private renderSourcesSection(pack: EvidencePack): string {
+        if (pack.items.length === 0) {
+            return '';
+        }
+        const lines = ['**Sources:**'];
+        for (const item of pack.items) {
+            const heading = item.headingPath.length > 0 ? item.headingPath.join(' > ') : '(preamble)';
+            const link = this.buildSourceLink(item.path, heading);
+            lines.push(`- [${item.citationId}] ${link} (lines ${item.startLine}-${item.endLine})`);
+        }
+        return lines.join('\n');
+    }
+
+    /**
+     * Build an Obsidian link that opens the source note. We prefer the wiki-link
+     * form `[[path#Heading]]` because Obsidian resolves it inside the editor.
+     */
+    private buildSourceLink(path: string, heading: string): string {
+        if (!heading || heading === '(preamble)') {
+            return `[[${path}]]`;
+        }
+        // Escape pipes inside the heading to avoid breaking the wiki-link alias syntax.
+        const safeHeading = heading.replace(/\|/g, '\\|');
+        return `[[${path}#${safeHeading}]]`;
     }
 
     /**

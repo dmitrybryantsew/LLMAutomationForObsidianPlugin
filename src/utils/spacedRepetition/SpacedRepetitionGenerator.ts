@@ -15,6 +15,7 @@ export interface GenerateQuestionsForNoteOptions {
   outputLanguage?: string;
   temperature?: number;
   maxTokens?: number;
+  extraContext?: string; // Additional content from other notes (e.g. author's other works)
 }
 
 export interface GeneratedQuestionSource {
@@ -150,6 +151,9 @@ export class SpacedRepetitionGenerator {
     const additionalInstructions = options.additionalInstructions?.trim()
       ? `\nAdditional user instructions:\n${options.additionalInstructions.trim()}\n`
       : '';
+    const extraContextSection = options.extraContext?.trim()
+      ? `\nAdditional context from related notes:\n${options.extraContext.trim()}\n`
+      : '';
 
     return `Generate spaced repetition review questions from this Obsidian note.
 
@@ -187,7 +191,7 @@ Rules:
 - For multiple_choice, choices must be exactly four strings and answerText must be the correct choice text.
 - Prefer questions that test durable understanding, definitions, distinctions, steps, and edge cases.
 - sourceQuote must be short and copied from the note when possible.
-${additionalInstructions}
+${additionalInstructions}${extraContextSection}
 Source note path: ${options.file.path}
 Source note title: ${options.file.basename}
 

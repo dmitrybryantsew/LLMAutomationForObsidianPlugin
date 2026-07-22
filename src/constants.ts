@@ -102,6 +102,26 @@ const DEFAULT_SETTINGS = {
   spacedRepetitionGenerationModel: '',
   noteChatProvider: 'openrouter',
   noteChatModel: '',
+  retrieval: {
+    enabled: false,
+    databasePath: '.obsidian/plugins/gpt4free-text-generator-plugin/retrieval-index.sqlite',
+    sources: [{
+      id: 'vault',
+      name: 'Vault',
+      kind: 'vault',
+      rootPath: '',
+      enabled: true,
+      trust: 'personal',
+      includeGlobs: ['**/*.md'],
+      excludeGlobs: ['.obsidian/**', 'Templates/**'],
+      maxFileBytes: 1_500_000,
+    }],
+    evidenceTokenBudget: 12000,
+    defaultResultLimit: 10,
+    autoIndexOnStartup: false,
+    autoIndexOnModify: true,
+    allowGeneralKnowledgeWhenUngrounded: false,
+  },
   studySourceGroups: [
     {
       id: "csharp-reference",

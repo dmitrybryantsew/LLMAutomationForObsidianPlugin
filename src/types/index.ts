@@ -5,6 +5,7 @@ export * from '../utils/TranscriptManager';
 import { SummaryType } from '../utils/summaryPrompts'; // Import SummaryType
 import { TextProviderId } from './providers';
 import { SpacedRepetitionSettings } from './spacedRepetition';
+import { RetrievalSettings } from './retrieval';
 import { StudySourceGroup } from './studySources';
 
 /**
@@ -153,6 +154,9 @@ export interface PluginSettings {
     // Note chat provider
     noteChatProvider: TextProviderId;
     noteChatModel: string;
+
+    // Knowledge retrieval settings
+    retrieval: RetrievalSettings;
   }
   
   /**

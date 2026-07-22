@@ -1,20 +1,47 @@
 function sanitizeFilename(input: string, separator: string = ' '): string {
   return input
-    .replace(/[<>:"/\\|?*\[\]]/g, '') // Removes invalid filename characters including square brackets
+    .replace(/[<>:"/\\|?*\[\]#]/g, '') // Removes invalid filename characters including # (breaks Obsidian wikilinks)
     .replace(/\s+/g, separator) 
     .slice(0, 100);
 }
-    // Add helper method for metadata sanitization
+
+/**
+ * Serializes a JS value into a valid YAML scalar for Obsidian frontmatter.
+ * - Arrays become YAML flow sequence [a, b, c] (Obsidian's preferred format for tags)
+ * - Strings with special chars are single-quoted (internal ' doubled to '')
+ * - Numbers/booleans left as-is; null/undefined becomes empty
+ */
+function yamlValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) {
+    const items = value.map((v: unknown) => yamlValue(v));
+    return `[${items.join(', ')}]`;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  const str = String(value);
+  const hasSpecial = str === '' || str === 'true' || str === 'false' || str === 'null'
+    || /["\u003a\[\]{}#&*!|>'%@`,]/.test(str)
+    || /[\x0a\x0d\x09]/.test(str)
+    || /^\d/.test(str);
+  if (!hasSpecial) {
+    return str;
+  }
+  // Single-quoted YAML scalar — internal ' doubled to ''
+  const escaped = str.replace(/'/g, "''");
+  return `'${escaped}'`;
+}
+
+// Deprecated: sanitizeForMetadata is kept for backward compatibility but
+// is now a no-op.  Use yamlValue() for proper YAML frontmatter serialization.
+// The old implementation backslash-escaped " and : which produced invalid YAML.
 function sanitizeForMetadata(text: string): string {
-        // Replace problematic characters for YAML
-        return text
-          .replace(/"/g, '\\"')  // Escape quotes
-          .replace(/:/g, '\\:')  // Escape colons
-          .replace(/\n/g, ' ')   // Remove newlines
-          .replace(/\r/g, ' ')   // Remove carriage returns
-          .replace(/\t/g, ' ')   // Remove tabs
-          .trim();
-      }
+  return text;
+}
       function chunkTranscriptBySentences(transcript: string, minWords: number = 5500, maxWords: number = 7000): string[] {
         // Split by sentence-ending punctuation followed by space or newline
         const sentences = transcript.match(/[^.!?]+[.!?]+(\s|$)/g) || [];
@@ -91,4 +118,5 @@ function sanitizeForMetadata(text: string): string {
 export {chunkTranscript};
 export { sanitizeFilename };
 export { sanitizeForMetadata };
+export { yamlValue };
 export { chunkTranscriptBySentences };

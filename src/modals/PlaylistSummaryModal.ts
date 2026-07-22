@@ -20,6 +20,7 @@ export class PlaylistSummaryModal extends Modal {
   private skipExisting: boolean = true;
   private provider: TextProviderId; // New: Use multi-provider system
   private enableChunking: boolean = true; // New: Enable chunking toggle
+  private saveToDatabase: boolean = false; // Save transcript to database toggle
   private modelDropdown: DropdownComponent | null = null; // Reference to model dropdown component
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin) {
@@ -254,6 +255,16 @@ export class PlaylistSummaryModal extends Modal {
         .onChange(value => {
           this.enableChunking = value;
         }));
+
+    // Save to Database toggle
+    new Setting(contentEl)
+      .setName("Save Transcript to Database")
+      .setDesc("Store transcript in database instead of note file (transcript will be accessible via modal)")
+      .addToggle(toggle => toggle
+        .setValue(this.saveToDatabase)
+        .onChange(value => {
+          this.saveToDatabase = value;
+        }));
   }
 
   private createTopicInput(container: HTMLElement) {
@@ -344,7 +355,8 @@ export class PlaylistSummaryModal extends Modal {
       topic: this.topic,
       skipExisting: this.skipExisting,
       provider: this.provider, // Pass the selected provider (NEW)
-      enableChunking: this.enableChunking // Pass the chunking option
+      enableChunking: this.enableChunking, // Pass the chunking option
+      saveToDatabase: this.saveToDatabase // Pass the database storage option
     });
     
     this.plugin.activateVideoProcessingView();
@@ -353,43 +365,28 @@ export class PlaylistSummaryModal extends Modal {
 
     private async extractPlaylistUrls(playlistUrl: string): Promise<string[]> {
       try {
-        // Extract playlist ID from URL
-        const playlistIdMatch = playlistUrl.match(/[?&]list=([^&]+)/);
-        if (!playlistIdMatch) {
-          throw new Error("Invalid playlist URL. Could not extract playlist ID.");
-        }
-        const playlistId = playlistIdMatch[1];
-
-        // Use YouTube's no-JS embed page to get video IDs
-        const embedUrl = `https://www.youtube.com/embed/videoseries?list=${playlistId}`;
-        const response = await fetch(embedUrl);
+        // Use the helper server's /extract-playlist endpoint (yt-dlp based).
+        // Direct YouTube scraping from Obsidian's Electron sandbox fails due to CORS.
+        const helperServerUrl = (this.plugin.settings.helperServerUrl || 'http://127.0.0.1:8001').replace(/\/+$/, '');
+        const response = await fetch(`${helperServerUrl}/extract-playlist`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playlist_url: playlistUrl }),
+        });
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`Server returned HTTP ${response.status}`);
         }
 
-        const html = await response.text();
+        const data = await response.json();
+        const videoUrls: string[] = data.video_urls || [];
 
-        // Extract video IDs using regex
-        const videoIdRegex = /"videoId":"([^"]+)"/g;
-        const videoIds: string[] = [];
-        let match;
-
-        while ((match = videoIdRegex.exec(html)) !== null) {
-          const videoId = match[1];
-          if (!videoIds.includes(videoId)) {
-            videoIds.push(videoId);
-          }
-        }
-
-        if (videoIds.length === 0) {
+        if (videoUrls.length === 0) {
           throw new Error("No videos found in playlist. The playlist might be private or empty.");
         }
 
-        // Convert video IDs to full URLs
-        const videoUrls = videoIds.map(videoId => `https://www.youtube.com/watch?v=${videoId}`);
         return videoUrls;
-      } catch (error: unknown) { // Explicitly type error as unknown
+      } catch (error: unknown) {
         throw new Error(`Failed to extract playlist: ${error instanceof Error ? error.message : 'An unknown error occurred.'}`);
       }
   }

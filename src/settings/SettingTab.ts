@@ -3,7 +3,8 @@ import {
     Setting,
     PluginSettingTab,
     Notice,
-    TFile
+    TFile,
+    ButtonComponent
   } from "obsidian";
 
   import type GptFreeTextGeneratorPlugin from '../main';
@@ -13,6 +14,7 @@ import {
   import { TestProviderConnectionModal } from '../modals/TestProviderConnectionModal';
   import { LLMClientFactory } from '../utils/LLMClientFactory';
   import { LLMProvider, TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
+  import { SearchKnowledgeModal } from '../modals/SearchKnowledgeModal';
 
   class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
@@ -38,6 +40,7 @@ import {
     this.addLanguageSettings(containerEl);
     this.addContentStorageSettings(containerEl);
     this.addSpacedRepetitionSettings(containerEl);
+    this.addRetrievalSettings(containerEl);
     this.addDebugSettings(containerEl);
     this.addTestSettings(containerEl);
   }
@@ -601,7 +604,296 @@ import {
             await this.plugin.saveSettings();
             this.display();
           }));
+      }
+  }
+
+  addRetrievalSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'Knowledge Retrieval' });
+
+    const retrieval = this.plugin.settings.retrieval;
+
+    new Setting(containerEl)
+      .setName('Enable Knowledge Retrieval')
+      .setDesc('Build a local Markdown index and use retrieved chunks as grounded evidence for Quick Query. Search works offline; an LLM is only used to formulate the final answer.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(retrieval.enabled)
+          .onChange(async (value) => {
+            retrieval.enabled = value;
+            await this.plugin.saveSettings();
+            if (value) {
+              await this.plugin.services.ensureRetrievalServices();
+              const coordinator = this.plugin.services.indexCoordinator;
+              if (coordinator) {
+                coordinator.registerVaultListeners(this.plugin);
+              }
+              this.display();
+            } else {
+              this.display();
+            }
+          })
+      );
+
+    if (!retrieval.enabled) {
+      containerEl.createEl('p', {
+        cls: 'setting-item-description',
+        text: 'Enable retrieval to configure indexed folders, exclusions, and index status.',
+      });
+      return;
     }
+
+    // Vault source root path (Phase 1: single vault source).
+    new Setting(containerEl)
+      .setName('Vault source root path')
+      .setDesc('Vault-relative folder to index. Leave empty to index the entire vault. Use forward slashes.')
+      .addText((text) =>
+        text
+          .setPlaceholder('e.g. Notes/Networking')
+          .setValue(retrieval.sources[0]?.rootPath ?? '')
+          .onChange(async (value) => {
+            if (retrieval.sources[0]) {
+              retrieval.sources[0].rootPath = value.trim();
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Include globs (single vault source).
+    new Setting(containerEl)
+      .setName('Include patterns')
+      .setDesc('Comma-separated globs of files to index. Default: **/*.md')
+      .addText((text) =>
+        text
+          .setValue((retrieval.sources[0]?.includeGlobs ?? []).join(', '))
+          .onChange(async (value) => {
+            if (retrieval.sources[0]) {
+              retrieval.sources[0].includeGlobs = value
+                .split(',')
+                .map((g) => g.trim())
+                .filter(Boolean);
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Exclude globs.
+    new Setting(containerEl)
+      .setName('Exclude patterns')
+      .setDesc('Comma-separated globs to exclude. Default: .obsidian/**, Templates/**')
+      .addText((text) =>
+        text
+          .setValue((retrieval.sources[0]?.excludeGlobs ?? []).join(', '))
+          .onChange(async (value) => {
+            if (retrieval.sources[0]) {
+              retrieval.sources[0].excludeGlobs = value
+                .split(',')
+                .map((g) => g.trim())
+                .filter(Boolean);
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Max file bytes.
+    new Setting(containerEl)
+      .setName('Max file size (bytes)')
+      .setDesc('Skip files larger than this. Default: 1500000 (~1.5 MB).')
+      .addText((text) =>
+        text
+          .setValue(String(retrieval.sources[0]?.maxFileBytes ?? 1_500_000))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (!Number.isNaN(parsed) && parsed > 0 && retrieval.sources[0]) {
+              retrieval.sources[0].maxFileBytes = parsed;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Evidence token budget.
+    new Setting(containerEl)
+      .setName('Evidence token budget')
+      .setDesc('Maximum tokens of retrieved evidence to send to the model. Default: 12000.')
+      .addText((text) =>
+        text
+          .setValue(String(retrieval.evidenceTokenBudget))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (!Number.isNaN(parsed) && parsed > 0) {
+              retrieval.evidenceTokenBudget = parsed;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Default result limit.
+    new Setting(containerEl)
+      .setName('Default result limit')
+      .setDesc('Maximum number of chunks to return from a search. Default: 10.')
+      .addText((text) =>
+        text
+          .setValue(String(retrieval.defaultResultLimit))
+          .onChange(async (value) => {
+            const parsed = parseInt(value, 10);
+            if (!Number.isNaN(parsed) && parsed > 0) {
+              retrieval.defaultResultLimit = parsed;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    // Auto-index on startup.
+    new Setting(containerEl)
+      .setName('Auto-index on startup')
+      .setDesc('Run a full index pass after the workspace loads. Never blocks plugin startup.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(retrieval.autoIndexOnStartup)
+          .onChange(async (value) => {
+            retrieval.autoIndexOnStartup = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Auto-index on modify.
+    new Setting(containerEl)
+      .setName('Auto-index on modify')
+      .setDesc('Debounce-update the index when a Markdown file changes. Recommended.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(retrieval.autoIndexOnModify)
+          .onChange(async (value) => {
+            retrieval.autoIndexOnModify = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Grounding policy.
+    new Setting(containerEl)
+      .setName('Allow general knowledge when ungrounded')
+      .setDesc('When off (recommended), the model must say it could not find the answer in indexed sources rather than guessing. When on, the model may fall back to its own knowledge.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(retrieval.allowGeneralKnowledgeWhenUngrounded)
+          .onChange(async (value) => {
+            retrieval.allowGeneralKnowledgeWhenUngrounded = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // SQLite database path.
+    new Setting(containerEl)
+      .setName('Retrieval SQLite path')
+      .setDesc('Runtime index file. Keep this out of git (it is ignored by default).')
+      .addText((text) =>
+        text
+          .setValue(retrieval.databasePath)
+          .onChange(async (value) => {
+            retrieval.databasePath = value.trim() || retrieval.databasePath;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Index status display.
+    const statusContainer = containerEl.createEl('div', { cls: 'retrieval-status-container' });
+    const renderStatus = () => {
+      statusContainer.empty();
+      const coordinator = this.plugin.services.indexCoordinator;
+      if (!coordinator) {
+        statusContainer.createEl('p', {
+          cls: 'setting-item-description',
+          text: 'Retrieval services not initialized.',
+        });
+        return;
+      }
+      const status = coordinator.getStatus();
+      const state = status.state === 'indexing' ? 'Indexing…' : status.state === 'error' ? 'Error' : 'Idle';
+      const last = status.lastIndexedAt ? new Date(status.lastIndexedAt).toLocaleString() : 'never';
+      const lines = [
+        `Status: ${state}`,
+        `Chunks: ${status.chunkCount}`,
+        `Files: ${status.fileCount}`,
+        `Last indexed: ${last}`,
+      ];
+      if (status.lastError) {
+        lines.push(`Last error: ${status.lastError}`);
+      }
+      for (const line of lines) {
+        statusContainer.createEl('p', { cls: 'setting-item-description', text: line });
+      }
+    };
+    renderStatus();
+
+    // Action buttons.
+    const actionsContainer = containerEl.createEl('div', { cls: 'retrieval-actions' });
+
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Index now')
+      .onClick(async () => {
+        const coordinator = this.plugin.services.indexCoordinator;
+        if (!coordinator) {
+          new Notice('Retrieval is not initialized.');
+          return;
+        }
+        if (coordinator.getStatus().state === 'indexing') {
+          new Notice('Indexing is already running.');
+          return;
+        }
+        new Notice('Indexing started...');
+        try {
+          const status = await coordinator.indexAll();
+          new Notice(
+            `Index updated: ${status.indexedFiles} indexed, ${status.unchangedFiles} unchanged, ${status.skippedFiles} skipped, ${status.deletedFiles} deleted.`
+          );
+          renderStatus();
+        } catch (error) {
+          new Notice(`Index failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Clear and rebuild')
+      .setWarning()
+      .onClick(async () => {
+        const coordinator = this.plugin.services.indexCoordinator;
+        if (!coordinator) {
+          new Notice('Retrieval is not initialized.');
+          return;
+        }
+        if (coordinator.getStatus().state === 'indexing') {
+          new Notice('Indexing is already running.');
+          return;
+        }
+        new Notice('Clearing and rebuilding index...');
+        try {
+          const status = await coordinator.indexAll({ rebuild: true });
+          new Notice(`Rebuilt index: ${status.indexedFiles} indexed, ${status.deletedFiles} removed.`);
+          renderStatus();
+        } catch (error) {
+          new Notice(`Rebuild failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Open search')
+      .onClick(() => {
+        if (!this.plugin.services.retrievalService || !this.plugin.services.indexCoordinator) {
+          new Notice('Retrieval services are not initialized.');
+          return;
+        }
+        new SearchKnowledgeModal(
+          this.app,
+          this.plugin,
+          this.plugin.services.retrievalService,
+          this.plugin.services.indexCoordinator
+        ).open();
+      });
+
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Refresh status')
+      .onClick(() => {
+        renderStatus();
+      });
   }
 
   addStudyPathSettings(containerEl: HTMLElement): void {

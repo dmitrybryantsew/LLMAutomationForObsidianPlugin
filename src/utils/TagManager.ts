@@ -490,9 +490,12 @@ class TagManager {
     return tags.map(tag => this.normalizeTag(tag)).filter(Boolean);
   }
 
-  // Format tags for metadata (Kept, useful for saving to files)
-  formatTags(tags: string[]): string {
-    return tags.join(', '); // Format as comma-separated string for frontmatter value
+  // Format tags for metadata — returns the array so FileManager can
+  // serialize it as a proper YAML list (e.g. tags: [tag1, tag2, tag3])
+  // which Obsidian recognises.  A comma-separated string would be treated
+  // as a single invalid tag value in frontmatter.
+  formatTags(tags: string[]): string[] {
+    return tags; // Return the array directly for proper YAML serialization
   }
 
   // Check if tag exists in vault (Kept, useful for UI perhaps)

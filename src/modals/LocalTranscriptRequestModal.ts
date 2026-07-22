@@ -1,10 +1,12 @@
-import { App, Modal, Setting, Notice, TextComponent, ButtonComponent } from "obsidian";
+import { App, Modal, Setting, Notice, TextComponent, ButtonComponent, DropdownComponent } from "obsidian";
 import { TranscriptManager } from "../utils/TranscriptManager";
 import { FileManager } from "../utils/FileManager";
 import { HierarchyManager } from "../utils/HierarchyManager";
-import type GptFreeTextGeneratorPlugin from "../main"; // Import the plugin type
-import { sanitizeFilename } from "../utils/helpers"; // For sanitizing title/author for display
-import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts'; // Import summary types and prompts
+import type GptFreeTextGeneratorPlugin from "../main";
+import { sanitizeFilename } from "../utils/helpers";
+import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts';
+import { TextProviderId } from '../types/providers';
+import { SettingTab } from '../settings/SettingTab';
 
 export class LocalTranscriptRequestModal extends Modal {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -16,12 +18,17 @@ export class LocalTranscriptRequestModal extends Modal {
   private title: string = "";
   private authorOrCourse: string = "";
 
-  private transcriptLanguage: string = "en"; // Default to English
-  private outputLanguage: string = "en"; // Default to English
+  private transcriptLanguage: string = "en";
+  private outputLanguage: string = "en";
   private summaryModel: string;
   private summaryType: SummaryType;
   private tokenOutput: number;
   private topic: string;
+  private provider: TextProviderId;
+  private modelDropdown: DropdownComponent | null = null;
+  private saveToDatabase: boolean = true; // default ON: no transcript in result file
+  private enableChunking: boolean = false; // default OFF
+  private flatFolder: boolean = false; // default OFF: save under Author/Title
 
   constructor(app: App, plugin: GptFreeTextGeneratorPlugin, transcriptManager: TranscriptManager, fileManager: FileManager, hierarchyManager: HierarchyManager) {
     super(app);
@@ -30,11 +37,28 @@ export class LocalTranscriptRequestModal extends Modal {
     this.fileManager = fileManager;
     this.hierarchyManager = hierarchyManager;
 
-    // Initialize LLM settings from plugin settings
-    this.summaryModel = this.plugin.settings.summaryModel;
-    this.summaryType = this.plugin.settings.summaryType;
-    this.tokenOutput = this.plugin.settings.numberOfOutputTokens;
-    this.topic = ""; // Initialize topic as empty
+    this.provider = plugin.settings.defaultLLMProvider;
+    this.summaryModel = this.getSummaryModelForProvider(this.provider);
+    this.summaryType = plugin.settings.summaryType;
+    this.tokenOutput = plugin.settings.numberOfOutputTokens;
+    this.topic = "";
+  }
+
+  private getSummaryModelForProvider(provider: TextProviderId): string {
+    switch (provider) {
+      case 'openrouter':
+        return this.plugin.settings.openrouterSummaryModel || this.plugin.settings.summaryModel;
+      case 'chutes':
+        return this.plugin.settings.chutesSummaryModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
+      case 'zai':
+        return this.plugin.settings.zaiSummaryModel || 'glm-4.6';
+      case 'ollama':
+        return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
+      case 'proxy':
+        return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      default:
+        return this.plugin.settings.summaryModel;
+    }
   }
 
   onOpen() {
@@ -113,22 +137,34 @@ export class LocalTranscriptRequestModal extends Modal {
           })
       );
 
-    // Add LLM settings
+    // Provider Selection
+    new Setting(contentEl)
+      .setName("LLM Provider")
+      .setDesc("Choose the AI provider for text generation")
+      .addDropdown((dropdown) => {
+        dropdown.addOptions({
+          openrouter: "OpenRouter",
+          chutes: "Chutes",
+          zai: "ZAI",
+          ollama: "Ollama",
+          proxy: "OpenAI Proxy",
+        });
+        dropdown
+          .setValue(this.provider)
+          .onChange(async (value) => {
+            this.provider = value as TextProviderId;
+            this.summaryModel = this.getSummaryModelForProvider(this.provider);
+            this.updateModelDropdown(contentEl);
+          });
+      });
+
+    // Summary Model Selection (dynamic)
     new Setting(contentEl)
       .setName("Summary Model")
       .setDesc("The LLM model to use for generating the summary and tags.")
       .addDropdown((dropdown) => {
-        dropdown.addOptions({
-          "gpt-4": "GPT-4",
-          "gpt-4o": "GPT-4o",
-          "claude-3-opus": "Claude 3 Opus",
-          "claude-3-sonnet": "Claude 3 Sonnet",
-          "openrouter/deepseek/deepseek-r1-zero:free": "DeepSeek R1 Zero (OpenRouter)",
-          "openrouter/deepseek/deepseek-r1:free": "DeepSeek R1 (OpenRouter)",
-          "openrouter/deepseek/deepseek-chat:free": "DeepSeek Chat (OpenRouter)",
-          "openrouter/deepseek/deepseek-chat-v3-0324:free": "DeepSeek Chat 0324",
-          "openrouter/deepseek/deepseek-r1-0528:free": "DeepSeek Chat 0528 (OpenRouter)"
-        });
+        this.modelDropdown = dropdown;
+        this.updateModelDropdown(contentEl);
         dropdown
           .setValue(this.summaryModel)
           .onChange((value) => {
@@ -188,6 +224,36 @@ export class LocalTranscriptRequestModal extends Modal {
           })
       );
 
+    // Save to Database toggle
+    new Setting(contentEl)
+      .setName("Save Transcript to Database")
+      .setDesc("If ON, the transcript text is NOT embedded in the summary file (keeps files small). If OFF, the full transcript is included in a collapsible section.")
+      .addToggle((toggle) =>
+        toggle.setValue(this.saveToDatabase).onChange((value) => {
+          this.saveToDatabase = value;
+        })
+      );
+
+    // Process in Chunks toggle
+    new Setting(contentEl)
+      .setName("Process in Chunks")
+      .setDesc("If ON, long transcripts are split into chunks and summarized separately, then combined. If OFF, the entire transcript is sent at once.")
+      .addToggle((toggle) =>
+        toggle.setValue(this.enableChunking).onChange((value) => {
+          this.enableChunking = value;
+        })
+      );
+
+    // Flat Folder toggle
+    new Setting(contentEl)
+      .setName("Flat Folder Structure")
+      .setDesc("If ON, the summary file is saved directly in the summary folder. If OFF, it's saved under Author/Title subfolders.")
+      .addToggle((toggle) =>
+        toggle.setValue(this.flatFolder).onChange((value) => {
+          this.flatFolder = value;
+        })
+      );
+
     // Buttons container
     const buttonContainer = contentEl.createDiv("modal-button-container");
 
@@ -215,17 +281,21 @@ export class LocalTranscriptRequestModal extends Modal {
 
           const filePath = await this.transcriptManager.processLocalTranscript({
             filePath: this.localFilePath,
-            title: this.title, // Pass the potentially derived title
+            title: this.title,
             authorOrCourse: this.authorOrCourse,
             transcriptLanguage: this.transcriptLanguage,
             outputLanguage: this.outputLanguage,
-            targetFolder: summaryFolder, // Use the configured summary folder
+            targetFolder: summaryFolder,
             summaryModel: this.summaryModel,
             summaryPrompt: summaryTypeConfig.summaryPrompt,
             tagPrompt: summaryTypeConfig.tagPrompt,
             summaryType: this.summaryType,
             numberOfOutputTokens: this.tokenOutput,
-            topic: this.topic
+            topic: this.topic,
+            provider: this.provider,
+            saveToDatabase: this.saveToDatabase,
+            enableChunking: this.enableChunking,
+            flatFolder: this.flatFolder,
           });
 
           new Notice(`Transcript and Summary saved to: ${filePath}`);
@@ -276,6 +346,21 @@ export class LocalTranscriptRequestModal extends Modal {
         type === 'unreal_tutorial' || type === 'programming_tutorial' 
           ? 'block' 
           : 'none';
+    }
+  }
+
+  private updateModelDropdown(containerEl: HTMLElement) {
+    if (!this.modelDropdown) return;
+    const settingTab = new SettingTab(this.app, this.plugin);
+    const models = settingTab.getFilteredModelsForBackend(this.provider);
+    this.modelDropdown.selectEl.empty();
+    for (const [value, label] of Object.entries(models)) {
+      this.modelDropdown.addOption(value, label as string);
+    }
+    const firstModel = Object.keys(models)[0];
+    this.modelDropdown.setValue(models[this.summaryModel] ? this.summaryModel : firstModel);
+    if (!models[this.summaryModel]) {
+      this.summaryModel = firstModel;
     }
   }
 

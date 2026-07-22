@@ -21,6 +21,10 @@ import { CodingExerciseGenerator } from "./CodingExerciseGenerator";
 import { StudyAssistantImporter } from "./StudyAssistantImporter";
 import { StudySourceLibrary } from "./StudySourceLibrary";
 import { StudyPathGenerator } from "./StudyPathGenerator";
+import { DebugLogger } from "./DebugLogger";
+import { RetrievalDatabase } from "../retrieval/RetrievalDatabase";
+import { IndexCoordinator } from "../retrieval/IndexCoordinator";
+import { RetrievalService } from "../retrieval/RetrievalService";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
 import type GptFreeTextGeneratorPlugin from "../main";
@@ -53,6 +57,10 @@ export class PluginServices {
   private _studyAssistantImporter: StudyAssistantImporter;
   private _studySourceLibrary: StudySourceLibrary;
   private _studyPathGenerator: StudyPathGenerator;
+  private _retrievalDatabase: RetrievalDatabase | null = null;
+  private _indexCoordinator: IndexCoordinator | null = null;
+  private _retrievalService: RetrievalService | null = null;
+  private _retrievalDebugLogger!: DebugLogger;
   
   // Settings
   private _settings: PluginSettings;
@@ -145,6 +153,9 @@ export class PluginServices {
         console.error("Failed to initialize spaced repetition database:", error);
       }
     }
+
+    // Initialize retrieval services (only if enabled). Failures are logged, not thrown.
+    await this.ensureRetrievalServices();
   }
   
   /**
@@ -254,6 +265,68 @@ export class PluginServices {
     await this._spacedRepetitionDatabase.initialize();
     return this._spacedRepetitionDatabase;
   }
+
+  public get retrievalDatabase(): RetrievalDatabase | null {
+    return this._retrievalDatabase;
+  }
+
+  public get indexCoordinator(): IndexCoordinator | null {
+    return this._indexCoordinator;
+  }
+
+  public get retrievalService(): RetrievalService | null {
+    return this._retrievalService;
+  }
+
+  /**
+   * Construct (if needed) and initialize the retrieval services.
+   * Safe to call repeatedly; returns the coordinator.
+   * Never throws: on failure, logs and leaves services null.
+   */
+  public async ensureRetrievalServices(): Promise<IndexCoordinator | null> {
+    if (!this._settings.retrieval.enabled) {
+      return null;
+    }
+
+    if (!this._retrievalDatabase) {
+      this._retrievalDatabase = new RetrievalDatabase(this.app, {
+        dbPath: this._settings.retrieval.databasePath,
+        wasmPath: `${this.app.vault.configDir}/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm`,
+      });
+    }
+    if (!this._retrievalDebugLogger) {
+      this._retrievalDebugLogger = new DebugLogger(this._settings.debugMode || false, 'Retrieval');
+    } else {
+      this._retrievalDebugLogger.setEnabled(this._settings.debugMode || false);
+    }
+    if (!this._indexCoordinator) {
+      this._indexCoordinator = new IndexCoordinator(
+        this.app,
+        this._retrievalDatabase,
+        () => this._settings.retrieval,
+        this._retrievalDebugLogger
+      );
+    }
+    if (!this._retrievalService) {
+      this._retrievalService = new RetrievalService(this._retrievalDatabase, {
+        evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
+        defaultResultLimit: this._settings.retrieval.defaultResultLimit,
+      });
+    } else {
+      this._retrievalService.updateOptions({
+        evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
+        defaultResultLimit: this._settings.retrieval.defaultResultLimit,
+      });
+    }
+
+    try {
+      await this._indexCoordinator.initialize();
+    } catch (error) {
+      console.error("Failed to initialize retrieval database:", error);
+      this._retrievalDebugLogger.logError(error instanceof Error ? error : new Error(String(error)));
+    }
+    return this._indexCoordinator;
+  }
   
   /**
    * Update settings when they change
@@ -280,7 +353,18 @@ export class PluginServices {
     
     // Update ErrorHandler debug mode
     ErrorHandler.setDebugMode(settings.debugMode || false);
-    
+
+    // Update retrieval debug logger + service options
+    if (this._retrievalDebugLogger) {
+      this._retrievalDebugLogger.setEnabled(settings.debugMode || false);
+    }
+    if (this._retrievalService) {
+      this._retrievalService.updateOptions({
+        evidenceTokenBudget: settings.retrieval.evidenceTokenBudget,
+        defaultResultLimit: settings.retrieval.defaultResultLimit,
+      });
+    }
+
     // If settings affect service configuration (like folder paths for PathManager's JSON/backups),
     // the service might need a specific update method or re-initialization.
     // Re-initializing PathManager here would lose its cached structure.
@@ -314,6 +398,20 @@ export class PluginServices {
 
     if (this._spacedRepetitionDatabase) {
       await this._spacedRepetitionDatabase.close();
+    }
+
+    if (this._indexCoordinator) {
+      try {
+        await this._indexCoordinator.shutdown();
+      } catch (error) {
+        console.error("Failed to shut down retrieval coordinator:", error);
+      }
+    } else if (this._retrievalDatabase) {
+      try {
+        await this._retrievalDatabase.close();
+      } catch (error) {
+        console.error("Failed to close retrieval database:", error);
+      }
     }
 
     // Other managers currently don't hold resources needing explicit destroy

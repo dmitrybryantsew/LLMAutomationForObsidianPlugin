@@ -24,6 +24,7 @@ import { AddSeriesModal } from './modals/AddSeriesModal';
 import { AddAuthorModal } from './modals/AddAuthorModal';
 import { AddContentModal } from './modals/AddContentModal';
 import { LocalTranscriptRequestModal } from './modals/LocalTranscriptRequestModal'; // Import the new modal
+import { BatchLocalTranscriptModal } from './modals/BatchLocalTranscriptModal'; // Import the batch modal
 import { TranscriptNoteScanner } from './utils/TranscriptNoteScanner'; // Import the scanner
 import { DatabaseMigrationTool } from './utils/DatabaseMigrationTool'; // Import the migration utility
 import { NoteDeleter } from './utils/NoteDeleter'; // Import the note deleter
@@ -40,6 +41,7 @@ import { CodingExerciseView } from './views/CodingExerciseView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
 import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
+import { SearchKnowledgeModal } from './modals/SearchKnowledgeModal';
 
 import './styles/styles.css';
 
@@ -56,6 +58,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     
     // Initialize async services that need `await`
     await this.services.initializeServices();
+
+    // Register retrieval vault listeners only if retrieval initialized successfully.
+    if (this.settings.retrieval.enabled && this.services.indexCoordinator) {
+      this.services.indexCoordinator.registerVaultListeners(this);
+    }
 
     // Add settings tab
     this.addSettingTab(new SettingTab(this.app, this));
@@ -76,6 +83,17 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // but its constructor should be synchronous with dependencies provided.
     // initializeVideoQueueManager is now just about creating the instance.
     this.services.initializeVideoQueueManager();
+
+    // Schedule an optional retrieval auto-index after the workspace layout is ready.
+    // Never block onload on this; it is cancellable and reports via index status.
+    if (this.settings.retrieval.enabled && this.settings.retrieval.autoIndexOnStartup && this.services.indexCoordinator) {
+      const coordinator = this.services.indexCoordinator;
+      this.app.workspace.onLayoutReady(() => {
+        void coordinator.indexAll().catch((error) => {
+          console.error('Retrieval auto-index failed:', error);
+        });
+      });
+    }
 
     // Add ribbon icons
     this.addRibbonIcon("pencil", "Open Text Generator", () => {
@@ -117,6 +135,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         this.services.fileManager,
         this.services.hierarchyManager
       );
+      modal.open();
+    });
+
+    // Add ribbon icon for batch local transcript processing
+    this.addRibbonIcon("files", "Batch Local Transcript Summarization", () => {
+      const modal = new BatchLocalTranscriptModal(this.app, this);
       modal.open();
     });
 
@@ -460,6 +484,15 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: 'batch-local-transcript',
+      name: 'Batch Local Transcript Summarization',
+      callback: () => {
+        const modal = new BatchLocalTranscriptModal(this.app, this);
+        modal.open();
+      }
+    });
+
     // Add command to view transcript from database
     this.addCommand({
       id: 'view-transcript-from-database',
@@ -482,7 +515,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // Add tag commands
     this.addCommand({
       id: 'init-tags',
-      name: 'Init=tags',
+      name: 'Init Tags',
       callback: () => {
         this.services.tagManager.initializeTags();
         
@@ -671,6 +704,23 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       hotkeys: [{ modifiers: ["Mod", "Shift"], key: "Q" }],
       editorCallback: (editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
         new QuickQueryModal(this.app, this).open();
+      }
+    });
+
+    // Add standalone Search Knowledge Base command (no LLM required)
+    this.addCommand({
+      id: 'search-knowledge-base',
+      name: 'Search Knowledge Base',
+      callback: () => {
+        if (!this.settings.retrieval.enabled) {
+          new Notice('Knowledge retrieval is disabled. Enable it in Settings → Knowledge Retrieval.');
+          return;
+        }
+        if (!this.services.retrievalService || !this.services.indexCoordinator) {
+          new Notice('Retrieval services are not initialized. Open Settings → Knowledge Retrieval to build the index.');
+          return;
+        }
+        new SearchKnowledgeModal(this.app, this, this.services.retrievalService, this.services.indexCoordinator).open();
       }
     });
 

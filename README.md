@@ -71,7 +71,7 @@ or:
 npm test
 ```
 
-Current baseline: `155` tests pass.
+Current baseline: `207` tests pass.
 
 ## OpenAI-Compatible Proxy Provider
 

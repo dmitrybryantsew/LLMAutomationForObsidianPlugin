@@ -267,8 +267,10 @@ export class SpacedRepetitionNoteChatModal extends Modal {
         const models = this.plugin.settings.openRouterModels?.length
           ? this.plugin.settings.openRouterModels
           : [this.getDefaultModelForProvider('openrouter')];
-        return models.reduce((acc: Record<string, string>, model: string) => {
-          acc[model] = model;
+        return models.reduce((acc: Record<string, string>, model) => {
+          const id = typeof model === 'string' ? model : model.id;
+          const name = typeof model === 'string' ? model : model.name;
+          acc[id] = name;
           return acc;
         }, {});
       }

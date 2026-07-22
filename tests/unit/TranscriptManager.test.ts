@@ -7,6 +7,7 @@ function createManager(providerOutput = 'ai, video-summary') {
   const tagManager = {
     formatTagsForPrompt: vi.fn().mockReturnValue('Existing tags: ai'),
     addCustomTags: vi.fn(),
+    normalizeTags: vi.fn((tags: string[]) => tags),
   };
 
   const manager = new TranscriptManager(

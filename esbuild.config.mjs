@@ -22,8 +22,10 @@ const outfile = path.join(packageDir, "main.js");
 async function copyStaticFiles() {
   await mkdir(packageDir, { recursive: true });
   await copyFile(path.join(rootDir, "manifest.json"), path.join(packageDir, "manifest.json"));
+  // Use the vendored FTS5-enabled sql.js wasm (see vendor/sqljs-fts5/README.md).
+  // The upstream npm sql.js wasm does NOT include FTS5, which RetrievalDatabase requires.
   await copyFile(
-    path.join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm"),
+    path.join(rootDir, "vendor", "sqljs-fts5", "sql-wasm.wasm"),
     path.join(packageDir, "sql-wasm.wasm")
   );
 }
@@ -59,7 +61,51 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile,
+  // Alias `sql.js` to the vendored FTS5-enabled loader. The upstream npm
+  // sql.js JS loader is built against a different Emscripten version than
+  // our FTS5 wasm; mixing them produces "file is not a database". Both the
+  // JS loader and wasm binary MUST come from the same build.
+  // See vendor/sqljs-fts5/README.md for provenance.
+  //
+  // We use an onLoad plugin rather than `alias` because the vendored file is
+  // a UMD/CJS module that assigns `exports["Module"] = initSqlJs` and has no
+  // ESM `default` export. The plugin wraps the source so `import initSqlJs
+  // from 'sql.js'` resolves to the initSqlJs function.
   plugins: [
+    {
+      name: "sqljs-fts5-alias",
+      setup(build) {
+        const sqlJsPath = path.join(rootDir, "vendor", "sqljs-fts5", "sql-wasm.js");
+        build.onResolve({ filter: /^sql\.js$/ }, () => ({
+          path: sqlJsPath,
+          namespace: "sqljs-fts5",
+        }));
+        build.onLoad({ filter: /.*/, namespace: "sqljs-fts5" }, async () => {
+          const fs = await import("fs/promises");
+          const source = await fs.readFile(sqlJsPath, "utf8");
+          // Wrap the UMD source so it runs in a CJS context (with module/exports/
+          // require) and then re-export the initSqlJs function as ESM default.
+          // The UMD wrapper assigns exports["Module"] = initSqlJs in CJS.
+          const contents = [
+            'let moduleObj = { exports: {} };',
+            'let exports = moduleObj.exports;',
+            'const __require = (id) => {',
+            '  if (id === "node:fs" || id === "fs") return require("fs");',
+            '  if (id === "node:path" || id === "path") return require("path");',
+            '  return require(id);',
+            '};',
+            '// The UMD source references require and module/exports on the',
+            '// Node sync-load path. Provide them as writable bindings.',
+            'let module = moduleObj;',
+            'let require = __require;',
+            source,
+            'const __initSqlJs = moduleObj.exports.Module || moduleObj.exports.default;',
+            'export default __initSqlJs;',
+          ].join('\n');
+          return { contents, loader: "js", resolveDir: path.dirname(sqlJsPath) };
+        });
+      },
+    },
     {
       name: "css-inline",
       setup(build) {

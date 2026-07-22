@@ -3,7 +3,7 @@ import { FileManager } from "./FileManager";
 import { ErrorHandler } from "./ErrorHandler";
 import { sanitizeFilename } from "../utils/helpers";
 import { TagManager } from "./TagManager"; // Import TagManager
-import { sanitizeForMetadata } from "../utils/helpers";
+import { sanitizeForMetadata, yamlValue } from "../utils/helpers";
 import { SummaryType, SUMMARY_PROMPTS, getAvailableSummaryTypes } from '../utils/summaryPrompts';
 import {chunkTranscriptBySentences, chunkTranscript} from "./helpers"
 import { PathManager } from "./pathStructure/PathManager";
@@ -40,6 +40,9 @@ interface LocalTranscriptInput {
   numberOfOutputTokens: number; // New: Max tokens for summary
   topic?: string; // New: Optional topic for tutorials
   provider?: TextProviderId; // Optional provider override
+  saveToDatabase?: boolean; // If true, don't embed transcript in output file (default: true)
+  enableChunking?: boolean; // If true, chunk long transcripts (default: false)
+  flatFolder?: boolean; // If true, save directly in targetFolder; if false, save under Author/Title (default: false)
 }
 
 interface TranscriptMetadata {
@@ -121,12 +124,18 @@ class TranscriptManager {
       
       const timestamp = new Date().toISOString().slice(0, 10);
 
-      // Folder structure: targetFolder/AuthorOrCourse/Title/transcript.md
-      let folderPath = `${options.targetFolder}/${sanitizedAuthorOrCourse}/${sanitizedTitle}`;
-      
-      // Add language code to folder path if translating
-      if (options.transcriptLanguage !== options.outputLanguage) {
-        folderPath += `/${options.outputLanguage}`;
+      // Folder structure:
+      // - flatFolder=true:  targetFolder/Title.md  (all files directly in target)
+      // - flatFolder=false: targetFolder/AuthorOrCourse/Title/transcript.md
+      let folderPath: string;
+      if (options.flatFolder) {
+        folderPath = options.targetFolder;
+      } else {
+        folderPath = `${options.targetFolder}/${sanitizedAuthorOrCourse}/${sanitizedTitle}`;
+        // Add language code to folder path if translating
+        if (options.transcriptLanguage !== options.outputLanguage) {
+          folderPath += `/${options.outputLanguage}`;
+        }
       }
 
       const metadata: TranscriptMetadata = {
@@ -144,8 +153,11 @@ class TranscriptManager {
       // 1. Generate Tags based on the full transcript
       const tags = await this.generateTagsForLocalTranscript(transcriptContent, derivedTitle, options);
 
-      // 2. Chunk the transcript for summary generation
-      const chunks = chunkTranscriptBySentences(transcriptContent, 5500, 7000); // Adjust chunk size based on model context window
+      // 2. Chunk the transcript for summary generation (only if enableChunking is true)
+      const enableChunking = options.enableChunking === true; // default: false
+      const chunks = enableChunking
+        ? chunkTranscriptBySentences(transcriptContent, 5500, 7000)
+        : [transcriptContent];
 
       let finalSummary = "";
       const chunkSummaries: string[] = [];
@@ -249,10 +261,11 @@ class TranscriptManager {
       };
 
       // Format content for the file
+      const saveToDatabase = options.saveToDatabase !== false; // default: true
       const content = this.formatLocalTranscriptContent(
         derivedTitle,
         finalSummary,
-        transcriptContent,
+        saveToDatabase ? "" : transcriptContent, // Omit transcript content when saveToDatabase is true
         tags,
         chunkSummaries
       );
@@ -406,11 +419,18 @@ class TranscriptManager {
       const tagsList = rawTagsOutput.split(',')
         .map((tag: string) => tag.trim().toLowerCase())
         .filter((tag: string) => tag.length > 0);
-      
-      // Normalize and add newly generated tags to the TagManager's custom list
-      this.tagManager.addCustomTags(tagsList);
 
-      return tagsList; // Return the normalized list
+      // Normalize each tag (spaces -> underscores, strip invalid chars) so
+      // the frontmatter value is a valid Obsidian tag.  Without this, an LLM
+      // could return e.g. "machine learning" or "C++" which Obsidian would
+      // show as invalid (red strikethrough) in the properties panel.
+      const normalizedTags = this.tagManager.normalizeTags(tagsList)
+        .filter((tag, idx, arr) => arr.indexOf(tag) === idx); // dedupe
+
+      // Normalize and add newly generated tags to the TagManager's custom list
+      this.tagManager.addCustomTags(normalizedTags);
+
+      return normalizedTags; // Return the normalized list
     } catch (error: unknown) {
       ErrorHandler.handleError(error, "API_ERROR", {
         operation: "generate-tags",
@@ -603,7 +623,7 @@ class TranscriptManager {
 
       // Create metadata with generated tags
       const metadata = {
-        title: sanitizeForMetadata(videoData.title), // Sanitize title for metadata
+        title: videoData.title, // yamlValue() in FileManager handles YAML escaping
         url: options.videoUrl,
         author: videoData.channel,
         channel_id: videoData.channel_id,
@@ -711,25 +731,12 @@ class TranscriptManager {
     transcript: string,
     metadata: TranscriptMetadata
   ): string {
-    // Sanitize metadata values for YAML frontmatter
-    const sanitizedMetadata = Object.entries(metadata).reduce((acc, [key, value]) => {
-        acc[key] = typeof value === 'string' ? sanitizeForMetadata(value) : value;
-        return acc;
-    }, {} as any);
+    // Serialize metadata values as proper YAML scalars
+    const yamlFrontmatter = Object.entries(metadata)
+      .map(([key, value]) => `${key}: ${yamlValue(value)}`)
+      .join('\n');
 
-    return `---
-${Object.entries(sanitizedMetadata)
-  .map(([key, value]) => `${key}: ${value}`)
-  .join('\n')}
----
-
-# ${videoData.title}
-
-## Description
-${videoData.description}
-
-## Transcript
-${transcript}`;
+    return `---\n${yamlFrontmatter}\n---\n\n# ${videoData.title}\n\n## Description\n${videoData.description}\n\n## Transcript\n${transcript}`;
   }
 
   private formatSummaryContent(
@@ -847,10 +854,15 @@ ${transcript}`;
       const tagsList = rawTagsOutput.split(',')
         .map((tag: string) => tag.trim().toLowerCase())
         .filter((tag: string) => tag.length > 0);
-      
-      this.tagManager.addCustomTags(tagsList);
 
-      return tagsList;
+      // Normalize each tag (spaces -> underscores, strip invalid chars) so
+      // the frontmatter value is a valid Obsidian tag.
+      const normalizedTags = this.tagManager.normalizeTags(tagsList)
+        .filter((tag, idx, arr) => arr.indexOf(tag) === idx); // dedupe
+
+      this.tagManager.addCustomTags(normalizedTags);
+
+      return normalizedTags;
     } catch (error: unknown) {
       ErrorHandler.handleError(error, "API_ERROR", {
         operation: "generate-tags-for-local-transcript",
@@ -922,11 +934,13 @@ ${transcript}`;
         content += "\n";
     }
 
-    // Add Full Transcript (in collapsible)
-    content += "## Full Transcript\n";
-    content += "<details>\n<summary>Click to expand</summary>\n\n";
-    content += transcript + "\n";
-    content += "</details>\n\n";
+    // Add Full Transcript (in collapsible) — only if transcript content is provided
+    if (transcript && transcript.trim().length > 0) {
+      content += "## Full Transcript\n";
+      content += "<details>\n<summary>Click to expand</summary>\n\n";
+      content += transcript + "\n";
+      content += "</details>\n\n";
+    }
 
     return content;
   }

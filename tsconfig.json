@@ -12,5 +12,5 @@
     //"ignoreDeprecations": "6.0"  // Silence deprecation warnings
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/combined.ts"]
 }

@@ -104,6 +104,6 @@ Thinking about the note...
   it('throws when no valid questions are present', () => {
     expect(() => generator.validateGeneratedQuestions([
       { questionText: 'Missing answer' },
-    ])).toThrow('Ollama did not return any valid review questions');
+    ])).toThrow('The selected provider did not return any valid review questions');
   });
 });

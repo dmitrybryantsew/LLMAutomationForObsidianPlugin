@@ -34,3 +34,8 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Evaluation results (may contain private query content — store locally)
+eval/baseline.md
+eval/results/
+
+docs/
