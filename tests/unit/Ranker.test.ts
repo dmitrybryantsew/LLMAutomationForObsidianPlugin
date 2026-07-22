@@ -20,6 +20,10 @@ function hit(path: string, heading: string, score: number): SearchHit {
     lexicalScore: score,
     finalScore: score,
     matchReasons: [],
+    retrievalMode: 'strict-and',
+    fallbackUsed: false,
+    matchedTerms: [],
+    matchedTermFraction: 0,
   };
 }
 

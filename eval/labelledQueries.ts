@@ -105,6 +105,21 @@ export const LABELLED_QUERIES: LabelledQuery[] = [
   { id: 'D4', query: 'Sourcegraph Cody', category: 'noanswer', expectedPaths: [] },
   { id: 'D5', query: 'Bito Qodo', category: 'noanswer', expectedPaths: [] },
 
+  // --- D-hard. Hard no-answer queries (10) ---
+  // These contain common words that DO appear individually in the fixtures
+  // (in unrelated contexts), but the combined concept does not exist.
+  // An OR fallback must NOT surface these unrelated chunks as evidence.
+  { id: 'D6', query: 'Unity Blender physics game engine', category: 'noanswer', expectedPaths: [] },
+  { id: 'D7', query: 'Android iOS mobile app development', category: 'noanswer', expectedPaths: [] },
+  { id: 'D8', query: 'Tailwind Bootstrap CSS framework', category: 'noanswer', expectedPaths: [] },
+  { id: 'D9', query: 'React Vue Angular Svelte comparison', category: 'noanswer', expectedPaths: [] },
+  { id: 'D10', query: 'AWS Azure GCP cloud provider pricing', category: 'noanswer', expectedPaths: [] },
+  { id: 'D11', query: 'medical hospital doctor health insurance', category: 'noanswer', expectedPaths: [] },
+  { id: 'D12', query: 'nutrition diet cooking recipe blog', category: 'noanswer', expectedPaths: [] },
+  { id: 'D13', query: 'business marketing finance sales strategy', category: 'noanswer', expectedPaths: [] },
+  { id: 'D14', query: 'school university college lecture schedule', category: 'noanswer', expectedPaths: [] },
+  { id: 'D15', query: 'Python Ruby Rust Go programming languages', category: 'noanswer', expectedPaths: [] },
+
   // --- E. Heading queries (5) ---
   { id: 'E1', query: 'DeepSeek-R1 chain-of-thought reasoning', category: 'heading', expectedPaths: [p('Andrej_Karpathy/Deep_Dive_into_LLMs_like_ChatGPT.md')] },
   { id: 'E2', query: 'Claude Artifacts app prototyping', category: 'heading', expectedPaths: [p('Andrej_Karpathy/How_I_use_LLMs.md')] },

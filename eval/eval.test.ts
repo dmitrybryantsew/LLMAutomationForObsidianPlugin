@@ -55,6 +55,11 @@ interface QueryResult {
   rankOfFirstExpected: number | null; // 1-based, null if not found
   latencyMs: number;
   expectedPaths: string[];
+  retrievalMode: string;
+  fallbackUsed: boolean;
+  strictCandidateCount: number;
+  matchedTerms: string[];
+  matchedTermFraction: number;
 }
 
 interface MetricsResult {
@@ -66,6 +71,7 @@ interface MetricsResult {
   p95LatencyMs: number;
   citationCorrectness: number;
   totalQueries: number;
+  fallbackRate: number;
   perCategory: Record<string, { recall: number; mrr: number; count: number }>;
   failures: { id: string; query: string; reason: string }[];
 }
@@ -122,6 +128,13 @@ describe('Evaluation harness (runbook §9.4)', () => {
         }
       }
 
+      // Capture diagnostics from the first hit (or empty defaults).
+      const firstHit = hits[0];
+      const retrievalMode = firstHit?.retrievalMode ?? 'strict-and';
+      const fallbackUsed = hits.some((h) => h.fallbackUsed);
+      const matchedTerms = firstHit?.matchedTerms ?? [];
+      const matchedTermFraction = firstHit?.matchedTermFraction ?? 0;
+
       results.push({
         id: q.id,
         query: q.query,
@@ -131,6 +144,11 @@ describe('Evaluation harness (runbook §9.4)', () => {
         rankOfFirstExpected,
         latencyMs: elapsed,
         expectedPaths: q.expectedPaths,
+        retrievalMode,
+        fallbackUsed,
+        strictCandidateCount: hits.length,
+        matchedTerms,
+        matchedTermFraction,
       });
     }
 
@@ -267,6 +285,8 @@ describe('Evaluation harness (runbook §9.4)', () => {
       count: noAnswerResults.length,
     };
 
+    const fallbackRate = results.filter((r) => r.fallbackUsed).length / results.length;
+
     metrics = {
       recallAt5: recallAll,
       recallAt5Exact: recallExact,
@@ -276,6 +296,7 @@ describe('Evaluation harness (runbook §9.4)', () => {
       p95LatencyMs: p95Latency,
       citationCorrectness,
       totalQueries: results.length,
+      fallbackRate,
       perCategory,
       failures,
     };
@@ -350,6 +371,7 @@ function formatReport(m: MetricsResult, rs: QueryResult[], freshnessDetails: str
   lines.push(`| No-answer precision | ${(m.noAnswerPrecision * 100).toFixed(1)}% | >= 90% | ${m.noAnswerPrecision >= 0.9 ? 'PASS' : 'FAIL'} |`);
   lines.push(`| Index freshness | ${(m.indexFreshness * 100).toFixed(1)}% | 100% | ${m.indexFreshness === 1 ? 'PASS' : 'FAIL'} |`);
   lines.push(`| P95 search latency | ${m.p95LatencyMs.toFixed(1)}ms | Record | — |`);
+  lines.push(`| Fallback rate | ${(m.fallbackRate * 100).toFixed(1)}% | Record | — |`);
   lines.push('');
   if (freshnessDetails.length > 0) {
     lines.push(`## Index freshness details`);
@@ -369,15 +391,18 @@ function formatReport(m: MetricsResult, rs: QueryResult[], freshnessDetails: str
   lines.push('');
   lines.push(`## Per-query results`);
   lines.push('');
-  lines.push(`| ID | Category | Query | Rank | Top-5 paths | Latency | Status |`);
-  lines.push(`|---|---|---|---|---|---|---|`);
+  lines.push(`| ID | Category | Query | Rank | Top-5 paths | Latency | Mode | Fallback | Coverage | Status |`);
+  lines.push(`|---|---|---|---|---|---|---|---|---|---|`);
   for (const r of rs) {
     const status = r.category === 'noanswer'
       ? (r.hitPaths.length === 0 ? 'correct-empty' : 'WRONG-hits')
       : (r.rankOfFirstExpected !== null && r.rankOfFirstExpected <= 5 ? 'PASS' : 'FAIL');
     const rank = r.rankOfFirstExpected ?? '-';
     const top5 = r.top5Paths.length > 0 ? r.top5Paths.map((p) => p.split('/').pop()).join(', ') : '(none)';
-    lines.push(`| ${r.id} | ${r.category} | ${r.query} | ${rank} | ${top5} | ${r.latencyMs.toFixed(1)}ms | ${status} |`);
+    const mode = r.retrievalMode;
+    const fb = r.fallbackUsed ? 'yes' : 'no';
+    const cov = r.matchedTermFraction > 0 ? r.matchedTermFraction.toFixed(2) : '-';
+    lines.push(`| ${r.id} | ${r.category} | ${r.query} | ${rank} | ${top5} | ${r.latencyMs.toFixed(1)}ms | ${mode} | ${fb} | ${cov} | ${status} |`);
   }
   if (m.failures.length > 0) {
     lines.push('');

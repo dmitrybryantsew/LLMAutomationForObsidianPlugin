@@ -30,6 +30,10 @@ function hit(
     lexicalScore: 1,
     finalScore: 1,
     matchReasons: [],
+    retrievalMode: 'strict-and',
+    fallbackUsed: false,
+    matchedTerms: [],
+    matchedTermFraction: 0,
   };
 }
 

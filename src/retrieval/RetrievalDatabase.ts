@@ -299,6 +299,10 @@ export class RetrievalDatabase {
       lexicalScore,
       finalScore: lexicalScore,
       matchReasons: ['lexical'],
+      retrievalMode: 'strict-and',
+      fallbackUsed: false,
+      matchedTerms: [],
+      matchedTermFraction: 0,
     };
   }
 

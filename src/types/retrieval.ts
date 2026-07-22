@@ -54,10 +54,25 @@ export interface SearchRequest {
   includeCurrentNotePath?: string;
 }
 
+export type RetrievalMode = 'strict-and' | 'relaxed-lexical' | 'semantic' | 'hybrid';
+
+export interface RetrievalDiagnostics {
+  retrievalMode: RetrievalMode;
+  fallbackUsed: boolean;
+  strictCandidateCount: number;
+  meaningfulTerms: string[];
+  matchedTerms: string[];
+  matchedTermFraction: number;
+}
+
 export interface SearchHit extends RetrievalChunk {
   lexicalScore: number;
   finalScore: number;
   matchReasons: string[];
+  retrievalMode: RetrievalMode;
+  fallbackUsed: boolean;
+  matchedTerms: string[];
+  matchedTermFraction: number;
 }
 
 export interface EvidenceItem extends SearchHit {

@@ -172,4 +172,117 @@ describe('QueryPlanner', () => {
       expect(p.ftsQuery).toBe('"hello"');
     });
   });
+
+  describe('P2: meaningful terms and stop-word removal', () => {
+    it('removes stop words from meaningfulTerms', () => {
+      const p = QueryPlanner.plan('how does the model learn from data');
+      expect(p.meaningfulTerms).not.toContain('how');
+      expect(p.meaningfulTerms).not.toContain('does');
+      expect(p.meaningfulTerms).not.toContain('the');
+      expect(p.meaningfulTerms).not.toContain('from');
+      expect(p.meaningfulTerms).toContain('model');
+      expect(p.meaningfulTerms).toContain('learn');
+      expect(p.meaningfulTerms).toContain('data');
+    });
+
+    it('keeps all terms in strictFtsQuery (stop words are NOT removed from strict)', () => {
+      const p = QueryPlanner.plan('how does the model learn');
+      expect(p.strictFtsQuery).toContain('"how"');
+      expect(p.strictFtsQuery).toContain('"does"');
+      expect(p.strictFtsQuery).toContain('"the"');
+    });
+
+    it('deduplicates meaningful terms', () => {
+      const p = QueryPlanner.plan('model model data data');
+      expect(p.meaningfulTerms).toEqual(['model', 'data']);
+    });
+
+    it('preserves exact tokens in meaningfulTerms context (they are always required)', () => {
+      const p = QueryPlanner.plan('how does `HttpClient.GetAsync` work with cancellation');
+      expect(p.exactTokens).toContain('HttpClient.GetAsync');
+      // "how", "does", "with" are stop words and removed from meaningfulTerms
+      expect(p.meaningfulTerms).not.toContain('how');
+      expect(p.meaningfulTerms).not.toContain('does');
+      expect(p.meaningfulTerms).not.toContain('with');
+      expect(p.meaningfulTerms).toContain('work');
+      expect(p.meaningfulTerms).toContain('cancellation');
+    });
+
+    it('caps meaningfulTerms at MAX_MEANINGFUL_TERMS (12)', () => {
+      const words = 'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango';
+      const p = QueryPlanner.plan(words);
+      expect(p.meaningfulTerms.length).toBeLessThanOrEqual(12);
+    });
+  });
+
+  describe('P2: relaxed FTS query', () => {
+    it('builds relaxed query with OR for meaningful terms', () => {
+      const p = QueryPlanner.plan('free local alternative to Cursor using VS Code extensions');
+      expect(p.relaxedFtsQuery).not.toBeNull();
+      // Relaxed query should contain OR
+      expect(p.relaxedFtsQuery!).toMatch(/ OR /);
+      // Should contain the meaningful terms
+      expect(p.relaxedFtsQuery!).toContain('"free"');
+      expect(p.relaxedFtsQuery!).toContain('"local"');
+      expect(p.relaxedFtsQuery!).toContain('"alternative"');
+      expect(p.relaxedFtsQuery!).toContain('"cursor"');
+      // Should NOT contain stop words
+      expect(p.relaxedFtsQuery!).not.toContain('"to"');
+      expect(p.relaxedFtsQuery!).not.toContain('"using"');
+    });
+
+    it('requires exact tokens in relaxed query with AND', () => {
+      const p = QueryPlanner.plan('"HttpClient.GetAsync" cancellation behavior');
+      expect(p.relaxedFtsQuery!).toContain('"httpclient.getasync"');
+      expect(p.relaxedFtsQuery!).toMatch(/ AND /);
+      // The exact token is required (AND'd), the meaningful terms are OR'd
+      expect(p.relaxedFtsQuery!).toContain('"cancellation"');
+      expect(p.relaxedFtsQuery!).toContain('"behavior"');
+    });
+
+    it('returns null relaxed query when no meaningful terms and no exact tokens', () => {
+      const p = QueryPlanner.plan('the and is for to');
+      // All stop words, no meaningful terms
+      expect(p.meaningfulTerms).toEqual([]);
+      // ftsQuery still has the stop words (strict), but relaxed is null
+      // Actually, the strict query will have them. Let's check relaxed:
+      expect(p.relaxedFtsQuery).toBeNull();
+    });
+
+    it('uses single term without OR parens when only one meaningful term', () => {
+      const p = QueryPlanner.plan('the model');
+      expect(p.meaningfulTerms).toEqual(['model']);
+      expect(p.relaxedFtsQuery).toBe('"model"');
+    });
+
+    it('preserves quoted phrases as required in relaxed query', () => {
+      const p = QueryPlanner.plan('"spaced repetition" for studying notes');
+      expect(p.relaxedFtsQuery!).toContain('"spaced repetition"');
+      expect(p.relaxedFtsQuery!).toContain('"studying"');
+      expect(p.relaxedFtsQuery!).toContain('"notes"');
+      expect(p.relaxedFtsQuery!).not.toContain('"for"');
+    });
+  });
+
+  describe('P2: required term count', () => {
+    it('returns 0 for exact-only queries', () => {
+      const p = QueryPlanner.plan('`HttpClient.GetAsync`');
+      expect(p.requiredTermCount).toBe(0);
+    });
+
+    it('returns 1 for single-term queries', () => {
+      const p = QueryPlanner.plan('model');
+      expect(p.requiredTermCount).toBe(1);
+    });
+
+    it('returns 1 for two-term queries', () => {
+      const p = QueryPlanner.plan('model data');
+      expect(p.requiredTermCount).toBe(1);
+    });
+
+    it('returns 2 for three+ term queries', () => {
+      const p = QueryPlanner.plan('model data training learning');
+      expect(p.requiredTermCount).toBe(2);
+    });
+  });
 });
