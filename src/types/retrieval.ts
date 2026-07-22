@@ -101,3 +101,62 @@ export interface IndexStatus {
   skippedFiles: number;
   deletedFiles: number;
 }
+
+// --- P3: Semantic retrieval interfaces ---
+
+export interface EmbeddingProvider {
+  readonly modelId: string;
+  readonly dimensions: number;
+  embed(texts: string[], signal?: AbortSignal): Promise<Float32Array[]>;
+}
+
+export interface VectorUpsertRow {
+  chunkId: string;
+  chunkHash: string;
+  modelId: string;
+  preprocessingVersion: string;
+  vector: Float32Array;
+}
+
+export interface VectorHit {
+  chunkId: string;
+  similarity: number;
+  sourceId: string;
+  path: string;
+  basename: string;
+  headingPath: string[];
+  startLine: number;
+  endLine: number;
+  text: string;
+  normalizedText: string;
+  tags: string[];
+  contentHash: string;
+  modifiedTime: number;
+}
+
+export interface VectorStore {
+  upsert(rows: VectorUpsertRow[]): Promise<void>;
+  search(queryVector: Float32Array, filters: VectorSearchFilters, limit: number): Promise<VectorHit[]>;
+  removeChunkIds(ids: string[]): Promise<void>;
+  removeByModel(modelId: string): Promise<number>;
+  getStatus(): Promise<VectorIndexStatus>;
+}
+
+export interface VectorSearchFilters {
+  sourceIds?: string[];
+  folderPrefix?: string;
+  tags?: string[];
+}
+
+export type VectorIndexState = 'empty' | 'building' | 'ready' | 'stale' | 'error';
+
+export interface VectorIndexStatus {
+  state: VectorIndexState;
+  modelId: string | null;
+  dimensions: number;
+  vectorCount: number;
+  lastBuiltAt: number | null;
+  lastError: string | null;
+  buildProgress: number | null;
+  buildTotal: number | null;
+}
