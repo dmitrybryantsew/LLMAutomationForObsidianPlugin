@@ -10,6 +10,7 @@ import {
   formatEvidenceFileContextName,
   formatEvidenceForModel,
 } from '../retrieval/EvidencePackBuilder';
+import { KnowledgeAgent } from '../retrieval/KnowledgeAgent';
 
 type QuickQueryScope = 'current-note' | 'linked-notes' | 'indexed-knowledge-base' | 'selected-folders';
 
@@ -54,6 +55,7 @@ export class QuickQueryModal extends Modal {
     private isProcessing: boolean = false;
     private includeCurrentNote: boolean = true;
     private includeManualFilesWithRetrieval: boolean = false;
+    private useAgenticMode: boolean = false;
     private queryScope: QuickQueryScope;
     private folderPrefix: string = '';
     private generatedResponse: string = "";
@@ -200,6 +202,15 @@ export class QuickQueryModal extends Modal {
         manualToggle.checked = this.includeManualFilesWithRetrieval;
         manualToggle.addEventListener('change', (e) => {
             this.includeManualFilesWithRetrieval = (e.target as HTMLInputElement).checked;
+        });
+
+        // Toggle: agentic mode (multi-step search → read → answer)
+        const agenticToggleContainer = this.retrievalControlsContainer.createEl('div', { cls: 'toggle-container' });
+        agenticToggleContainer.createSpan({ text: 'Agentic (multi-step search & read): ' });
+        const agenticToggle = agenticToggleContainer.createEl('input', { type: 'checkbox' });
+        agenticToggle.checked = this.useAgenticMode;
+        agenticToggle.addEventListener('change', (e) => {
+            this.useAgenticMode = (e.target as HTMLInputElement).checked;
         });
 
         this.refreshRetrievalControlsVisibility();
@@ -542,6 +553,12 @@ export class QuickQueryModal extends Modal {
         this.lastEvidencePack = null;
 
         try {
+            // Agentic mode: multi-step search → read → answer via KnowledgeAgent
+            if (this.useAgenticMode && (this.queryScope === 'indexed-knowledge-base' || this.queryScope === 'selected-folders')) {
+                await this.handleAgenticGenerate();
+                return;
+            }
+
             const fileContexts: FileContext[] = [];
             let systemInstruction = 'Analyze the provided context files to answer the user request. Highlight connections between the documents.';
             let temperature = 0.7;
@@ -693,6 +710,82 @@ export class QuickQueryModal extends Modal {
             this.generateButton.setButtonText('Generate');
             this.generateButton.setDisabled(false);
         }
+    }
+
+    /**
+     * Agentic mode: uses KnowledgeAgent for multi-step search → read → answer.
+     * The agent searches, asks the LLM which sources to read, reads them, and
+     * generates a grounded answer with citations.
+     */
+    private async handleAgenticGenerate(): Promise<void> {
+        const retrievalService = this.plugin.services.retrievalService;
+        if (!retrievalService) {
+            new Notice('Retrieval service not initialized.');
+            return;
+        }
+
+        const client = this.plugin.services.llmClientService.getClient();
+        if (!client) {
+            new Notice('LLM client not initialized.');
+            return;
+        }
+
+        const model = this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
+
+        this.outputArea.setText('Searching knowledge base...');
+
+        const agent = new KnowledgeAgent({
+            retrievalService,
+            model,
+            generateText: async (opts) => {
+                const response = await client.generateText({
+                    model: opts.model,
+                    message: opts.message,
+                    temperature: opts.temperature,
+                    maxTokens: opts.maxTokens,
+                });
+                return response.output;
+            },
+        });
+
+        const result = await agent.answer(this.prompt.trim(), {
+            maxSearchCalls: 3,
+            maxReadCalls: 5,
+            maxEvidenceTokens: this.plugin.settings.retrieval.evidenceTokenBudget,
+            maxAnswerTokens: 2000,
+            temperature: 0.3,
+            timeoutMs: 60_000,
+            allowGeneralKnowledge: this.plugin.settings.retrieval.allowGeneralKnowledgeWhenUngrounded,
+        });
+
+        // Store evidence pack for citation display
+        this.lastEvidencePack = result.evidencePack;
+        this.retrievedHits = result.evidencePack.items;
+        this.selectedHitIds = new Set(result.evidencePack.items.map((h) => h.id));
+        this.renderSources();
+
+        // Build display: answer + sources section
+        let display = result.answer;
+        if (result.evidencePack.items.length > 0) {
+            const sourcesSection = this.renderSourcesSection(result.evidencePack);
+            if (sourcesSection) {
+                display = `${result.answer}\n\n${sourcesSection}`;
+            }
+        }
+
+        // Add agent diagnostics footer
+        const diagLine = `\n\n---\n*Agent: ${result.searchCalls} search, ${result.readCalls} read, ${result.steps.length} steps, ${(result.totalLatencyMs / 1000).toFixed(1)}s${result.truncated ? ' (truncated)' : ''}*`;
+        display += diagLine;
+
+        this.generatedResponse = display;
+        this.outputArea.empty();
+        this.outputArea.removeClass('empty');
+        this.outputArea.setText(display);
+
+        this.insertButton.buttonEl.style.display = 'inline-block';
+        this.appendButton.buttonEl.style.display = 'inline-block';
+
+        new Notice(`Agent complete: ${result.searchCalls} search, ${result.readCalls} read, ${(result.totalLatencyMs / 1000).toFixed(1)}s`);
     }
 
     /**

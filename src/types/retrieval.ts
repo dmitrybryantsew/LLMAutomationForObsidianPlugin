@@ -174,3 +174,62 @@ export interface VectorIndexStatus {
   buildProgress: number | null;
   buildTotal: number | null;
 }
+
+// --- P5: Knowledge agent tool loop ---
+
+export interface BoundedSourceRead {
+  sourceId: string;
+  path: string;
+  basename: string;
+  headingPath: string[];
+  startLine: number;
+  endLine: number;
+  text: string;
+  truncated: boolean;
+  estimatedTokens: number;
+}
+
+export interface KnowledgeAgentStep {
+  type: 'search' | 'read' | 'answer';
+  query?: string;
+  readChunkId?: string;
+  readPath?: string;
+  searchResultCount?: number;
+  searchResultPaths?: string[];
+  searchResultSnippets?: string[];
+  readSnippet?: string;
+  answer?: string;
+  citations?: string[];
+  latencyMs: number;
+}
+
+export interface KnowledgeAgentResult {
+  answer: string;
+  citations: string[];
+  evidencePack: EvidencePack;
+  steps: KnowledgeAgentStep[];
+  totalLatencyMs: number;
+  searchCalls: number;
+  readCalls: number;
+  truncated: boolean;
+}
+
+export interface KnowledgeAgentOptions {
+  maxSearchCalls: number;
+  maxReadCalls: number;
+  maxEvidenceTokens: number;
+  maxAnswerTokens: number;
+  temperature: number;
+  timeoutMs: number;
+  allowGeneralKnowledge: boolean;
+}
+
+export const DEFAULT_AGENT_OPTIONS: KnowledgeAgentOptions = {
+  maxSearchCalls: 3,
+  maxReadCalls: 5,
+  maxEvidenceTokens: 12000,
+  maxAnswerTokens: 2000,
+  temperature: 0.3,
+  timeoutMs: 60_000,
+  allowGeneralKnowledge: false,
+};
