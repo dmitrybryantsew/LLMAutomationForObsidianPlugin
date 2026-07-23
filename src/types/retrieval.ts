@@ -15,6 +15,19 @@ export interface RetrievalSourceConfig {
   version?: string;
 }
 
+export type EmbeddingProviderType = 'none' | 'ollama' | 'chutes';
+
+export interface EmbeddingConfig {
+  provider: EmbeddingProviderType;
+  ollamaEndpoint: string;
+  ollamaModel: string;
+  chutesApiKey: string;
+  chutesBaseUrl: string;
+  chutesModel: string;
+  semanticThreshold: number;
+  lexicalVeto: boolean;
+}
+
 export interface RetrievalSettings {
   enabled: boolean;
   databasePath: string;
@@ -24,6 +37,7 @@ export interface RetrievalSettings {
   autoIndexOnStartup: boolean;
   autoIndexOnModify: boolean;
   allowGeneralKnowledgeWhenUngrounded: boolean;
+  embedding: EmbeddingConfig;
 }
 
 export interface RetrievalChunkDraft {

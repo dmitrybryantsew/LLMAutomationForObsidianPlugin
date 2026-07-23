@@ -25,6 +25,11 @@ import { DebugLogger } from "./DebugLogger";
 import { RetrievalDatabase } from "../retrieval/RetrievalDatabase";
 import { IndexCoordinator } from "../retrieval/IndexCoordinator";
 import { RetrievalService } from "../retrieval/RetrievalService";
+import { SqliteVectorStore } from "../retrieval/SqliteVectorStore";
+import { EmbeddingCoordinator } from "../retrieval/EmbeddingCoordinator";
+import { OllamaEmbeddingProvider } from "../retrieval/OllamaEmbeddingProvider";
+import { ChutesEmbeddingProvider } from "../retrieval/ChutesEmbeddingProvider";
+import type { EmbeddingProvider } from "../types/retrieval";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
 import type GptFreeTextGeneratorPlugin from "../main";
@@ -61,6 +66,8 @@ export class PluginServices {
   private _indexCoordinator: IndexCoordinator | null = null;
   private _retrievalService: RetrievalService | null = null;
   private _retrievalDebugLogger!: DebugLogger;
+  private _embeddingProvider: EmbeddingProvider | null = null;
+  private _embeddingCoordinator: EmbeddingCoordinator | null = null;
   
   // Settings
   private _settings: PluginSettings;
@@ -278,6 +285,46 @@ export class PluginServices {
     return this._retrievalService;
   }
 
+  public get embeddingCoordinator(): EmbeddingCoordinator | null {
+    return this._embeddingCoordinator;
+  }
+
+  private createEmbeddingProvider(): EmbeddingProvider | null {
+    const cfg = this._settings.retrieval.embedding;
+    if (!cfg || cfg.provider === 'none') return null;
+
+    if (cfg.provider === 'ollama') {
+      try {
+        return new OllamaEmbeddingProvider({
+          endpoint: cfg.ollamaEndpoint,
+          model: cfg.ollamaModel,
+        });
+      } catch (e) {
+        this._retrievalDebugLogger?.logError(e instanceof Error ? e : new Error(String(e)));
+        return null;
+      }
+    }
+
+    if (cfg.provider === 'chutes') {
+      if (!cfg.chutesApiKey) {
+        this._retrievalDebugLogger?.logError(new Error('Chutes embedding provider selected but no API key configured'));
+        return null;
+      }
+      try {
+        return new ChutesEmbeddingProvider({
+          apiKey: cfg.chutesApiKey,
+          baseUrl: cfg.chutesBaseUrl,
+          model: cfg.chutesModel,
+        });
+      } catch (e) {
+        this._retrievalDebugLogger?.logError(e instanceof Error ? e : new Error(String(e)));
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Construct (if needed) and initialize the retrieval services.
    * Safe to call repeatedly; returns the coordinator.
@@ -308,14 +355,29 @@ export class PluginServices {
       );
     }
     if (!this._retrievalService) {
-      this._retrievalService = new RetrievalService({ database: this._retrievalDatabase }, {
-        evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
-        defaultResultLimit: this._settings.retrieval.defaultResultLimit,
-      });
+      this._embeddingProvider = this.createEmbeddingProvider();
+      const vectorStore = this._embeddingProvider ? new SqliteVectorStore(this._retrievalDatabase) : null;
+      if (vectorStore && this._embeddingProvider) {
+        await vectorStore.initialize();
+        this._embeddingCoordinator = new EmbeddingCoordinator(this.app, this._retrievalDatabase, this._retrievalDebugLogger);
+        await this._embeddingCoordinator.initialize();
+        this._embeddingCoordinator.setProvider(this._embeddingProvider);
+      }
+      this._retrievalService = new RetrievalService(
+        { database: this._retrievalDatabase, vectorStore, embeddingProvider: this._embeddingProvider },
+        {
+          evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
+          defaultResultLimit: this._settings.retrieval.defaultResultLimit,
+          semanticThreshold: this._settings.retrieval.embedding.semanticThreshold,
+          lexicalVeto: this._settings.retrieval.embedding.lexicalVeto,
+        }
+      );
     } else {
       this._retrievalService.updateOptions({
         evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
         defaultResultLimit: this._settings.retrieval.defaultResultLimit,
+        semanticThreshold: this._settings.retrieval.embedding.semanticThreshold,
+        lexicalVeto: this._settings.retrieval.embedding.lexicalVeto,
       });
     }
 

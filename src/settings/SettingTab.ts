@@ -894,6 +894,143 @@ import {
       .onClick(() => {
         renderStatus();
       });
+
+    // --- Embedding / Semantic settings ---
+    containerEl.createEl('h4', { text: 'Semantic embeddings (optional)' });
+    const emb = retrieval.embedding ?? {
+      provider: 'none' as const,
+      ollamaEndpoint: 'http://localhost:11434',
+      ollamaModel: 'qwen3-embedding:0.6b',
+      chutesApiKey: '',
+      chutesBaseUrl: 'https://chutes-qwen-qwen3-embedding-8b-tee.chutes.ai',
+      chutesModel: 'Qwen/Qwen3-Embedding-8B-TEE',
+      semanticThreshold: 0.3,
+      lexicalVeto: true,
+    };
+    retrieval.embedding = emb;
+
+    new Setting(containerEl)
+      .setName('Embedding provider')
+      .setDesc('Local (Ollama) runs on your machine. Remote (Chutes) sends text to a cloud API.')
+      .addDropdown((dd) => {
+        dd.addOption('none', 'None (lexical only)');
+        dd.addOption('ollama', 'Local — Ollama');
+        dd.addOption('chutes', 'Remote — Chutes (Qwen3-8B)');
+        dd.setValue(emb.provider);
+        dd.onChange(async (value) => {
+          emb.provider = value as typeof emb.provider;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Ollama endpoint')
+      .setDesc('Default: http://localhost:11434')
+      .addText((text) =>
+        text
+          .setValue(emb.ollamaEndpoint)
+          .onChange(async (value) => {
+            emb.ollamaEndpoint = value.trim() || emb.ollamaEndpoint;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Ollama model')
+      .setDesc('e.g. qwen3-embedding:0.6b')
+      .addText((text) =>
+        text
+          .setValue(emb.ollamaModel)
+          .onChange(async (value) => {
+            emb.ollamaModel = value.trim() || emb.ollamaModel;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Chutes API key')
+      .setDesc('Required for remote Chutes provider. Your text is sent to the Chutes API.')
+      .addText((text) =>
+        text
+          .setValue(emb.chutesApiKey)
+          .setPlaceholder('chutes-...')
+          .onChange(async (value) => {
+            emb.chutesApiKey = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Semantic threshold')
+      .setDesc('Minimum cosine similarity for vector hits (0.0–1.0). Lower = more results, higher = more precise.')
+      .addText((text) =>
+        text
+          .setValue(String(emb.semanticThreshold))
+          .onChange(async (value) => {
+            const n = parseFloat(value);
+            if (!isNaN(n) && n >= 0 && n <= 1) {
+              emb.semanticThreshold = n;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Lexical veto')
+      .setDesc('When on, hybrid search returns 0 hits if lexical search finds nothing (prevents semantic false positives).')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(emb.lexicalVeto)
+          .onChange(async (value) => {
+            emb.lexicalVeto = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Build semantic index button.
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Build semantic index')
+      .onClick(async () => {
+        const embCoord = this.plugin.services.embeddingCoordinator;
+        if (!embCoord) {
+          new Notice('No embedding provider configured. Enable one above and reload the plugin.');
+          return;
+        }
+        if (!embCoord.isReady()) {
+          new Notice('Embedding provider not ready.');
+          return;
+        }
+        new Notice('Building semantic index...');
+        try {
+          const coordinator = this.plugin.services.indexCoordinator;
+          if (!coordinator) {
+            new Notice('Retrieval not initialized.');
+            return;
+          }
+          const status = coordinator.getStatus();
+          if (status.chunkCount === 0) {
+            new Notice('No chunks indexed. Run "Index now" first.');
+            return;
+          }
+          const result = await embCoord.buildIndex(
+            // Get all chunks from DB — the coordinator handles batching
+            (this.plugin.services.retrievalDatabase as any)?.select(
+              'SELECT id, source_id, path, basename, heading_path_json, start_line, end_line, text, normalized_text, tags_json, links_json, content_hash, modified_time FROM retrieval_chunks'
+            ).map((c: any) => ({
+              id: c.id, sourceId: c.source_id, path: c.path, basename: c.basename,
+              headingPath: JSON.parse(c.heading_path_json || '[]'),
+              startLine: c.start_line, endLine: c.end_line,
+              text: c.text, normalizedText: c.normalized_text,
+              tags: JSON.parse(c.tags_json || '[]'),
+              outboundLinks: JSON.parse(c.links_json || '[]'),
+              contentHash: c.content_hash, modifiedTime: c.modified_time,
+            }))
+          );
+          new Notice(`Semantic index built: ${result.embedded} embedded, ${result.skipped} skipped.`);
+        } catch (error) {
+          new Notice(`Semantic build failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
   }
 
   addStudyPathSettings(containerEl: HTMLElement): void {

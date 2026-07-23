@@ -43,6 +43,7 @@ function makeSettings(): RetrievalSettings {
     autoIndexOnStartup: false,
     autoIndexOnModify: true,
     allowGeneralKnowledgeWhenUngrounded: false,
+    embedding: { provider: 'none', ollamaEndpoint: 'http://localhost:11434', ollamaModel: 'qwen3-embedding:0.6b', chutesApiKey: '', chutesBaseUrl: 'https://chutes-qwen-qwen3-embedding-8b-tee.chutes.ai', chutesModel: 'Qwen/Qwen3-Embedding-8B-TEE', semanticThreshold: 0.3, lexicalVeto: true },
   };
 }
 
