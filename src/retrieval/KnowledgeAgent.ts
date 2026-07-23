@@ -60,11 +60,21 @@ export class KnowledgeAgent {
     const timeout = setTimeout(() => timeoutController.abort(), opts.timeoutMs);
 
     try {
-      // Step 1: Initial search
-      const initialQuery = question;
+      // Step 0: Extract search terms from the question
+      const refinedQuery = await this.extractSearchTerms(question, opts);
+      steps.push({
+        type: 'search',
+        query: refinedQuery,
+        searchResultCount: 0,
+        searchResultPaths: [],
+        searchResultSnippets: [],
+        latencyMs: 0,
+      });
+
+      // Step 1: Search with refined query
       const searchStart = performance.now();
       const hits = await this.deps.retrievalService.search({
-        query: initialQuery,
+        query: refinedQuery,
         limit: 20,
       });
       const searchElapsed = performance.now() - searchStart;
@@ -72,14 +82,12 @@ export class KnowledgeAgent {
 
       allHits.push(...hits);
 
-      steps.push({
-        type: 'search',
-        query: initialQuery,
-        searchResultCount: hits.length,
-        searchResultPaths: hits.slice(0, 10).map((h) => h.path),
-        searchResultSnippets: hits.slice(0, 10).map((h) => this.formatSnippet(h)),
-        latencyMs: searchElapsed,
-      });
+      // Update the search step with results
+      const searchStep = steps[0];
+      searchStep.searchResultCount = hits.length;
+      searchStep.searchResultPaths = hits.slice(0, 10).map((h) => h.path);
+      searchStep.searchResultSnippets = hits.slice(0, 10).map((h) => this.formatSnippet(h));
+      searchStep.latencyMs = searchElapsed;
 
       if (hits.length === 0) {
         const answer = 'I could not find this in the indexed sources. No search results were returned.';
@@ -185,6 +193,41 @@ export class KnowledgeAgent {
     const heading = hit.headingPath.length > 0 ? hit.headingPath.join(' > ') : '';
     const snippet = hit.text.slice(0, 200).replace(/\n/g, ' ');
     return `[${heading || hit.basename}] ${snippet}...`;
+  }
+
+  private async extractSearchTerms(
+    question: string,
+    opts: KnowledgeAgentOptions
+  ): Promise<string> {
+    // For short queries (<= 5 words), use as-is — FTS5 handles them well
+    const words = question.trim().split(/\s+/);
+    if (words.length <= 5) return question;
+
+    // For longer queries, ask the LLM to extract 2-5 search terms
+    const prompt = `Extract 2-5 key search terms from this question. Reply with ONLY the terms separated by spaces, nothing else.
+
+Question: ${question}
+
+Search terms:`;
+
+    try {
+      const response = await this.deps.generateText({
+        model: this.deps.model,
+        message: prompt,
+        temperature: 0.1,
+        maxTokens: 50,
+      });
+      const cleaned = response.trim().replace(/^search terms?:?\s*/i, '').trim();
+      // Only use if it produced something reasonable
+      if (cleaned.length > 0 && cleaned.length < question.length) {
+        return cleaned;
+      }
+    } catch {
+      // Fall through to simple truncation
+    }
+
+    // Fallback: use first 5 words
+    return words.slice(0, 5).join(' ');
   }
 
   private buildSelectionPrompt(
