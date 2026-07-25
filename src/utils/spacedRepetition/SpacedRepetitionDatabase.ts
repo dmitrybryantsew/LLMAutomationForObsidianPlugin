@@ -1105,27 +1105,46 @@ export class SpacedRepetitionDatabase {
   }
 
   private async readWasmBinary(): Promise<Uint8Array | null> {
-    if (!this.config.wasmPath) {
-      return null;
+    const defaultRel = '.obsidian/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm';
+    const configPath = this.config.wasmPath ?? defaultRel;
+    const adapter = this.app.vault.adapter as any;
+
+    // Build candidate paths — vault-relative only
+    const candidates: string[] = [defaultRel];
+    if (configPath !== defaultRel) {
+      if (configPath.includes(':') || configPath.startsWith('/')) {
+        const vaultRoot = (adapter as any).basePath || '';
+        if (vaultRoot && configPath.toLowerCase().startsWith(vaultRoot.toLowerCase())) {
+          const rel = configPath.slice(vaultRoot.length).replace(/\\/g, '/').replace(/^\//, '');
+          candidates.unshift(rel);
+        }
+        const obsIdx = configPath.replace(/\\/g, '/').indexOf('.obsidian/');
+        if (obsIdx >= 0) {
+          const rel = configPath.replace(/\\/g, '/').slice(obsIdx);
+          if (!candidates.includes(rel)) candidates.unshift(rel);
+        }
+      } else {
+        candidates.unshift(configPath);
+      }
     }
 
-    const adapter = this.app.vault.adapter as any;
-    const normalizedWasmPath = normalizePath(this.config.wasmPath);
-
-    try {
-      if (typeof adapter.exists === 'function' && await adapter.exists(normalizedWasmPath)) {
-        if (typeof adapter.readBinary === 'function') {
-          const buffer = await adapter.readBinary(normalizedWasmPath);
-          return new Uint8Array(buffer);
+    for (const candidate of candidates) {
+      const normalized = normalizePath(candidate);
+      try {
+        const exists = typeof adapter.exists === 'function' && await adapter.exists(normalized);
+        if (exists) {
+          if (typeof adapter.readBinary === 'function') {
+            const buffer = await adapter.readBinary(normalized);
+            return new Uint8Array(buffer);
+          }
+          if (typeof adapter.read === 'function') {
+            const encoded = await adapter.read(normalized);
+            return Uint8Array.from(Buffer.from(encoded, 'base64'));
+          }
         }
-
-        if (typeof adapter.read === 'function') {
-          const encoded = await adapter.read(normalizedWasmPath);
-          return Uint8Array.from(Buffer.from(encoded, 'base64'));
-        }
+      } catch (e) {
+        // try next candidate
       }
-    } catch (error) {
-      console.warn('Failed to read sql.js WASM through vault adapter, falling back to locateFile:', error);
     }
 
     return null;

@@ -38,4 +38,12 @@ Thumbs.db
 eval/baseline.md
 eval/results/
 
+# Companion state (allowlist, temp index)
+companion/.companion-state/
+companion/.pytest_cache/
+
+# Python bytecode cache
+**/__pycache__/
+
+
 docs/

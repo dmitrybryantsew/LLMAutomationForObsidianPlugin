@@ -17,6 +17,11 @@ export interface RetrievalSourceConfig {
 
 export type EmbeddingProviderType = 'none' | 'ollama' | 'chutes';
 
+export interface CompanionConfig {
+  enabled: boolean;
+  endpoint: string;
+}
+
 export interface EmbeddingConfig {
   provider: EmbeddingProviderType;
   ollamaEndpoint: string;
@@ -38,6 +43,7 @@ export interface RetrievalSettings {
   autoIndexOnModify: boolean;
   allowGeneralKnowledgeWhenUngrounded: boolean;
   embedding: EmbeddingConfig;
+  companion: CompanionConfig;
 }
 
 export interface RetrievalChunkDraft {
@@ -114,6 +120,8 @@ export interface IndexStatus {
   unchangedFiles: number;
   skippedFiles: number;
   deletedFiles: number;
+  totalFiles: number;
+  processedFiles: number;
 }
 
 // --- P3: Semantic retrieval interfaces ---
@@ -233,3 +241,36 @@ export const DEFAULT_AGENT_OPTIONS: KnowledgeAgentOptions = {
   timeoutMs: 60_000,
   allowGeneralKnowledge: false,
 };
+
+/** Live event emitted during agent execution for UI progress display. */
+export interface KnowledgeAgentEvent {
+  /** Current phase of the agent loop. */
+  phase: 'extracting-terms' | 'searching' | 'selecting' | 'reading' | 'answering' | 'done' | 'error';
+  /** Human-readable status message. */
+  message: string;
+  /** Step index (0-based) for correlating with the final steps array. */
+  stepIndex?: number;
+  /** Partial data — e.g. search hits during 'searching' phase. */
+  data?: unknown;
+}
+
+/** Callback for receiving live progress events during agent execution. */
+export type KnowledgeAgentEventCallback = (event: KnowledgeAgentEvent) => void;
+
+/** Result of the evidence-gathering phase (before answer generation). */
+export interface KnowledgeAgentEvidence {
+  /** The selected hits the agent will use as evidence. */
+  hits: SearchHit[];
+  /** Evidence pack built from the hits. */
+  evidencePack: EvidencePack;
+  /** Steps recorded so far (search + read steps). */
+  steps: KnowledgeAgentStep[];
+  /** Number of search calls made. */
+  searchCalls: number;
+  /** Number of read calls made. */
+  readCalls: number;
+  /** Whether the evidence was truncated by limits. */
+  truncated: boolean;
+  /** The refined query used for the search. */
+  refinedQuery: string;
+}

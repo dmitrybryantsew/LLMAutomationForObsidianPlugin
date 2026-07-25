@@ -15,7 +15,7 @@ export interface EmbeddingCoordinatorOptions {
   batchSize: number;
 }
 
-const DEFAULT_BATCH_SIZE = 32;
+const DEFAULT_BATCH_SIZE = 16;
 
 export class EmbeddingCoordinator {
   private vectorStore: SqliteVectorStore;
@@ -50,7 +50,11 @@ export class EmbeddingCoordinator {
     return this.provider !== null;
   }
 
-  async buildIndex(chunks: RetrievalChunkDraft[], signal?: AbortSignal): Promise<{
+  async buildIndex(
+    chunks: RetrievalChunkDraft[],
+    signal?: AbortSignal,
+    onProgress?: (embedded: number, total: number) => void
+  ): Promise<{
     embedded: number;
     skipped: number;
     cancelled: boolean;
@@ -102,6 +106,7 @@ export class EmbeddingCoordinator {
 
         if (toEmbed.length === 0) {
           this.buildProgress += batch.length;
+          onProgress?.(this.buildProgress, this.buildTotal);
           continue;
         }
 
@@ -125,6 +130,7 @@ export class EmbeddingCoordinator {
         await this.vectorStore.upsert(rows);
         embedded += toEmbed.length;
         this.buildProgress += batch.length;
+        onProgress?.(this.buildProgress, this.buildTotal);
       }
     } catch (error) {
       this.buildError = error instanceof Error ? error.message : String(error);

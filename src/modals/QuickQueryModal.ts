@@ -59,6 +59,7 @@ export class QuickQueryModal extends Modal {
     private queryScope: QuickQueryScope;
     private folderPrefix: string = '';
     private generatedResponse: string = "";
+    private outputLanguage: string = 'english';
 
     // Retrieval state
     private retrievedHits: SearchHit[] = [];
@@ -72,8 +73,10 @@ export class QuickQueryModal extends Modal {
     private generateButton!: ButtonComponent;
     private insertButton!: ButtonComponent;
     private appendButton!: ButtonComponent;
+    private saveAsNoteButton!: ButtonComponent;
     private toggleContainer!: HTMLElement;
     private scopeDropdown!: DropdownComponent;
+    private languageDropdown!: DropdownComponent;
     private sourcesContainer!: HTMLElement;
     private previewSourcesButton!: ButtonComponent;
     private retrievalControlsContainer!: HTMLElement;
@@ -140,6 +143,20 @@ export class QuickQueryModal extends Modal {
         
         this.promptInput.inputEl.addClass('prompt-textarea');
         this.promptInput.inputEl.rows = 5;
+
+        // Output language dropdown
+        const langSetting = new Setting(container)
+            .setName('Output language')
+            .setDesc('Language for the generated answer.');
+        this.languageDropdown = new DropdownComponent(langSetting.controlEl);
+        this.languageDropdown.addOptions({
+            'english': 'English',
+            'russian': 'Russian',
+        });
+        this.languageDropdown.setValue(this.outputLanguage);
+        this.languageDropdown.onChange((value) => {
+            this.outputLanguage = value;
+        });
     }
 
     /**
@@ -386,6 +403,16 @@ export class QuickQueryModal extends Modal {
                 this.handleAppendToNote();
             });
         this.appendButton.buttonEl.style.display = 'none';
+
+        // Save as Note button (hidden initially)
+        this.saveAsNoteButton = new ButtonComponent(buttonsContainer);
+        this.saveAsNoteButton
+            .setButtonText('Save as Note')
+            .setTooltip('Save the answer as a new note in WikiSynthesis/KBSearchQuestions/')
+            .onClick(() => {
+                this.handleSaveAsNote();
+            });
+        this.saveAsNoteButton.buttonEl.style.display = 'none';
     }
 
     /**
@@ -550,6 +577,7 @@ export class QuickQueryModal extends Modal {
         this.outputArea.setText('Generating response...');
         this.insertButton.buttonEl.style.display = 'none';
         this.appendButton.buttonEl.style.display = 'none';
+        this.saveAsNoteButton.buttonEl.style.display = 'none';
         this.lastEvidencePack = null;
 
         try {
@@ -665,7 +693,7 @@ export class QuickQueryModal extends Modal {
                 files: fileContexts.length > 0 ? fileContexts : undefined,
                 temperature,
                 maxTokens: 2000,
-                language: this.plugin.settings.defaultLanguage
+                language: this.outputLanguage
             };
 
             // Call LLM service
@@ -689,6 +717,7 @@ export class QuickQueryModal extends Modal {
             // Show action buttons
             this.insertButton.buttonEl.style.display = 'inline-block';
             this.appendButton.buttonEl.style.display = 'inline-block';
+            this.saveAsNoteButton.buttonEl.style.display = 'inline-block';
 
             new Notice('Response generated successfully');
 
@@ -714,8 +743,8 @@ export class QuickQueryModal extends Modal {
 
     /**
      * Agentic mode: uses KnowledgeAgent for multi-step search → read → answer.
-     * The agent searches, asks the LLM which sources to read, reads them, and
-     * generates a grounded answer with citations.
+     * Phase 1: gather evidence (search + read) with live progress display.
+     * Phase 2: show evidence preview with checkboxes, then generate answer.
      */
     private async handleAgenticGenerate(): Promise<void> {
         const retrievalService = this.plugin.services.retrievalService;
@@ -732,8 +761,6 @@ export class QuickQueryModal extends Modal {
 
         const model = this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
 
-        this.outputArea.setText('Searching knowledge base...');
-
         const agent = new KnowledgeAgent({
             retrievalService,
             model,
@@ -743,12 +770,13 @@ export class QuickQueryModal extends Modal {
                     message: opts.message,
                     temperature: opts.temperature,
                     maxTokens: opts.maxTokens,
+                    language: this.outputLanguage,
                 });
                 return response.output;
             },
         });
 
-        const result = await agent.answer(this.prompt.trim(), {
+        const agentOpts = {
             maxSearchCalls: 3,
             maxReadCalls: 5,
             maxEvidenceTokens: this.plugin.settings.retrieval.evidenceTokenBudget,
@@ -756,36 +784,144 @@ export class QuickQueryModal extends Modal {
             temperature: 0.3,
             timeoutMs: 60_000,
             allowGeneralKnowledge: this.plugin.settings.retrieval.allowGeneralKnowledgeWhenUngrounded,
-        });
+        };
 
-        // Store evidence pack for citation display
-        this.lastEvidencePack = result.evidencePack;
-        this.retrievedHits = result.evidencePack.items;
-        this.selectedHitIds = new Set(result.evidencePack.items.map((h) => h.id));
-        this.renderSources();
-
-        // Build display: answer + sources section
-        let display = result.answer;
-        if (result.evidencePack.items.length > 0) {
-            const sourcesSection = this.renderSourcesSection(result.evidencePack);
-            if (sourcesSection) {
-                display = `${result.answer}\n\n${sourcesSection}`;
-            }
-        }
-
-        // Add agent diagnostics footer
-        const diagLine = `\n\n---\n*Agent: ${result.searchCalls} search, ${result.readCalls} read, ${result.steps.length} steps, ${(result.totalLatencyMs / 1000).toFixed(1)}s${result.truncated ? ' (truncated)' : ''}*`;
-        display += diagLine;
-
-        this.generatedResponse = display;
+        // Phase 1: gather evidence with live progress
         this.outputArea.empty();
         this.outputArea.removeClass('empty');
-        this.outputArea.setText(display);
+        const progressEl = this.outputArea.createEl('div', { cls: 'agent-progress' });
+        const statusEl = progressEl.createEl('p', { text: 'Starting agent...' });
 
-        this.insertButton.buttonEl.style.display = 'inline-block';
-        this.appendButton.buttonEl.style.display = 'inline-block';
+        let evidence: import('../types/retrieval').KnowledgeAgentEvidence | null = null;
 
-        new Notice(`Agent complete: ${result.searchCalls} search, ${result.readCalls} read, ${(result.totalLatencyMs / 1000).toFixed(1)}s`);
+        try {
+            evidence = await agent.prepareEvidence(this.prompt.trim(), agentOpts, (event) => {
+                statusEl.setText(event.message);
+                const phaseLabel = this.formatPhaseLabel(event.phase);
+                if (phaseLabel) {
+                    progressEl.createEl('p', { text: phaseLabel, cls: 'agent-phase-label' });
+                }
+            });
+        } catch (error) {
+            this.outputArea.setText(`Agent failed: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+        }
+
+        if (!evidence || evidence.hits.length === 0) {
+            this.generatedResponse = 'I could not find this in the indexed sources. No search results were returned.';
+            this.outputArea.setText(this.generatedResponse);
+            new Notice('No evidence found');
+            return;
+        }
+
+        // Phase 2: show evidence preview with checkboxes
+        this.outputArea.empty();
+        this.outputArea.createEl('h4', { text: 'Evidence Preview' });
+        this.outputArea.createEl('p', {
+            text: `${evidence.hits.length} source(s) selected by the agent. Uncheck any you want to exclude, then click "Generate Answer".`,
+            cls: 'evidence-preview-desc'
+        });
+
+        const evidenceContainer = this.outputArea.createEl('div', { cls: 'evidence-preview-list' });
+        const checkboxes: { hit: SearchHit; checkbox: HTMLInputElement }[] = [];
+
+        for (let i = 0; i < evidence.hits.length; i++) {
+            const hit = evidence.hits[i];
+            const itemEl = evidenceContainer.createEl('div', { cls: 'evidence-preview-item' });
+            const checkbox = itemEl.createEl('input', { type: 'checkbox' });
+            checkbox.checked = true;
+            checkbox.id = `evidence-${i}`;
+            const label = itemEl.createEl('label', { attr: { for: `evidence-${i}` } });
+            const heading = hit.headingPath.length > 0 ? hit.headingPath.join(' > ') : hit.basename;
+            label.createEl('strong', { text: `[S${i + 1}] ${hit.basename}` });
+            label.createEl('br');
+            label.createSpan({ text: heading, cls: 'evidence-heading' });
+            label.createEl('br');
+            label.createSpan({ text: hit.text.slice(0, 150).replace(/\n/g, ' ') + '...', cls: 'evidence-snippet' });
+
+            checkboxes.push({ hit, checkbox });
+        }
+
+        // Generate Answer button
+        const generateBtn = this.outputArea.createEl('button', {
+            text: 'Generate Answer',
+            cls: 'mod-cta agent-generate-btn'
+        });
+
+        generateBtn.addEventListener('click', async () => {
+            generateBtn.disabled = true;
+            generateBtn.setText('Generating...');
+
+            // Filter evidence based on checkbox state
+            const selectedHits = checkboxes
+                .filter((c) => c.checkbox.checked)
+                .map((c) => c.hit);
+
+            if (selectedHits.length === 0) {
+                this.outputArea.setText('No evidence selected. Please select at least one source.');
+                generateBtn.disabled = false;
+                generateBtn.setText('Generate Answer');
+                return;
+            }
+
+            const filteredEvidence = {
+                ...evidence!,
+                hits: selectedHits,
+            };
+
+            try {
+                const result = await agent.generateAnswer(this.prompt.trim(), filteredEvidence, agentOpts, (event) => {
+                    generateBtn.setText(event.message);
+                });
+
+                // Store evidence pack for citation display
+                this.lastEvidencePack = result.evidencePack;
+                this.retrievedHits = result.evidencePack.items;
+                this.selectedHitIds = new Set(result.evidencePack.items.map((h) => h.id));
+                this.renderSources();
+
+                // Build display: answer + sources section
+                let display = result.answer;
+                if (result.evidencePack.items.length > 0) {
+                    const sourcesSection = this.renderSourcesSection(result.evidencePack);
+                    if (sourcesSection) {
+                        display = `${result.answer}\n\n${sourcesSection}`;
+                    }
+                }
+
+                // Add agent diagnostics footer
+                const diagLine = `\n\n---\n*Agent: ${result.searchCalls} search, ${result.readCalls} read, ${result.steps.length} steps${result.truncated ? ' (truncated)' : ''}*`;
+                display += diagLine;
+
+                this.generatedResponse = display;
+                this.outputArea.empty();
+                this.outputArea.removeClass('empty');
+                this.outputArea.setText(display);
+
+                this.insertButton.buttonEl.style.display = 'inline-block';
+                this.appendButton.buttonEl.style.display = 'inline-block';
+                this.saveAsNoteButton.buttonEl.style.display = 'inline-block';
+
+                new Notice(`Agent complete: ${result.searchCalls} search, ${result.readCalls} read`);
+            } catch (error) {
+                this.outputArea.setText(`Answer generation failed: ${error instanceof Error ? error.message : String(error)}`);
+                generateBtn.disabled = false;
+                generateBtn.setText('Generate Answer');
+            }
+        });
+    }
+
+    private formatPhaseLabel(phase: string): string | null {
+        const labels: Record<string, string> = {
+            'extracting-terms': '✓ Extracted search terms',
+            'searching': '✓ Searched knowledge base',
+            'selecting': '✓ LLM selected sources to read',
+            'reading': '✓ Read source contents',
+            'answering': '✓ Generated answer',
+            'done': '',
+            'error': '✗ Error',
+        };
+        return labels[phase] ?? null;
     }
 
     /**
@@ -923,6 +1059,85 @@ export class QuickQueryModal extends Modal {
             ErrorHandler.handleError(error, 'FILE_OPERATION', {
                 operation: 'appendToNote',
                 filePath: this.activeFile.path
+            });
+        }
+    }
+
+    /**
+     * Save the generated response as a new note in WikiSynthesis/KBSearchQuestions/
+     * with frontmatter metadata (query, date, model, language, sources).
+     */
+    private async handleSaveAsNote(): Promise<void> {
+        if (!this.generatedResponse) {
+            new Notice('No response to save');
+            return;
+        }
+
+        const folder = 'WikiSynthesis/KBSearchQuestions';
+        const now = new Date();
+        const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const querySlug = this.prompt.trim()
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .slice(0, 60)
+            .replace(/-+$/, '');
+        const filename = `${folder}/${dateStr}-${querySlug}.md`;
+
+        const model = this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
+        const dateFormatted = now.toISOString();
+
+        // Build sources list from evidence pack if available
+        let sourcesYaml = '[]';
+        if (this.lastEvidencePack && this.lastEvidencePack.items.length > 0) {
+            const sourcePaths = this.lastEvidencePack.items.map((item) => item.path);
+            sourcesYaml = JSON.stringify(sourcePaths);
+        }
+
+        const frontmatter = [
+            '---',
+            `query: ${JSON.stringify(this.prompt.trim())}`,
+            `date: ${dateFormatted}`,
+            `model: ${model}`,
+            `language: ${this.outputLanguage}`,
+            `scope: ${this.queryScope}`,
+            `agentic: ${this.useAgenticMode}`,
+            `sources: ${sourcesYaml}`,
+            '---',
+            '',
+        ].join('\n');
+
+        const content = `${frontmatter}${this.generatedResponse}`;
+
+        try {
+            // Ensure folder exists
+            const folderExists = this.app.vault.getAbstractFileByPath(folder);
+            if (!folderExists) {
+                await this.app.vault.createFolder(folder);
+            }
+
+            // Check if file already exists, append counter if needed
+            let finalPath = filename;
+            let counter = 1;
+            while (this.app.vault.getAbstractFileByPath(finalPath)) {
+                finalPath = `${folder}/${dateStr}-${querySlug}-${counter}.md`;
+                counter++;
+            }
+
+            await this.app.vault.create(finalPath, content);
+            new Notice(`Saved to ${finalPath}`);
+
+            // Open the created file
+            const file = this.app.vault.getAbstractFileByPath(finalPath);
+            if (file instanceof TFile) {
+                await this.app.workspace.openLinkText(finalPath, '', false);
+            }
+
+            this.close();
+        } catch (error) {
+            ErrorHandler.handleError(error, 'FILE_OPERATION', {
+                operation: 'saveAsNote',
+                filePath: filename
             });
         }
     }

@@ -1262,3 +1262,84 @@
     flex-wrap: wrap;
 }
 
+/* Retrieval indexing progress bar */
+.retrieval-progress-bar-outer {
+    width: 100%;
+    height: 8px;
+    margin: 6px 0 4px 0;
+    border-radius: 4px;
+    background: var(--background-modifier-border);
+    overflow: hidden;
+}
+
+.retrieval-progress-bar-inner {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--interactive-accent);
+    transition: width 0.3s ease;
+}
+
+/* Agent progress and evidence preview */
+.quick-query-modal .agent-progress {
+    padding: 8px 0;
+}
+
+.quick-query-modal .agent-progress p {
+    margin: 2px 0;
+    color: var(--text-muted);
+}
+
+.quick-query-modal .agent-phase-label {
+    color: var(--text-success) !important;
+    font-size: var(--font-ui-smaller);
+}
+
+.quick-query-modal .evidence-preview-desc {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    margin-bottom: 10px;
+}
+
+.quick-query-modal .evidence-preview-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+
+.quick-query-modal .evidence-preview-item {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    margin-bottom: 6px;
+}
+
+.quick-query-modal .evidence-preview-item input[type='checkbox'] {
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.quick-query-modal .evidence-preview-item label {
+    cursor: pointer;
+}
+
+.quick-query-modal .evidence-heading {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+.quick-query-modal .evidence-snippet {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.quick-query-modal .agent-generate-btn {
+    margin-top: 8px;
+}
+

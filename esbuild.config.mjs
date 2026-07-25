@@ -82,7 +82,23 @@ const context = await esbuild.context({
         }));
         build.onLoad({ filter: /.*/, namespace: "sqljs-fts5" }, async () => {
           const fs = await import("fs/promises");
-          const source = await fs.readFile(sqlJsPath, "utf8");
+          let source = await fs.readFile(sqlJsPath, "utf8");
+
+          // Patch: inject wasmBinary support into the vendored Emscripten loader.
+          // This build (Emscripten 6.0.3) pre-dates the `wasmBinary` config option
+          // that newer sql.js builds support. In Obsidian's Electron renderer,
+          // `fetch()` of `file://` URLs is blocked and `fs` is unavailable, so
+          // the only way to load the wasm is via `wasmBinary` (read from the vault
+          // adapter). We patch the `Va` function (the wasm instantiation entry
+          // point) to check `Module.wasmBinary` before attempting any fetch.
+          //
+          // Original:  async function Va(a){var b=Sa;if(!Da(b)&&!ca)try{...fetch...}catch{...}return Ua(b,a)}
+          // Patched:   checks Module.wasmBinary first, uses WebAssembly.instantiate directly
+          source = source.replace(
+            'async function Va(a){var b=Sa;if(!Da(b)&&!ca)try{var c=fetch(b,{credentials:"same-origin"});return await WebAssembly.instantiateStreaming(c,a)}catch(d){C(`wasm streaming compile failed: ${d}`),C("falling back to ArrayBuffer instantiation")}return Ua(b,a)}',
+            'async function Va(a){var b=Sa;if(l.wasmBinary){var __wasmBytes=l.wasmBinary;if(__wasmBytes instanceof ArrayBuffer)__wasmBytes=new Uint8Array(__wasmBytes);return await WebAssembly.instantiate(__wasmBytes,a)}if(!Da(b)&&!ca)try{var c=fetch(b,{credentials:"same-origin"});return await WebAssembly.instantiateStreaming(c,a)}catch(d){C(`wasm streaming compile failed: ${d}`),C("falling back to ArrayBuffer instantiation")}return Ua(b,a)}'
+          );
+
           // Wrap the UMD source so it runs in a CJS context (with module/exports/
           // require) and then re-export the initSqlJs function as ESM default.
           // The UMD wrapper assigns exports["Module"] = initSqlJs in CJS.
@@ -99,7 +115,18 @@ const context = await esbuild.context({
             'let module = moduleObj;',
             'let require = __require;',
             source,
-            'const __initSqlJs = moduleObj.exports.Module || moduleObj.exports.default;',
+            'const __rawInitSqlJs = moduleObj.exports.Module || moduleObj.exports.default;',
+            '// Wrap initSqlJs to reset the singleton promise on failure, so a',
+            '// transient failure (e.g. wasm load error) does not poison all',
+            '// subsequent callers sharing the same module instance.',
+            '// `initSqlJsPromise` is a module-level var in the vendored source above.',
+            'const __initSqlJs = (config) => {',
+            '  const p = __rawInitSqlJs(config);',
+            '  if (p && typeof p.catch === "function") {',
+            '    p.catch(() => { initSqlJsPromise = undefined; });',
+            '  }',
+            '  return p;',
+            '};',
             'export default __initSqlJs;',
           ].join('\n');
           return { contents, loader: "js", resolveDir: path.dirname(sqlJsPath) };

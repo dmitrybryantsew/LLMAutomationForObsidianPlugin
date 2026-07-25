@@ -452,14 +452,43 @@ export class RetrievalDatabase {
 
   private async readWasmBinary(): Promise<Uint8Array | null> {
     const adapter = this.app.vault.adapter as any;
-    const wasmPath = this.config.wasmPath ?? '.obsidian/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm';
-    try {
-      if (typeof adapter.readBinary === 'function' && await adapter.exists(wasmPath)) {
-        const buffer = await adapter.readBinary(wasmPath);
-        return new Uint8Array(buffer);
+    const defaultRel = '.obsidian/plugins/gpt4free-text-generator-plugin/sql-wasm.wasm';
+    const configPath = this.config.wasmPath ?? defaultRel;
+
+    // Build candidate paths — vault-relative paths only, since the adapter only accepts those
+    const candidates: string[] = [defaultRel];
+    if (configPath !== defaultRel) {
+      if (configPath.includes(':') || configPath.startsWith('/')) {
+        const vaultRoot = (adapter as any).basePath || '';
+        if (vaultRoot && configPath.toLowerCase().startsWith(vaultRoot.toLowerCase())) {
+          const rel = configPath.slice(vaultRoot.length).replace(/\\/g, '/').replace(/^\//, '');
+          candidates.unshift(rel);
+        }
+        const obsIdx = configPath.replace(/\\/g, '/').indexOf('.obsidian/');
+        if (obsIdx >= 0) {
+          const rel = configPath.replace(/\\/g, '/').slice(obsIdx);
+          if (!candidates.includes(rel)) candidates.unshift(rel);
+        }
+      } else {
+        candidates.unshift(configPath);
       }
-    } catch {
-      // fall through
+    }
+
+    for (const candidate of candidates) {
+      try {
+        if (typeof adapter.exists === 'function' && await adapter.exists(candidate)) {
+          if (typeof adapter.readBinary === 'function') {
+            const buffer = await adapter.readBinary(candidate);
+            return new Uint8Array(buffer);
+          }
+          if (typeof adapter.read === 'function') {
+            const encoded = await adapter.read(candidate);
+            return Uint8Array.from(Buffer.from(encoded, 'base64'));
+          }
+        }
+      } catch {
+        // try next candidate
+      }
     }
     return null;
   }

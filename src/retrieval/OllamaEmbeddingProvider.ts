@@ -1,8 +1,9 @@
 import { EmbeddingProvider } from '../types/retrieval';
 
 const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
-const DEFAULT_CONCURRENCY = 4;
-const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_CONCURRENCY = 1;
+const REQUEST_TIMEOUT_MS = 300_000;
+const BATCH_SIZE = 16;
 
 export interface OllamaEmbeddingProviderOptions {
   endpoint?: string;
@@ -10,8 +11,8 @@ export interface OllamaEmbeddingProviderOptions {
   concurrency?: number;
 }
 
-interface OllamaEmbedResponse {
-  embedding: number[];
+interface OllamaBatchEmbedResponse {
+  embeddings: number[][];
 }
 
 export class OllamaEmbeddingProvider implements EmbeddingProvider {
@@ -30,15 +31,22 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
   async embed(texts: string[], signal?: AbortSignal): Promise<Float32Array[]> {
     const results: Float32Array[] = new Array(texts.length);
 
-    const batches: { index: number; text: string }[] = texts.map((text, index) => ({ index, text }));
+    // Split into batches of BATCH_SIZE and process with limited concurrency.
+    const batches: { index: number; texts: string[] }[] = [];
+    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+      batches.push({ index: i, texts: texts.slice(i, i + BATCH_SIZE) });
+    }
 
-    const worker = async (queue: { index: number; text: string }[]) => {
+    const worker = async (queue: { index: number; texts: string[] }[]) => {
       while (queue.length > 0) {
         const item = queue.shift();
         if (!item) break;
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-        results[item.index] = await this.embedOne(item.text, signal);
+        const vectors = await this.embedBatch(item.texts, signal);
+        for (let j = 0; j < vectors.length; j++) {
+          results[item.index + j] = vectors[j];
+        }
       }
     };
 
@@ -49,16 +57,18 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
     return results;
   }
 
-  private async embedOne(text: string, signal?: AbortSignal): Promise<Float32Array> {
+  private async embedBatch(texts: string[], signal?: AbortSignal): Promise<Float32Array[]> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    // Scale timeout with batch size: 60s per text in the batch.
+    const timeoutMs = Math.max(60_000, texts.length * 60_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     if (signal) {
       signal.addEventListener('abort', () => controller.abort());
     }
 
     try {
-      const body = JSON.stringify({ model: this.modelId, prompt: text });
-      const res = await fetch(`${this.endpoint}/api/embeddings`, {
+      const body = JSON.stringify({ model: this.modelId, input: texts });
+      const res = await fetch(`${this.endpoint}/api/embed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
@@ -66,11 +76,16 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
       });
 
       if (!res.ok) {
-        throw new Error(`Ollama embeddings API error: ${res.status} ${res.statusText}`);
+        throw new Error(`Ollama embed API error: ${res.status} ${res.statusText}`);
       }
 
-      const data = (await res.json()) as OllamaEmbedResponse;
-      return Float32Array.from(data.embedding);
+      const data = (await res.json()) as OllamaBatchEmbedResponse;
+      return data.embeddings.map((e) => Float32Array.from(e));
+    } catch (error) {
+      if (controller.signal.aborted && !signal?.aborted) {
+        throw new Error(`Ollama embed request timed out after ${timeoutMs / 1000}s for ${texts.length} texts`);
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }

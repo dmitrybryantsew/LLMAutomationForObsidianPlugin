@@ -29,6 +29,7 @@ import { SqliteVectorStore } from "../retrieval/SqliteVectorStore";
 import { EmbeddingCoordinator } from "../retrieval/EmbeddingCoordinator";
 import { OllamaEmbeddingProvider } from "../retrieval/OllamaEmbeddingProvider";
 import { ChutesEmbeddingProvider } from "../retrieval/ChutesEmbeddingProvider";
+import { CompanionClient } from "../retrieval/CompanionClient";
 import type { EmbeddingProvider } from "../types/retrieval";
 
 import {HIERARCHY_PLUGIN_ID} from "../constants"
@@ -68,6 +69,7 @@ export class PluginServices {
   private _retrievalDebugLogger!: DebugLogger;
   private _embeddingProvider: EmbeddingProvider | null = null;
   private _embeddingCoordinator: EmbeddingCoordinator | null = null;
+  private _companionClient: CompanionClient | null = null;
   
   // Settings
   private _settings: PluginSettings;
@@ -289,6 +291,10 @@ export class PluginServices {
     return this._embeddingCoordinator;
   }
 
+  public get companionClient(): CompanionClient | null {
+    return this._companionClient;
+  }
+
   private createEmbeddingProvider(): EmbeddingProvider | null {
     const cfg = this._settings.retrieval.embedding;
     if (!cfg || cfg.provider === 'none') return null;
@@ -354,6 +360,16 @@ export class PluginServices {
         this._retrievalDebugLogger
       );
     }
+
+    // Initialize the database first — vector store and embedding coordinator
+    // both depend on it being ready.
+    try {
+      await this._indexCoordinator.initialize();
+    } catch (error) {
+      console.error("Failed to initialize retrieval database:", error);
+      this._retrievalDebugLogger.logError(error instanceof Error ? error : new Error(String(error)));
+    }
+
     if (!this._retrievalService) {
       this._embeddingProvider = this.createEmbeddingProvider();
       const vectorStore = this._embeddingProvider ? new SqliteVectorStore(this._retrievalDatabase) : null;
@@ -373,6 +389,26 @@ export class PluginServices {
         }
       );
     } else {
+      // Check if the embedding provider config changed and we need to re-create it.
+      const newProvider = this.createEmbeddingProvider();
+      const oldProviderId = this._embeddingProvider?.modelId ?? null;
+      const newProviderId = newProvider?.modelId ?? null;
+      if (oldProviderId !== newProviderId) {
+        this._embeddingProvider = newProvider;
+        if (newProvider) {
+          const vectorStore = new SqliteVectorStore(this._retrievalDatabase);
+          await vectorStore.initialize();
+          if (!this._embeddingCoordinator) {
+            this._embeddingCoordinator = new EmbeddingCoordinator(this.app, this._retrievalDatabase, this._retrievalDebugLogger);
+            await this._embeddingCoordinator.initialize();
+          }
+          this._embeddingCoordinator.setProvider(newProvider);
+          this._retrievalService.setHybridRetriever(this._retrievalDatabase, vectorStore, newProvider);
+        } else {
+          // Switched to "none" — disable hybrid retrieval
+          this._embeddingCoordinator?.setProvider(null);
+        }
+      }
       this._retrievalService.updateOptions({
         evidenceTokenBudget: this._settings.retrieval.evidenceTokenBudget,
         defaultResultLimit: this._settings.retrieval.defaultResultLimit,
@@ -381,12 +417,20 @@ export class PluginServices {
       });
     }
 
-    try {
-      await this._indexCoordinator.initialize();
-    } catch (error) {
-      console.error("Failed to initialize retrieval database:", error);
-      this._retrievalDebugLogger.logError(error instanceof Error ? error : new Error(String(error)));
+    // Initialize companion client if enabled
+    const companionCfg = this._settings.retrieval.companion;
+    if (companionCfg?.enabled && companionCfg.endpoint) {
+      if (!this._companionClient) {
+        this._companionClient = new CompanionClient(companionCfg.endpoint);
+      } else {
+        this._companionClient.setEndpoint(companionCfg.endpoint);
+      }
+      // Fire-and-forget status check; availability is checked lazily
+      this._companionClient.checkStatus(true).catch(() => {});
+    } else {
+      this._companionClient = null;
     }
+
     return this._indexCoordinator;
   }
   

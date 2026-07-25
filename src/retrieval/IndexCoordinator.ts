@@ -7,6 +7,7 @@ import { VaultSource } from './VaultSource';
 export interface IndexAllOptions {
   rebuild?: boolean;
   signal?: AbortSignal;
+  onProgress?: (status: IndexStatus) => void;
 }
 
 export class IndexCoordinator {
@@ -25,6 +26,8 @@ export class IndexCoordinator {
     unchangedFiles: 0,
     skippedFiles: 0,
     deletedFiles: 0,
+    totalFiles: 0,
+    processedFiles: 0,
   };
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private currentAbort: AbortController | null = null;
@@ -103,6 +106,13 @@ export class IndexCoordinator {
     this.status.unchangedFiles = 0;
     this.status.skippedFiles = 0;
     this.status.deletedFiles = 0;
+    this.status.totalFiles = 0;
+    this.status.processedFiles = 0;
+
+    const onProgress = options.onProgress;
+    const reportProgress = () => {
+      onProgress?.(this.getStatus());
+    };
 
     const startedAt = Date.now();
     try {
@@ -111,11 +121,19 @@ export class IndexCoordinator {
       }
 
       const settings = this.getSettings();
-      for (const source of settings.sources.filter((entry) => entry.enabled)) {
+      const enabledSources = settings.sources.filter((entry) => entry.enabled);
+
+      // Pre-count total candidates across all enabled sources.
+      for (const source of enabledSources) {
+        this.status.totalFiles += this.vaultSource.listCandidates(source).length;
+      }
+      reportProgress();
+
+      for (const source of enabledSources) {
         if (signal.aborted) {
           break;
         }
-        await this.indexSource(source, signal);
+        await this.indexSource(source, signal, reportProgress);
       }
 
       await this.database.flush();
@@ -206,7 +224,11 @@ export class IndexCoordinator {
     this.refreshStatusFromDatabase();
   }
 
-  private async indexSource(source: ReturnType<typeof this.getSettings>['sources'][number], signal: AbortSignal): Promise<void> {
+  private async indexSource(
+    source: ReturnType<typeof this.getSettings>['sources'][number],
+    signal: AbortSignal,
+    onProgress?: (status: IndexStatus) => void
+  ): Promise<void> {
     const candidates = this.vaultSource.listCandidates(source);
     const observedPaths = new Set<string>();
 
@@ -223,6 +245,8 @@ export class IndexCoordinator {
       } else {
         this.status.skippedFiles++;
       }
+      this.status.processedFiles++;
+      onProgress?.(this.getStatus());
     }
 
     this.status.deletedFiles += await this.database.removeMissingFiles(source.id, observedPaths);

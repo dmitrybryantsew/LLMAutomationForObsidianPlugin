@@ -796,6 +796,7 @@ import {
 
     // Index status display.
     const statusContainer = containerEl.createEl('div', { cls: 'retrieval-status-container' });
+    let statusPollTimer: ReturnType<typeof setInterval> | null = null;
     const renderStatus = () => {
       statusContainer.empty();
       const coordinator = this.plugin.services.indexCoordinator;
@@ -807,14 +808,24 @@ import {
         return;
       }
       const status = coordinator.getStatus();
-      const state = status.state === 'indexing' ? 'Indexing…' : status.state === 'error' ? 'Error' : 'Idle';
+      const isIndexing = status.state === 'indexing';
+      const state = isIndexing ? 'Indexing…' : status.state === 'error' ? 'Error' : 'Idle';
       const last = status.lastIndexedAt ? new Date(status.lastIndexedAt).toLocaleString() : 'never';
       const lines = [
         `Status: ${state}`,
-        `Chunks: ${status.chunkCount}`,
-        `Files: ${status.fileCount}`,
-        `Last indexed: ${last}`,
       ];
+      if (isIndexing && status.totalFiles > 0) {
+        const pct = Math.round((status.processedFiles / status.totalFiles) * 100);
+        lines.push(`Progress: ${status.processedFiles} / ${status.totalFiles} files (${pct}%)`);
+        lines.push(`  indexed=${status.indexedFiles}, unchanged=${status.unchangedFiles}, skipped=${status.skippedFiles}`);
+        // Progress bar
+        const barOuter = statusContainer.createEl('div', { cls: 'retrieval-progress-bar-outer' });
+        const barInner = barOuter.createEl('div', { cls: 'retrieval-progress-bar-inner' });
+        barInner.style.width = `${pct}%`;
+      }
+      lines.push(`Chunks: ${status.chunkCount}`);
+      lines.push(`Files: ${status.fileCount}`);
+      lines.push(`Last indexed: ${last}`);
       if (status.lastError) {
         lines.push(`Last error: ${status.lastError}`);
       }
@@ -823,6 +834,21 @@ import {
       }
     };
     renderStatus();
+
+    const startStatusPolling = () => {
+      if (statusPollTimer) clearInterval(statusPollTimer);
+      statusPollTimer = setInterval(() => {
+        const coordinator = this.plugin.services.indexCoordinator;
+        if (!coordinator) return;
+        if (coordinator.getStatus().state !== 'indexing') {
+          if (statusPollTimer) {
+            clearInterval(statusPollTimer);
+            statusPollTimer = null;
+          }
+        }
+        renderStatus();
+      }, 500);
+    };
 
     // Action buttons.
     const actionsContainer = containerEl.createEl('div', { cls: 'retrieval-actions' });
@@ -840,14 +866,19 @@ import {
           return;
         }
         new Notice('Indexing started...');
+        renderStatus();
+        startStatusPolling();
         try {
-          const status = await coordinator.indexAll();
+          const status = await coordinator.indexAll({
+            onProgress: () => {},
+          });
           new Notice(
             `Index updated: ${status.indexedFiles} indexed, ${status.unchangedFiles} unchanged, ${status.skippedFiles} skipped, ${status.deletedFiles} deleted.`
           );
           renderStatus();
         } catch (error) {
           new Notice(`Index failed: ${error instanceof Error ? error.message : String(error)}`);
+          renderStatus();
         }
       });
 
@@ -865,13 +896,38 @@ import {
           return;
         }
         new Notice('Clearing and rebuilding index...');
+        renderStatus();
+        startStatusPolling();
         try {
           const status = await coordinator.indexAll({ rebuild: true });
           new Notice(`Rebuilt index: ${status.indexedFiles} indexed, ${status.deletedFiles} removed.`);
           renderStatus();
         } catch (error) {
           new Notice(`Rebuild failed: ${error instanceof Error ? error.message : String(error)}`);
+          renderStatus();
         }
+      });
+
+    new ButtonComponent(actionsContainer)
+      .setButtonText('Cancel indexing')
+      .setWarning()
+      .onClick(() => {
+        const coordinator = this.plugin.services.indexCoordinator;
+        if (!coordinator) {
+          new Notice('Retrieval is not initialized.');
+          return;
+        }
+        if (coordinator.getStatus().state !== 'indexing') {
+          new Notice('No indexing in progress.');
+          return;
+        }
+        coordinator.cancelCurrentIndex();
+        new Notice('Indexing cancelled.');
+        if (statusPollTimer) {
+          clearInterval(statusPollTimer);
+          statusPollTimer = null;
+        }
+        renderStatus();
       });
 
     new ButtonComponent(actionsContainer)
@@ -920,6 +976,8 @@ import {
         dd.onChange(async (value) => {
           emb.provider = value as typeof emb.provider;
           await this.plugin.saveSettings();
+          await this.plugin.services.ensureRetrievalServices();
+          this.display();
         });
       });
 
@@ -1000,37 +1058,105 @@ import {
           new Notice('Embedding provider not ready.');
           return;
         }
+        const coordinator = this.plugin.services.indexCoordinator;
+        if (!coordinator) {
+          new Notice('Retrieval not initialized.');
+          return;
+        }
+        const status = coordinator.getStatus();
+        if (status.chunkCount === 0) {
+          new Notice('No chunks indexed. Run "Index now" first.');
+          return;
+        }
         new Notice('Building semantic index...');
         try {
-          const coordinator = this.plugin.services.indexCoordinator;
-          if (!coordinator) {
-            new Notice('Retrieval not initialized.');
-            return;
-          }
-          const status = coordinator.getStatus();
-          if (status.chunkCount === 0) {
-            new Notice('No chunks indexed. Run "Index now" first.');
-            return;
-          }
+          const allChunks = (this.plugin.services.retrievalDatabase as any)?.select(
+            'SELECT id, source_id, path, basename, heading_path_json, start_line, end_line, text, normalized_text, tags_json, links_json, content_hash, modified_time FROM retrieval_chunks'
+          ).map((c: any) => ({
+            id: c.id, sourceId: c.source_id, path: c.path, basename: c.basename,
+            headingPath: JSON.parse(c.heading_path_json || '[]'),
+            startLine: c.start_line, endLine: c.end_line,
+            text: c.text, normalizedText: c.normalized_text,
+            tags: JSON.parse(c.tags_json || '[]'),
+            outboundLinks: JSON.parse(c.links_json || '[]'),
+            contentHash: c.content_hash, modifiedTime: c.modified_time,
+          }));
+          const total = allChunks.length;
+          let lastNotice = 0;
           const result = await embCoord.buildIndex(
-            // Get all chunks from DB — the coordinator handles batching
-            (this.plugin.services.retrievalDatabase as any)?.select(
-              'SELECT id, source_id, path, basename, heading_path_json, start_line, end_line, text, normalized_text, tags_json, links_json, content_hash, modified_time FROM retrieval_chunks'
-            ).map((c: any) => ({
-              id: c.id, sourceId: c.source_id, path: c.path, basename: c.basename,
-              headingPath: JSON.parse(c.heading_path_json || '[]'),
-              startLine: c.start_line, endLine: c.end_line,
-              text: c.text, normalizedText: c.normalized_text,
-              tags: JSON.parse(c.tags_json || '[]'),
-              outboundLinks: JSON.parse(c.links_json || '[]'),
-              contentHash: c.content_hash, modifiedTime: c.modified_time,
-            }))
+            allChunks,
+            undefined,
+            (embedded, total) => {
+              const now = Date.now();
+              if (now - lastNotice > 2000) {
+                const pct = Math.round((embedded / total) * 100);
+                new Notice(`Embedding: ${embedded} / ${total} (${pct}%)`);
+                lastNotice = now;
+              }
+            }
           );
           new Notice(`Semantic index built: ${result.embedded} embedded, ${result.skipped} skipped.`);
         } catch (error) {
           new Notice(`Semantic build failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       });
+
+    // --- Companion service ---
+    containerEl.createEl('h4', { text: 'Companion service (external sources)' });
+    const companion = retrieval.companion ?? { enabled: false, endpoint: 'http://127.0.0.1:43110' };
+    retrieval.companion = companion;
+
+    new Setting(containerEl)
+      .setName('Enable companion')
+      .setDesc('Connect to a local companion service for indexing external code repos and docs.')
+      .addToggle(toggle => toggle
+        .setValue(companion.enabled)
+        .onChange(async (value) => {
+          companion.enabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Companion endpoint')
+      .setDesc('Loopback URL of the companion service. Default: http://127.0.0.1:43110')
+      .addText(text => text
+        .setValue(companion.endpoint)
+        .setPlaceholder('http://127.0.0.1:43110')
+        .onChange(async (value) => {
+          companion.endpoint = value.trim() || 'http://127.0.0.1:43110';
+          await this.plugin.saveSettings();
+        }));
+
+    // Companion status indicator
+    const companionStatusEl = containerEl.createEl('p', { cls: 'retrieval-companion-status' });
+    companionStatusEl.setText('Companion: checking...');
+    const checkCompanion = async () => {
+      if (!companion.enabled) {
+        companionStatusEl.setText('Companion: disabled');
+        companionStatusEl.style.color = 'var(--text-muted)';
+        return;
+      }
+      try {
+        const client = this.plugin.services.companionClient;
+        if (!client) {
+          companionStatusEl.setText('Companion: not initialized (reload plugin)');
+          companionStatusEl.style.color = 'var(--text-warning)';
+          return;
+        }
+        const status = await client.checkStatus(true);
+        if (status?.running) {
+          companionStatusEl.setText(`Companion: connected (v${status.version}, ${status.allowlistSize} source(s))`);
+          companionStatusEl.style.color = 'var(--text-success)';
+        } else {
+          companionStatusEl.setText('Companion: offline');
+          companionStatusEl.style.color = 'var(--text-warning)';
+        }
+      } catch {
+        companionStatusEl.setText('Companion: offline');
+        companionStatusEl.style.color = 'var(--text-warning)';
+      }
+    };
+    checkCompanion();
   }
 
   addStudyPathSettings(containerEl: HTMLElement): void {

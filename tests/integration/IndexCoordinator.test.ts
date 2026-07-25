@@ -89,6 +89,25 @@ describe('IndexCoordinator (integration)', () => {
       expect(status.state).toBe('idle');
     });
 
+    it('reports totalFiles and processedFiles via onProgress', async () => {
+      mock.addFile('notes/a.md', '# A\n\nBody.', 1000);
+      mock.addFile('notes/b.md', '# B\n\nBody.', 1000);
+      mock.addFile('notes/c.md', '# C\n\nBody.', 1000);
+
+      const { coordinator } = await makeCoordinator();
+      const progressSnapshots: { processed: number; total: number }[] = [];
+      const status = await coordinator.indexAll({
+        onProgress: (s) => progressSnapshots.push({ processed: s.processedFiles, total: s.totalFiles }),
+      });
+
+      expect(status.totalFiles).toBe(3);
+      expect(status.processedFiles).toBe(3);
+      // At least the final snapshot should show 3/3
+      const last = progressSnapshots[progressSnapshots.length - 1];
+      expect(last.processed).toBe(3);
+      expect(last.total).toBe(3);
+    });
+
     it('skips files over maxFileBytes', async () => {
       mock.addFile('notes/small.md', '# Small\n\nTiny.', 1000);
       mock.addFile('notes/huge.md', '# Huge\n\n' + 'X'.repeat(2000), 1000);

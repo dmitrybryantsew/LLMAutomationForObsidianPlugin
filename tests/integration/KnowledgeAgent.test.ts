@@ -149,4 +149,124 @@ describe('KnowledgeAgent', () => {
     expect(result.citations).toEqual(expect.arrayContaining(['[S1]', '[S2]']));
     expect(result.totalLatencyMs).toBeGreaterThan(0);
   });
+
+  it('supports two-phase API: prepareEvidence + generateAnswer', async () => {
+    const generateText = vi.fn()
+      .mockResolvedValueOnce('1') // selection: read source 1 (cats.md)
+      .mockResolvedValueOnce('Cats are small furry pets [S1].'); // answer
+
+    const agent = new KnowledgeAgent({
+      retrievalService: service,
+      generateText,
+      model: 'test-model',
+    });
+
+    // Phase 1: gather evidence
+    const evidence = await agent.prepareEvidence('cats');
+    expect(evidence.hits.length).toBe(1);
+    expect(evidence.searchCalls).toBe(1);
+    expect(evidence.readCalls).toBe(1);
+    expect(evidence.steps.length).toBe(2); // search + read
+    expect(evidence.refinedQuery).toBe('cats');
+
+    // Phase 2: generate answer (may modify hits before this)
+    const result = await agent.generateAnswer('cats', evidence);
+    expect(result.answer).toContain('Cats');
+    expect(result.citations).toContain('[S1]');
+    expect(result.steps.length).toBe(3); // search + read + answer
+  });
+
+  it('allows deselecting evidence between phases', async () => {
+    const generateText = vi.fn()
+      .mockResolvedValueOnce('1,2') // selection: read sources 1 and 2
+      .mockResolvedValueOnce('Cats and dogs are pets [S1].'); // answer
+
+    const agent = new KnowledgeAgent({
+      retrievalService: service,
+      generateText,
+      model: 'test-model',
+    });
+
+    const evidence = await agent.prepareEvidence('pets');
+    expect(evidence.hits.length).toBe(2);
+
+    // User deselects the second hit
+    const filteredEvidence = {
+      ...evidence,
+      hits: evidence.hits.slice(0, 1),
+    };
+
+    const result = await agent.generateAnswer('pets', filteredEvidence);
+    expect(result.answer).toContain('Cats');
+    // Only S1 should be in the answer prompt since we filtered to 1 hit
+    expect(result.evidencePack.items.length).toBe(2); // original evidence pack unchanged
+  });
+
+  it('emits progress events during execution', async () => {
+    const generateText = vi.fn()
+      .mockResolvedValueOnce('1')
+      .mockResolvedValueOnce('Cats are pets [S1].');
+
+    const agent = new KnowledgeAgent({
+      retrievalService: service,
+      generateText,
+      model: 'test-model',
+    });
+
+    const events: { phase: string; message: string }[] = [];
+    await agent.answer('cats', {}, (event) => {
+      events.push({ phase: event.phase, message: event.message });
+    });
+
+    const phases = events.map((e) => e.phase);
+    expect(phases).toContain('extracting-terms');
+    expect(phases).toContain('searching');
+    expect(phases).toContain('selecting');
+    expect(phases).toContain('reading');
+    expect(phases).toContain('answering');
+    expect(phases).toContain('done');
+  });
+
+  it('emits events with correct phases in two-phase mode', async () => {
+    const generateText = vi.fn()
+      .mockResolvedValueOnce('1')
+      .mockResolvedValueOnce('Answer [S1].');
+
+    const agent = new KnowledgeAgent({
+      retrievalService: service,
+      generateText,
+      model: 'test-model',
+    });
+
+    const phase1Events: string[] = [];
+    const evidence = await agent.prepareEvidence('cats', {}, (e) => {
+      phase1Events.push(e.phase);
+    });
+    expect(phase1Events).toContain('searching');
+    expect(phase1Events).toContain('done');
+
+    const phase2Events: string[] = [];
+    await agent.generateAnswer('cats', evidence, {}, (e) => {
+      phase2Events.push(e.phase);
+    });
+    expect(phase2Events).toContain('answering');
+    expect(phase2Events).toContain('done');
+  });
+
+  it('includes allowGeneralKnowledge in answer prompt when enabled', async () => {
+    const generateText = vi.fn()
+      .mockResolvedValueOnce('1')
+      .mockResolvedValueOnce('Cats are pets [S1]. General knowledge: cats have whiskers (uncited).');
+
+    const agent = new KnowledgeAgent({
+      retrievalService: service,
+      generateText,
+      model: 'test-model',
+    });
+
+    const result = await agent.answer('cats', { allowGeneralKnowledge: true });
+    // The answer prompt should have been called with the general knowledge instruction
+    const answerCall = generateText.mock.calls[1];
+    expect(answerCall[0].message).toContain('General knowledge (uncited)');
+  });
 });

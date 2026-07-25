@@ -131,6 +131,10 @@ const DEFAULT_SETTINGS = {
       semanticThreshold: 0.3,
       lexicalVeto: true,
     },
+    companion: {
+      enabled: false,
+      endpoint: 'http://127.0.0.1:43110',
+    },
   },
   studySourceGroups: [
     {

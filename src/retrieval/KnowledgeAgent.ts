@@ -1,6 +1,9 @@
 import {
   BoundedSourceRead,
   EvidencePack,
+  KnowledgeAgentEvent,
+  KnowledgeAgentEventCallback,
+  KnowledgeAgentEvidence,
   KnowledgeAgentOptions,
   KnowledgeAgentResult,
   KnowledgeAgentStep,
@@ -42,151 +45,214 @@ Sources:
 export class KnowledgeAgent {
   constructor(private deps: KnowledgeAgentDeps) {}
 
+  /**
+   * Full one-shot agent loop: search → read → answer.
+   * Emits progress events via ``onEvent`` if provided.
+   */
   async answer(
     question: string,
-    options: Partial<KnowledgeAgentOptions> = {}
+    options: Partial<KnowledgeAgentOptions> = {},
+    onEvent?: KnowledgeAgentEventCallback
   ): Promise<KnowledgeAgentResult> {
     const opts = { ...DEFAULT_AGENT_OPTIONS, ...options };
     const startTime = performance.now();
 
+    // Phase 1: gather evidence
+    const evidence = await this.prepareEvidence(question, opts, onEvent);
+
+    if (evidence.hits.length === 0) {
+      const totalElapsed = performance.now() - startTime;
+      onEvent?.({ phase: 'done', message: 'No evidence found' });
+      return {
+        answer: 'I could not find this in the indexed sources. No search results were returned.',
+        citations: [],
+        evidencePack: evidence.evidencePack,
+        steps: evidence.steps,
+        totalLatencyMs: totalElapsed,
+        searchCalls: evidence.searchCalls,
+        readCalls: evidence.readCalls,
+        truncated: evidence.truncated,
+      };
+    }
+
+    // Phase 2: generate answer from the gathered evidence
+    const result = await this.generateAnswer(question, evidence, opts, onEvent);
+    return {
+      ...result,
+      totalLatencyMs: performance.now() - startTime,
+    };
+  }
+
+  /**
+   * Phase 1: Search the knowledge base, ask the LLM which sources to read,
+   * and return the selected evidence. The caller can preview this evidence
+   * (with checkboxes) before calling ``generateAnswer``.
+   */
+  async prepareEvidence(
+    question: string,
+    options: Partial<KnowledgeAgentOptions> = {},
+    onEvent?: KnowledgeAgentEventCallback
+  ): Promise<KnowledgeAgentEvidence> {
+    const opts = { ...DEFAULT_AGENT_OPTIONS, ...options };
     const steps: KnowledgeAgentStep[] = [];
     let searchCalls = 0;
     let readCalls = 0;
     const readChunks = new Map<string, SearchHit>();
-    const allHits: SearchHit[] = [];
     let truncated = false;
 
-    const timeoutController = new AbortController();
-    const timeout = setTimeout(() => timeoutController.abort(), opts.timeoutMs);
+    // Step 0: Extract search terms from the question
+    onEvent?.({ phase: 'extracting-terms', message: 'Extracting search terms...' });
+    const refinedQuery = await this.extractSearchTerms(question, opts);
+    steps.push({
+      type: 'search',
+      query: refinedQuery,
+      searchResultCount: 0,
+      searchResultPaths: [],
+      searchResultSnippets: [],
+      latencyMs: 0,
+    });
 
-    try {
-      // Step 0: Extract search terms from the question
-      const refinedQuery = await this.extractSearchTerms(question, opts);
-      steps.push({
-        type: 'search',
-        query: refinedQuery,
-        searchResultCount: 0,
-        searchResultPaths: [],
-        searchResultSnippets: [],
-        latencyMs: 0,
-      });
+    // Step 1: Search with refined query
+    onEvent?.({ phase: 'searching', message: `Searching: "${refinedQuery.slice(0, 60)}"...` });
+    const searchStart = performance.now();
+    const hits = await this.deps.retrievalService.search({
+      query: refinedQuery,
+      limit: 20,
+    });
+    const searchElapsed = performance.now() - searchStart;
+    searchCalls++;
 
-      // Step 1: Search with refined query
-      const searchStart = performance.now();
-      const hits = await this.deps.retrievalService.search({
-        query: refinedQuery,
-        limit: 20,
-      });
-      const searchElapsed = performance.now() - searchStart;
-      searchCalls++;
+    // Update the search step with results
+    const searchStep = steps[0];
+    searchStep.searchResultCount = hits.length;
+    searchStep.searchResultPaths = hits.slice(0, 10).map((h) => h.path);
+    searchStep.searchResultSnippets = hits.slice(0, 10).map((h) => this.formatSnippet(h));
+    searchStep.latencyMs = searchElapsed;
 
-      allHits.push(...hits);
-
-      // Update the search step with results
-      const searchStep = steps[0];
-      searchStep.searchResultCount = hits.length;
-      searchStep.searchResultPaths = hits.slice(0, 10).map((h) => h.path);
-      searchStep.searchResultSnippets = hits.slice(0, 10).map((h) => this.formatSnippet(h));
-      searchStep.latencyMs = searchElapsed;
-
-      if (hits.length === 0) {
-        const answer = 'I could not find this in the indexed sources. No search results were returned.';
-        const totalElapsed = performance.now() - startTime;
-        return {
-          answer,
-          citations: [],
-          evidencePack: { query: question, items: [], totalEstimatedTokens: 0, omittedHitCount: 0 },
-          steps,
-          totalLatencyMs: totalElapsed,
-          searchCalls,
-          readCalls,
-          truncated,
-        };
-      }
-
-      // Step 2: Ask LLM which sources to read (or if it can answer from snippets)
-      const selectionPrompt = this.buildSelectionPrompt(question, hits, opts);
-      const selectionStart = performance.now();
-      const selectionResponse = await this.deps.generateText({
-        model: this.deps.model,
-        message: selectionPrompt,
-        temperature: 0.1,
-        maxTokens: 500,
-      });
-      const selectionElapsed = performance.now() - selectionStart;
-
-      const readIndices = this.parseReadRequest(selectionResponse, hits.length);
-
-      steps.push({
-        type: 'read',
-        readChunkId: readIndices.length > 0 ? readIndices.map((i) => hits[i]?.id).filter(Boolean).join(', ') : undefined,
-        readPath: readIndices.length > 0 ? readIndices.map((i) => hits[i]?.path).filter(Boolean).join(', ') : undefined,
-        readSnippet: selectionResponse.slice(0, 200),
-        latencyMs: selectionElapsed,
-      });
-
-      // Step 3: Read the selected sources
-      for (const idx of readIndices) {
-        if (readCalls >= opts.maxReadCalls) {
-          truncated = true;
-          break;
-        }
-        const hit = hits[idx];
-        if (!hit) continue;
-        readChunks.set(hit.id, hit);
-        readCalls++;
-      }
-
-      // If LLM didn't select any reads, use top hits by default
-      if (readChunks.size === 0 && hits.length > 0) {
-        const defaultReadCount = Math.min(3, hits.length, opts.maxReadCalls);
-        for (let i = 0; i < defaultReadCount; i++) {
-          readChunks.set(hits[i].id, hits[i]);
-          readCalls++;
-        }
-      }
-
-      // Step 4: Build evidence pack from read chunks
-      const selectedHits = Array.from(readChunks.values());
-      const evidencePack = this.deps.retrievalService
-        ? await this.buildEvidencePack(question, selectedHits, opts)
-        : { query: question, items: [], totalEstimatedTokens: 0, omittedHitCount: 0 };
-
-      // Step 5: Generate final answer
-      const answerPrompt = this.buildAnswerPrompt(question, selectedHits, opts);
-      const answerStart = performance.now();
-      const answer = await this.deps.generateText({
-        model: this.deps.model,
-        message: answerPrompt,
-        temperature: opts.temperature,
-        maxTokens: opts.maxAnswerTokens,
-      });
-      const answerElapsed = performance.now() - answerStart;
-
-      const citations = this.extractCitations(answer);
-
-      steps.push({
-        type: 'answer',
-        answer,
-        citations,
-        latencyMs: answerElapsed,
-      });
-
-      const totalElapsed = performance.now() - startTime;
-
+    if (hits.length === 0) {
+      onEvent?.({ phase: 'done', message: 'No search results' });
       return {
-        answer,
-        citations,
-        evidencePack,
+        hits: [],
+        evidencePack: { query: question, items: [], totalEstimatedTokens: 0, omittedHitCount: 0 },
         steps,
-        totalLatencyMs: totalElapsed,
         searchCalls,
         readCalls,
         truncated,
+        refinedQuery,
       };
-    } finally {
-      clearTimeout(timeout);
     }
+
+    // Step 2: Ask LLM which sources to read
+    onEvent?.({ phase: 'selecting', message: 'Selecting sources to read...' });
+    const selectionPrompt = this.buildSelectionPrompt(question, hits, opts);
+    const selectionStart = performance.now();
+    const selectionResponse = await this.deps.generateText({
+      model: this.deps.model,
+      message: selectionPrompt,
+      temperature: 0.1,
+      maxTokens: 500,
+    });
+    const selectionElapsed = performance.now() - selectionStart;
+
+    const readIndices = this.parseReadRequest(selectionResponse, hits.length);
+
+    steps.push({
+      type: 'read',
+      readChunkId: readIndices.length > 0 ? readIndices.map((i) => hits[i]?.id).filter(Boolean).join(', ') : undefined,
+      readPath: readIndices.length > 0 ? readIndices.map((i) => hits[i]?.path).filter(Boolean).join(', ') : undefined,
+      readSnippet: selectionResponse.slice(0, 200),
+      latencyMs: selectionElapsed,
+    });
+
+    // Step 3: Read the selected sources
+    onEvent?.({ phase: 'reading', message: `Reading ${readIndices.length || 'top'} sources...` });
+    for (const idx of readIndices) {
+      if (readCalls >= opts.maxReadCalls) {
+        truncated = true;
+        break;
+      }
+      const hit = hits[idx];
+      if (!hit) continue;
+      readChunks.set(hit.id, hit);
+      readCalls++;
+    }
+
+    // If LLM didn't select any reads, use top hits by default
+    if (readChunks.size === 0 && hits.length > 0) {
+      const defaultReadCount = Math.min(3, hits.length, opts.maxReadCalls);
+      for (let i = 0; i < defaultReadCount; i++) {
+        readChunks.set(hits[i].id, hits[i]);
+        readCalls++;
+      }
+    }
+
+    // Build evidence pack from read chunks
+    const selectedHits = Array.from(readChunks.values());
+    const evidencePack = await this.buildEvidencePack(question, selectedHits, opts);
+
+    onEvent?.({
+      phase: 'done',
+      message: `Found ${selectedHits.length} evidence source(s)`,
+      data: selectedHits,
+    });
+
+    return {
+      hits: selectedHits,
+      evidencePack,
+      steps,
+      searchCalls,
+      readCalls,
+      truncated,
+      refinedQuery,
+    };
+  }
+
+  /**
+   * Phase 2: Generate a grounded answer from the selected evidence.
+   * The caller may have modified the hits (e.g. deselected some via checkboxes)
+   * before calling this.
+   */
+  async generateAnswer(
+    question: string,
+    evidence: KnowledgeAgentEvidence,
+    options: Partial<KnowledgeAgentOptions> = {},
+    onEvent?: KnowledgeAgentEventCallback
+  ): Promise<KnowledgeAgentResult> {
+    const opts = { ...DEFAULT_AGENT_OPTIONS, ...options };
+
+    onEvent?.({ phase: 'answering', message: 'Generating answer...' });
+    const answerPrompt = this.buildAnswerPrompt(question, evidence.hits, opts);
+    const answerStart = performance.now();
+    const answer = await this.deps.generateText({
+      model: this.deps.model,
+      message: answerPrompt,
+      temperature: opts.temperature,
+      maxTokens: opts.maxAnswerTokens,
+    });
+    const answerElapsed = performance.now() - answerStart;
+
+    const citations = this.extractCitations(answer);
+
+    const steps = [...evidence.steps];
+    steps.push({
+      type: 'answer',
+      answer,
+      citations,
+      latencyMs: answerElapsed,
+    });
+
+    onEvent?.({ phase: 'done', message: 'Answer generated' });
+
+    return {
+      answer,
+      citations,
+      evidencePack: evidence.evidencePack,
+      steps,
+      totalLatencyMs: 0,
+      searchCalls: evidence.searchCalls,
+      readCalls: evidence.readCalls,
+      truncated: evidence.truncated,
+    };
   }
 
   private formatSnippet(hit: SearchHit): string {
@@ -199,11 +265,9 @@ export class KnowledgeAgent {
     question: string,
     opts: KnowledgeAgentOptions
   ): Promise<string> {
-    // For short queries (<= 5 words), use as-is — FTS5 handles them well
     const words = question.trim().split(/\s+/);
     if (words.length <= 5) return question;
 
-    // For longer queries, ask the LLM to extract 2-5 search terms
     const prompt = `Extract 2-5 key search terms from this question. Reply with ONLY the terms separated by spaces, nothing else.
 
 Question: ${question}
@@ -218,7 +282,6 @@ Search terms:`;
         maxTokens: 50,
       });
       const cleaned = response.trim().replace(/^search terms?:?\s*/i, '').trim();
-      // Only use if it produced something reasonable
       if (cleaned.length > 0 && cleaned.length < question.length) {
         return cleaned;
       }
@@ -226,7 +289,6 @@ Search terms:`;
       // Fall through to simple truncation
     }
 
-    // Fallback: use first 5 words
     return words.slice(0, 5).join(' ');
   }
 
@@ -278,6 +340,10 @@ Search terms:`;
   ): string {
     const lines: string[] = [];
     lines.push(GROUNDED_ANSWER_INSTRUCTION);
+    if (opts.allowGeneralKnowledge) {
+      lines.push('');
+      lines.push('If you use general knowledge not from the evidence, label it as "General knowledge (uncited)" and do not present it as source evidence.');
+    }
     lines.push('');
     lines.push('---');
     lines.push('');
