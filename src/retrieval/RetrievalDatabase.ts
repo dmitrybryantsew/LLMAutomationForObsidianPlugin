@@ -33,6 +33,7 @@ export class RetrievalDatabase {
   private initializePromise: Promise<void> | null = null;
   private pendingPersist = false;
   private persistPromise: Promise<void> | null = null;
+  private persistTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: App, config: RetrievalDatabaseConfig) {
     this.app = app;
@@ -67,6 +68,10 @@ export class RetrievalDatabase {
   }
 
   async flush(): Promise<void> {
+    if (this.persistTimeout) {
+      clearTimeout(this.persistTimeout);
+      this.persistTimeout = null;
+    }
     if (this.persistPromise) {
       await this.persistPromise;
     }
@@ -184,6 +189,23 @@ export class RetrievalDatabase {
     this.schedulePersist();
   }
 
+  async updateFileModifiedTime(sourceId: string, path: string, modifiedTime: number): Promise<void> {
+    const db = this.requireDb();
+    const normalizedPath = normalizePath(path);
+    db.run('BEGIN');
+    try {
+      db.run(
+        'UPDATE retrieval_files SET modified_time = ? WHERE source_id = ? AND path = ?',
+        [modifiedTime, sourceId, normalizedPath]
+      );
+      db.run('COMMIT');
+    } catch (error) {
+      db.run('ROLLBACK');
+      throw error;
+    }
+    this.schedulePersist();
+  }
+
   async removeFile(sourceId: string, path: string): Promise<void> {
     const db = this.requireDb();
     const normalizedPath = normalizePath(path);
@@ -206,10 +228,16 @@ export class RetrievalDatabase {
       [sourceId]
     );
     let deleted = 0;
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       if (!observedPaths.has(row.path)) {
         await this.removeFile(sourceId, row.path);
         deleted++;
+
+        // Yield to the main thread occasionally during large batch deletions
+        if (deleted > 0 && deleted % 50 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
     }
     return deleted;
@@ -393,11 +421,19 @@ export class RetrievalDatabase {
 
   private schedulePersist(): void {
     this.pendingPersist = true;
-    if (!this.persistPromise) {
-      this.persistPromise = this.persistNow().finally(() => {
-        this.persistPromise = null;
-      });
+    if (this.persistTimeout) {
+      clearTimeout(this.persistTimeout);
     }
+
+    // Debounce the heavy db.export() and write operations
+    this.persistTimeout = setTimeout(() => {
+      this.persistTimeout = null;
+      if (!this.persistPromise) {
+        this.persistPromise = this.persistNow().finally(() => {
+          this.persistPromise = null;
+        });
+      }
+    }, 2000);
   }
 
   private async persistNow(): Promise<void> {

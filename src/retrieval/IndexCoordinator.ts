@@ -232,12 +232,21 @@ export class IndexCoordinator {
     const candidates = this.vaultSource.listCandidates(source);
     const observedPaths = new Set<string>();
 
-    for (const candidate of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
       if (signal.aborted) {
         return;
       }
+
+      // Yield to the main thread every 50 files to prevent blocking the UI
+      if (i > 0 && i % 50 === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        onProgress?.(this.getStatus());
+      }
+
       observedPaths.add(candidate.path);
       const result = await this.vaultSource.indexFile(this.database, source, candidate);
+
       if (result.status === 'indexed') {
         this.status.indexedFiles++;
       } else if (result.status === 'unchanged') {
@@ -246,8 +255,10 @@ export class IndexCoordinator {
         this.status.skippedFiles++;
       }
       this.status.processedFiles++;
-      onProgress?.(this.getStatus());
     }
+
+    // Final progress report for this source
+    onProgress?.(this.getStatus());
 
     this.status.deletedFiles += await this.database.removeMissingFiles(source.id, observedPaths);
   }
