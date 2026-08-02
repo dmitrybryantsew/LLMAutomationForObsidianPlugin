@@ -57,16 +57,25 @@ export class VaultSource {
       };
     }
 
+    const existing = database.getFileRecord(source.id, candidate.path);
+
+    // Fast path: if the file's modified time hasn't changed, we can skip reading/hashing
+    if (existing && existing.modifiedTime === candidate.modifiedTime) {
+      return {
+        path: candidate.path,
+        status: 'unchanged',
+        chunkCount: 0,
+      };
+    }
+
     const content = await this.app.vault.read(candidate.file);
     const normalized = normalizeRetrievalText(content);
     const contentHash = fnv1aHash(normalized);
-    const existing = database.getFileRecord(source.id, candidate.path);
 
-    if (
-      existing &&
-      existing.contentHash === contentHash &&
-      existing.modifiedTime === candidate.modifiedTime
-    ) {
+    // Secondary check: if for some reason the modification time changed but content didn't
+    if (existing && existing.contentHash === contentHash) {
+      // Just update the modified time in the DB to avoid re-reading next time
+      await database.updateFileModifiedTime(source.id, candidate.path, candidate.modifiedTime);
       return {
         path: candidate.path,
         status: 'unchanged',
