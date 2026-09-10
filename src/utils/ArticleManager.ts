@@ -212,6 +212,8 @@ class ArticleManager {
         throw new Error("LLM client not initialized. Please check your settings and API keys.");
       }
 
+      const tagModel = this.getTagModelForProvider(provider);
+
       const tagsOptions: TextGenerationOptions = {
         message: `Based on this article content and title, generate relevant tags.
                  Consider main topics, technologies, concepts, and categories.
@@ -222,7 +224,7 @@ class ArticleManager {
                  
                  Content (snippet):
                  ${contentSnippet}${articleData.content.length > 2000 ? '...' : ''}`,
-        model: "openrouter/deepseek/deepseek-chat:free", // Using a specific model for tags might be good
+        model: tagModel,
         language: "english", // Always generate tags in English for consistency
         files: [],
         temperature: 0.7,
@@ -248,6 +250,23 @@ class ArticleManager {
         details: error instanceof Error ? error.message : String(error)
       });
       return []; // Return empty array on error
+    }
+  }
+
+  private getTagModelForProvider(provider?: TextProviderId): string {
+    switch (provider) {
+      case 'openrouter':
+        return this.settings.openrouterTagModel || 'google/gemma-4-31b-it';
+      case 'chutes':
+        return this.settings.chutesTagModel || 'chutes:Qwen/Qwen3-32B-TEE';
+      case 'zai':
+        return this.settings.zaiTagModel || this.settings.zaiSummaryModel;
+      case 'ollama':
+        return this.settings.ollamaTagModel || this.settings.ollamaSummaryModel;
+      case 'proxy':
+        return this.settings.proxyTagModel || 'chutes:Qwen/Qwen3-32B-TEE';
+      default:
+        return this.settings.openrouterTagModel || 'google/gemma-4-31b-it';
     }
   }
 

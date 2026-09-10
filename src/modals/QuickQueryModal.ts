@@ -561,7 +561,11 @@ export class QuickQueryModal extends Modal {
         }
 
         // Validate LLM client
-        const client = this.plugin.services.llmClientService.getClient();
+        const retrieval = this.plugin.settings.retrieval;
+        const quickQueryProvider = retrieval.quickQueryProvider || '';
+        const client = quickQueryProvider
+            ? (this.plugin.services.llmClientService.getClientForProvider(quickQueryProvider as any) ?? this.plugin.services.llmClientService.getClient())
+            : this.plugin.services.llmClientService.getClient();
         if (!client) {
             new Notice('LLM client not initialized. Please check your settings.');
             return;
@@ -688,7 +692,7 @@ export class QuickQueryModal extends Modal {
 
             // Prepare generation options
             const options: TextGenerationOptions = {
-                model: this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel,
+                model: retrieval.quickQueryModel || (this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel),
                 message: message,
                 files: fileContexts.length > 0 ? fileContexts : undefined,
                 temperature,
@@ -753,13 +757,19 @@ export class QuickQueryModal extends Modal {
             return;
         }
 
-        const client = this.plugin.services.llmClientService.getClient();
+        const retrieval = this.plugin.settings.retrieval;
+        const agenticProvider = retrieval.agenticProvider || '';
+        const agenticModel = retrieval.agenticModel || '';
+
+        const client = agenticProvider
+            ? (this.plugin.services.llmClientService.getClientForProvider(agenticProvider as any) ?? this.plugin.services.llmClientService.getClient())
+            : this.plugin.services.llmClientService.getClient();
         if (!client) {
             new Notice('LLM client not initialized.');
             return;
         }
 
-        const model = this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
+        const model = agenticModel || (this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel);
 
         const agent = new KnowledgeAgent({
             retrievalService,
@@ -1084,7 +1094,10 @@ export class QuickQueryModal extends Modal {
             .replace(/-+$/, '');
         const filename = `${folder}/${dateStr}-${querySlug}.md`;
 
-        const model = this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel;
+        const retrieval = this.plugin.settings.retrieval;
+        const model = (this.useAgenticMode && retrieval.agenticModel)
+            ? retrieval.agenticModel
+            : (this.plugin.settings.openrouterTextModel || this.plugin.settings.defaultTextModel);
         const dateFormatted = now.toISOString();
 
         // Build sources list from evidence pack if available

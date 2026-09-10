@@ -1,7 +1,8 @@
 function sanitizeFilename(input: string, separator: string = ' '): string {
+  if (input == null) return '';
   return input
     .replace(/[<>:"/\\|?*\[\]#]/g, '') // Removes invalid filename characters including # (breaks Obsidian wikilinks)
-    .replace(/\s+/g, separator) 
+    .replace(/\s+/g, separator)
     .slice(0, 100);
 }
 

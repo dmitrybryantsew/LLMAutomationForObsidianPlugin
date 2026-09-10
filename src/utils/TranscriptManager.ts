@@ -468,9 +468,25 @@ class TranscriptManager {
         options.summaryFolder, // Summaries are saved alongside transcripts/summaries
         options.saveToDatabase || false // Pass database storage option
       );
+
+      if (!transcript) {
+        new Notice("Transcript returned null, aborting summary creation.");
+        if (this.debugEnabled) {
+          console.log('[TranscriptManager] Transcript returned null, aborting summary creation', { videoUrl: options.videoUrl });
+        }
+        return "Transcript returned null, aborting summary creation.";
+      }
+
+      if (!videoData || !videoData.title) {
+        new Notice("Video title returned null, aborting summary creation.");
+        if (this.debugEnabled) {
+          console.log('[TranscriptManager] Video title returned null, aborting summary creation', { videoUrl: options.videoUrl });
+        }
+        return "Video title returned null, aborting summary creation.";
+      }
       
       // Check if transcript is empty or too short to summarize meaningfully
-      if (!transcript || transcript.trim().split(/\s+/).length < 50) { // Minimum 50 words?
+      if (transcript.trim().split(/\s+/).length < 50) { // Minimum 50 words?
            new Notice("Transcript is too short or empty, skipping summary.");
            // Optionally, save a minimal summary file indicating this or just return the transcript path
            return videoData.title + ": Transcript too short for summary."; // Or throw? Let's return a message.
@@ -873,11 +889,20 @@ class TranscriptManager {
   }
 
   private getTagModelForProvider(provider: TextProviderId | undefined, fallbackModel: string): string {
-    if (provider === 'openrouter') {
-      return this.settings?.openrouterTagModel || 'google/gemma-4-31b-it';
+    switch (provider) {
+      case 'openrouter':
+        return this.settings?.openrouterTagModel || 'google/gemma-4-31b-it';
+      case 'chutes':
+        return this.settings?.chutesTagModel || 'chutes:Qwen/Qwen3-32B-TEE';
+      case 'zai':
+        return this.settings?.zaiTagModel || fallbackModel;
+      case 'ollama':
+        return this.settings?.ollamaTagModel || fallbackModel;
+      case 'proxy':
+        return this.settings?.proxyTagModel || 'chutes:Qwen/Qwen3-32B-TEE';
+      default:
+        return fallbackModel;
     }
-
-    return fallbackModel;
   }
 
   private logSummaryRequest(kind: string, details: Record<string, unknown>): void {

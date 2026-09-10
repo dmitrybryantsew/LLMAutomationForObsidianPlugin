@@ -17,12 +17,16 @@ export class ArticleRequestModal extends Modal {
     super(app);
     this.plugin = plugin;
     this.outputLanguage = plugin.settings.defaultOutputLanguage;
-    this.provider = plugin.settings.defaultLLMProvider; // Initialize provider from settings
-    this.summaryModel = this.getSummaryModelForProvider(this.provider); // Initialize with provider-specific model
+    this.provider = (plugin.settings.articleSummaryProvider as TextProviderId) || plugin.settings.defaultLLMProvider;
+    this.summaryModel = this.getSummaryModelForProvider(this.provider);
   }
 
   // Helper method to get summary model for provider
   private getSummaryModelForProvider(provider: TextProviderId): string {
+    // Use article-specific model if set and provider matches
+    if (this.plugin.settings.articleSummaryModel && provider === (this.plugin.settings.articleSummaryProvider as TextProviderId)) {
+      return this.plugin.settings.articleSummaryModel;
+    }
     switch (provider) {
       case 'openrouter':
         return this.plugin.settings.openrouterSummaryModel || this.plugin.settings.summaryModel;

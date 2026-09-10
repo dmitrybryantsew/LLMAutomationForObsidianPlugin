@@ -109,9 +109,13 @@ export interface PluginSettings {
     openrouterSummaryModel: string; // Default summary model for OpenRouter
     openrouterTagModel: string; // Default tag model for OpenRouter video/local transcript tagging
     chutesSummaryModel: string; // Default summary model for Chutes
+    chutesTagModel: string; // Default tag model for Chutes video/local transcript tagging
     zaiSummaryModel: string; // Default summary model for ZAI
+    zaiTagModel: string; // Default tag model for ZAI video/local transcript tagging
     ollamaSummaryModel: string; // Default summary model for Ollama
+    ollamaTagModel: string; // Default tag model for Ollama video/local transcript tagging
     proxySummaryModel: string; // Default summary model for OpenAI-compatible proxy
+    proxyTagModel: string; // Default tag model for OpenAI-compatible proxy video/local transcript tagging
     
     // Provider-specific text models (NEW)
     openrouterTextModel: string; // Default text model for OpenRouter
@@ -119,6 +123,10 @@ export interface PluginSettings {
     zaiTextModel: string; // Default text model for ZAI
     ollamaTextModel: string; // Default text model for Ollama
     proxyTextModel: string; // Default text model for OpenAI-compatible proxy
+
+    // Article summary model (separate from YouTube summary)
+    articleSummaryProvider: string;
+    articleSummaryModel: string;
     
     // Debug settings
     debugMode: boolean; // Enable debug logging for troubleshooting

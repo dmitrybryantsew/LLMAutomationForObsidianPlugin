@@ -3,6 +3,42 @@
     flex-direction: column;
     height: 100%;
   }
+
+/* Settings tab bar */
+.llm-automation-settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 0 12px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 12px;
+}
+
+.llm-automation-settings-tab {
+    padding: 6px 14px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--font-ui-small);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.llm-automation-settings-tab:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.llm-automation-settings-tab.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.llm-automation-settings-tab-content {
+    /* content container — no extra styling needed */
+}
   
   .main-panel {
     flex-grow: 1;
