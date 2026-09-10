@@ -1,16 +1,31 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CompanionClient } from '../../src/retrieval/CompanionClient';
 import { spawn, ChildProcess } from 'child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
 const COMPANION_ENDPOINT = 'http://127.0.0.1:43110';
-const PYTHON = 'C:\\Users\\User\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe';
+// The companion source moved to GeneralTools (single copy). This repo keeps
+// only a pointer README under companion/.
+const GENERALTOOLS_ROOT = 'H:\\Common\\Python\\GeneralTools';
+const COMPANION_SOURCE = join(GENERALTOOLS_ROOT, 'bundled_projects', 'obsidian_companion');
+const VENV_PYTHON = join(GENERALTOOLS_ROOT, 'app_data', 'venvs', 'obsidian_companion_16d0fefc02', 'Scripts', 'python.exe');
+const FALLBACK_PYTHON = 'C:\\Users\\User\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe';
 
 let companionProcess: ChildProcess | null = null;
+let reusedRunningServer = false;
 let tmpRoot: string;
 let tmpStateDir: string;
+
+async function isCompanionUp(): Promise<boolean> {
+  try {
+    const res = await fetch(`${COMPANION_ENDPOINT}/status`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 beforeAll(async () => {
   // Create a temp source tree
@@ -19,12 +34,23 @@ beforeAll(async () => {
   mkdirSync(join(tmpRoot, 'src'));
   writeFileSync(join(tmpRoot, 'src', 'main.py'), 'def hello():\n    print("hi")\n');
 
+  // If a compatible companion is already running on the endpoint, reuse it
+  // instead of failing to bind the port.
+  if (await isCompanionUp()) {
+    reusedRunningServer = true;
+    return;
+  }
+
+  if (!existsSync(COMPANION_SOURCE)) {
+    throw new Error(`Companion source not found at ${COMPANION_SOURCE}. Start it via GeneralTools or clone GeneralTools.`);
+  }
+
   // Create a unique state dir per test run so the allowlist is clean
   tmpStateDir = mkdtempSync(join(tmpdir(), 'companion-state-'));
 
-  // Start the companion server
-  companionProcess = spawn(PYTHON, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '43110'], {
-    cwd: join(process.cwd(), 'companion'),
+  const python = existsSync(VENV_PYTHON) ? VENV_PYTHON : FALLBACK_PYTHON;
+  companionProcess = spawn(python, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '43110'], {
+    cwd: COMPANION_SOURCE,
     stdio: 'pipe',
     env: { ...process.env, COMPANION_STATE_DIR: tmpStateDir },
   });
@@ -33,12 +59,7 @@ beforeAll(async () => {
   const maxRetries = 20;
   for (let i = 0; i < maxRetries; i++) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    try {
-      const res = await fetch(`${COMPANION_ENDPOINT}/status`);
-      if (res.ok) return;
-    } catch {
-      // keep trying
-    }
+    if (await isCompanionUp()) return;
   }
   throw new Error('Companion server did not start');
 }, 60_000);
@@ -68,6 +89,10 @@ describe('CompanionClient live integration', () => {
 
   it('adds root to allowlist, scans, and indexes', async () => {
     const client = new CompanionClient(COMPANION_ENDPOINT);
+
+    // Clear any stale 'test-src' entry from previous runs (add_root is
+    // idempotent on id, so an old entry would silently block this run).
+    await client.removeAllowlistRoot('test-src').catch(() => {});
 
     // Add to allowlist
     await client.addAllowlistRoot('test-src', tmpRoot);
@@ -115,6 +140,11 @@ describe('CompanionClient live integration', () => {
     // Should have a function chunk for "hello"
     const helloChunk = pyChunks.find(c => c.headingPath.includes('hello'));
     expect(helloChunk).toBeDefined();
+
+    // Clean up our allowlist entry (the reused running server persists state).
+    if (reusedRunningServer) {
+      await client.removeAllowlistRoot('test-src').catch(() => {});
+    }
   });
 
   it('rejects non-allowlisted paths with 403', async () => {
