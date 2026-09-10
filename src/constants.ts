@@ -61,15 +61,22 @@ const DEFAULT_SETTINGS = {
   openrouterSummaryModel: "openrouter/deepseek/deepseek-r1:free",
   openrouterTagModel: "google/gemma-4-31b-it",
   chutesSummaryModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
+  chutesTagModel: "chutes:Qwen/Qwen3-32B-TEE",
   zaiSummaryModel: "glm-4.6",
+  zaiTagModel: "glm-4.6",
   ollamaSummaryModel: "gemma4:31b-cloud",
+  ollamaTagModel: "gemma4:31b-cloud",
   proxySummaryModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  proxyTagModel: "chutes:Qwen/Qwen3-32B-TEE",
   // Provider-specific text models (NEW)
   openrouterTextModel: "openrouter/deepseek/deepseek-r1:free",
   chutesTextModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiTextModel: "glm-4.6",
   ollamaTextModel: "gemma4:31b-cloud",
   proxyTextModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  // Article summary model (separate from YouTube summary)
+  articleSummaryProvider: "openrouter",
+  articleSummaryModel: "openrouter/deepseek/deepseek-r1:free",
   // Debug settings
   debugMode: false, // Debug mode for detailed logging
   // Spaced repetition settings
@@ -125,6 +132,11 @@ const DEFAULT_SETTINGS = {
       provider: 'none',
       ollamaEndpoint: 'http://localhost:11434',
       ollamaModel: 'qwen3-embedding:0.6b',
+      llamaServerEndpoint: 'http://127.0.0.1:8005',
+      // Matches Ollama's model id: verified identical embedding space with
+      // Ollama's qwen3-embedding:0.6b (same Q8_0 GGUF weights), so vectors
+      // indexed under Ollama remain valid — no re-embed on provider switch.
+      llamaServerModel: 'qwen3-embedding:0.6b',
       chutesApiKey: '',
       chutesBaseUrl: 'https://chutes-qwen-qwen3-embedding-8b-tee.chutes.ai',
       chutesModel: 'Qwen/Qwen3-Embedding-8B-TEE',
@@ -135,6 +147,10 @@ const DEFAULT_SETTINGS = {
       enabled: false,
       endpoint: 'http://127.0.0.1:43110',
     },
+    agenticProvider: '',
+    agenticModel: '',
+    quickQueryProvider: '',
+    quickQueryModel: '',
   },
   studySourceGroups: [
     {

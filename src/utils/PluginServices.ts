@@ -29,6 +29,7 @@ import { SqliteVectorStore } from "../retrieval/SqliteVectorStore";
 import { EmbeddingCoordinator } from "../retrieval/EmbeddingCoordinator";
 import { OllamaEmbeddingProvider } from "../retrieval/OllamaEmbeddingProvider";
 import { ChutesEmbeddingProvider } from "../retrieval/ChutesEmbeddingProvider";
+import { LlamaServerEmbeddingProvider } from "../retrieval/LlamaServerEmbeddingProvider";
 import { CompanionClient } from "../retrieval/CompanionClient";
 import type { EmbeddingProvider } from "../types/retrieval";
 
@@ -321,6 +322,18 @@ export class PluginServices {
           apiKey: cfg.chutesApiKey,
           baseUrl: cfg.chutesBaseUrl,
           model: cfg.chutesModel,
+        });
+      } catch (e) {
+        this._retrievalDebugLogger?.logError(e instanceof Error ? e : new Error(String(e)));
+        return null;
+      }
+    }
+
+    if (cfg.provider === 'llama-server') {
+      try {
+        return new LlamaServerEmbeddingProvider({
+          endpoint: cfg.llamaServerEndpoint,
+          model: cfg.llamaServerModel,
         });
       } catch (e) {
         this._retrievalDebugLogger?.logError(e instanceof Error ? e : new Error(String(e)));

@@ -15,7 +15,7 @@ export interface RetrievalSourceConfig {
   version?: string;
 }
 
-export type EmbeddingProviderType = 'none' | 'ollama' | 'chutes';
+export type EmbeddingProviderType = 'none' | 'ollama' | 'chutes' | 'llama-server';
 
 export interface CompanionConfig {
   enabled: boolean;
@@ -26,6 +26,8 @@ export interface EmbeddingConfig {
   provider: EmbeddingProviderType;
   ollamaEndpoint: string;
   ollamaModel: string;
+  llamaServerEndpoint: string;
+  llamaServerModel: string;
   chutesApiKey: string;
   chutesBaseUrl: string;
   chutesModel: string;
@@ -44,6 +46,10 @@ export interface RetrievalSettings {
   allowGeneralKnowledgeWhenUngrounded: boolean;
   embedding: EmbeddingConfig;
   companion: CompanionConfig;
+  agenticProvider: string;
+  agenticModel: string;
+  quickQueryProvider: string;
+  quickQueryModel: string;
 }
 
 export interface RetrievalChunkDraft {

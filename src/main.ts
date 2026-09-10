@@ -1,6 +1,7 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
 import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
+import type { EmbeddingConfig, CompanionConfig } from './types/retrieval';
 import { GenerateTextView } from './views/GenerateTextView';
 import { GenerateImageView } from './views/GenerateImageView';
 import { VideoProcessingView, VIEW_TYPE_VIDEO_PROCESSING } from './views/VideoProcessingView';
@@ -899,6 +900,10 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.openRouterApiKey = this.settings.openRouterApiKey ?? DEFAULT_SETTINGS.openRouterApiKey;
     this.settings.openRouterModels = this.settings.openRouterModels ?? DEFAULT_SETTINGS.openRouterModels;
     this.settings.openrouterTagModel = this.settings.openrouterTagModel ?? DEFAULT_SETTINGS.openrouterTagModel;
+    this.settings.chutesTagModel = this.settings.chutesTagModel ?? DEFAULT_SETTINGS.chutesTagModel;
+    this.settings.zaiTagModel = this.settings.zaiTagModel ?? DEFAULT_SETTINGS.zaiTagModel;
+    this.settings.ollamaTagModel = this.settings.ollamaTagModel ?? DEFAULT_SETTINGS.ollamaTagModel;
+    this.settings.proxyTagModel = this.settings.proxyTagModel ?? DEFAULT_SETTINGS.proxyTagModel;
     this.settings.lastUpdated = this.settings.lastUpdated ?? DEFAULT_SETTINGS.lastUpdated;
     this.settings.filterFreeModelsOnly = this.settings.filterFreeModelsOnly ?? DEFAULT_SETTINGS.filterFreeModelsOnly;
     this.settings.minContextLength = this.settings.minContextLength ?? DEFAULT_SETTINGS.minContextLength;
@@ -949,7 +954,22 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       ? this.settings.providerTimeout
       : DEFAULT_SETTINGS.providerTimeout;
     this.settings.providerRetryCount = this.settings.providerRetryCount ?? DEFAULT_SETTINGS.providerRetryCount;
-    
+
+    // Deep-merge retrieval.embedding so newly added providers (llama-server)
+    // get their defaults without clobbering existing user choices.
+    this.settings.retrieval = {
+      ...DEFAULT_SETTINGS.retrieval,
+      ...(this.settings.retrieval ?? {}),
+      embedding: {
+        ...DEFAULT_SETTINGS.retrieval.embedding,
+        ...(this.settings.retrieval?.embedding ?? {}),
+      } as EmbeddingConfig,
+      companion: {
+        ...DEFAULT_SETTINGS.retrieval.companion,
+        ...(this.settings.retrieval?.companion ?? {}),
+      } as CompanionConfig,
+    };
+
     // Settings relevant to service initialization are passed in the constructor
     // of PluginServices during plugin's onload.
   }

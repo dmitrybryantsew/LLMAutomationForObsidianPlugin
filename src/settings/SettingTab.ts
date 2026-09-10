@@ -28,21 +28,67 @@ import {
     const { containerEl } = this;
     containerEl.empty();
 
-    this.addMultiProviderSettings(containerEl);
-    this.addOpenRouterSettings(containerEl);
-    this.addGeneralSettings(containerEl);
-    this.addFolderSettings(containerEl);
-    this.addFlashcardGenerationSettings(containerEl);
-    this.addCodingExerciseSettings(containerEl);
-    this.addStudySourceSettings(containerEl);
-    this.addStudyPathSettings(containerEl);
-    this.addSummarySettings(containerEl);
-    this.addLanguageSettings(containerEl);
-    this.addContentStorageSettings(containerEl);
-    this.addSpacedRepetitionSettings(containerEl);
-    this.addRetrievalSettings(containerEl);
-    this.addDebugSettings(containerEl);
-    this.addTestSettings(containerEl);
+    // --- Tabbed settings ---
+    const tabs: { id: string; label: string; render: (el: HTMLElement) => void }[] = [
+      { id: 'models', label: 'Models & Providers', render: (el) => {
+        this.addMultiProviderSettings(el);
+        this.addOpenRouterSettings(el);
+        this.addGeneralSettings(el);
+      }},
+      { id: 'retrieval', label: 'Knowledge Retrieval', render: (el) => {
+        this.addRetrievalSettings(el);
+      }},
+      { id: 'content', label: 'Content Generation', render: (el) => {
+        this.addSummarySettings(el);
+        this.addFlashcardGenerationSettings(el);
+      }},
+      { id: 'study', label: 'Study & Spaced Repetition', render: (el) => {
+        this.addCodingExerciseSettings(el);
+        this.addStudySourceSettings(el);
+        this.addStudyPathSettings(el);
+        this.addSpacedRepetitionSettings(el);
+      }},
+      { id: 'folders', label: 'Folders & Language', render: (el) => {
+        this.addFolderSettings(el);
+        this.addLanguageSettings(el);
+        this.addContentStorageSettings(el);
+      }},
+      { id: 'debug', label: 'Debug & Testing', render: (el) => {
+        this.addDebugSettings(el);
+        this.addTestSettings(el);
+      }},
+    ];
+
+    // Tab bar
+    const tabBar = containerEl.createEl('div', { cls: 'llm-automation-settings-tabs' });
+    const tabContents: Map<string, HTMLElement> = new Map();
+    let activeTab = tabs[0].id;
+
+    for (const tab of tabs) {
+      const tabBtn = tabBar.createEl('button', {
+        cls: 'llm-automation-settings-tab' + (tab.id === activeTab ? ' active' : ''),
+        text: tab.label,
+      });
+      tabBtn.dataset.tabId = tab.id;
+      tabBtn.addEventListener('click', () => {
+        // Deactivate all
+        tabBar.querySelectorAll('.llm-automation-settings-tab').forEach((b) => b.removeClass('active'));
+        tabContents.forEach((el) => el.style.display = 'none');
+        // Activate clicked
+        tabBtn.addClass('active');
+        const content = tabContents.get(tab.id);
+        if (content) content.style.display = '';
+        activeTab = tab.id;
+      });
+    }
+
+    // Tab content containers
+    for (const tab of tabs) {
+      const content = containerEl.createEl('div', { cls: 'llm-automation-settings-tab-content' });
+      content.style.display = tab.id === activeTab ? '' : 'none';
+      tab.render(content);
+      tabContents.set(tab.id, content);
+    }
   }
 
   addGeneralSettings(containerEl: HTMLElement): void {
@@ -781,6 +827,70 @@ import {
           })
       );
 
+    // Agentic model settings.
+    containerEl.createEl('h4', { text: 'Agentic model (optional)' });
+    new Setting(containerEl)
+      .setName('Agentic LLM provider')
+      .setDesc('Provider for the agentic (multi-step) Quick Query mode. Leave empty to use the default provider.')
+      .addDropdown((dd) => {
+        dd.addOption('', 'Default (same as text model)');
+        dd.addOption('openrouter', 'OpenRouter');
+        dd.addOption('ollama', 'Ollama');
+        dd.addOption('chutes', 'Chutes');
+        dd.addOption('zai', 'ZAI');
+        dd.addOption('proxy', 'OpenAI Proxy');
+        dd.setValue(retrieval.agenticProvider || '');
+        dd.onChange(async (value) => {
+          retrieval.agenticProvider = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Agentic LLM model')
+      .setDesc('Model for the agentic Quick Query mode. Leave empty to use the default text model.')
+      .addText((text) =>
+        text
+          .setPlaceholder('e.g. gemma4:31b-cloud')
+          .setValue(retrieval.agenticModel || '')
+          .onChange(async (value) => {
+            retrieval.agenticModel = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Quick Query model settings.
+    containerEl.createEl('h4', { text: 'Quick Query model (optional)' });
+    new Setting(containerEl)
+      .setName('Quick Query LLM provider')
+      .setDesc('Provider for the regular (non-agentic) Quick Query mode. Leave empty to use the default provider.')
+      .addDropdown((dd) => {
+        dd.addOption('', 'Default (same as text model)');
+        dd.addOption('openrouter', 'OpenRouter');
+        dd.addOption('ollama', 'Ollama');
+        dd.addOption('chutes', 'Chutes');
+        dd.addOption('zai', 'ZAI');
+        dd.addOption('proxy', 'OpenAI Proxy');
+        dd.setValue(retrieval.quickQueryProvider || '');
+        dd.onChange(async (value) => {
+          retrieval.quickQueryProvider = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Quick Query LLM model')
+      .setDesc('Model for the regular Quick Query mode. Leave empty to use the default text model.')
+      .addText((text) =>
+        text
+          .setPlaceholder('e.g. gemma4:31b-cloud')
+          .setValue(retrieval.quickQueryModel || '')
+          .onChange(async (value) => {
+            retrieval.quickQueryModel = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
     // SQLite database path.
     new Setting(containerEl)
       .setName('Retrieval SQLite path')
@@ -957,6 +1067,8 @@ import {
       provider: 'none' as const,
       ollamaEndpoint: 'http://localhost:11434',
       ollamaModel: 'qwen3-embedding:0.6b',
+      llamaServerEndpoint: 'http://127.0.0.1:8005',
+      llamaServerModel: 'qwen3-embedding:0.6b',
       chutesApiKey: '',
       chutesBaseUrl: 'https://chutes-qwen-qwen3-embedding-8b-tee.chutes.ai',
       chutesModel: 'Qwen/Qwen3-Embedding-8B-TEE',
@@ -967,10 +1079,11 @@ import {
 
     new Setting(containerEl)
       .setName('Embedding provider')
-      .setDesc('Local (Ollama) runs on your machine. Remote (Chutes) sends text to a cloud API.')
+      .setDesc('Local (Ollama or llama.cpp server) runs on your machine. Remote (Chutes) sends text to a cloud API.')
       .addDropdown((dd) => {
         dd.addOption('none', 'None (lexical only)');
         dd.addOption('ollama', 'Local — Ollama');
+        dd.addOption('llama-server', 'Local — llama.cpp server (GeneralTools)');
         dd.addOption('chutes', 'Remote — Chutes (Qwen3-8B)');
         dd.setValue(emb.provider);
         dd.onChange(async (value) => {
@@ -1001,6 +1114,30 @@ import {
           .setValue(emb.ollamaModel)
           .onChange(async (value) => {
             emb.ollamaModel = value.trim() || emb.ollamaModel;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('llama.cpp server endpoint')
+      .setDesc('llama-server with --embeddings (GeneralTools Local Embedding Server). Default: http://127.0.0.1:8005')
+      .addText((text) =>
+        text
+          .setValue(emb.llamaServerEndpoint)
+          .onChange(async (value) => {
+            emb.llamaServerEndpoint = value.trim() || emb.llamaServerEndpoint;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('llama.cpp server model alias')
+      .setDesc('Must match --alias in the server args. Use qwen3-embedding:0.6b (default) to reuse vectors indexed via Ollama without re-embedding.')
+      .addText((text) =>
+        text
+          .setValue(emb.llamaServerModel)
+          .onChange(async (value) => {
+            emb.llamaServerModel = value.trim() || emb.llamaServerModel;
             await this.plugin.saveSettings();
           })
       );
@@ -1283,6 +1420,86 @@ import {
           this.plugin.settings.summaryPrompt = value;
           await this.plugin.saveSettings();
         }));
+
+    // Tag model settings — separate from summary model to avoid thinking models
+    // eating all tokens on tag generation and returning nothing.
+    containerEl.createEl('h3', { text: 'Tag Models (per provider)' });
+    containerEl.createEl('p', { text: 'Model used only for tag generation. Use a non-thinking model to avoid empty tag output.' });
+
+    new Setting(containerEl)
+      .setName("Chutes Tag Model")
+      .setDesc("Model for tags when provider is Chutes.")
+      .addText(text => text
+        .setValue(this.plugin.settings.chutesTagModel || 'chutes:Qwen/Qwen3-32B-TEE')
+        .setPlaceholder("chutes:Qwen/Qwen3-32B-TEE")
+        .onChange(async value => {
+          this.plugin.settings.chutesTagModel = value.trim() || 'chutes:Qwen/Qwen3-32B-TEE';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Proxy Tag Model")
+      .setDesc("Model for tags when provider is OpenAI Proxy.")
+      .addText(text => text
+        .setValue(this.plugin.settings.proxyTagModel || 'chutes:Qwen/Qwen3-32B-TEE')
+        .setPlaceholder("chutes:Qwen/Qwen3-32B-TEE")
+        .onChange(async value => {
+          this.plugin.settings.proxyTagModel = value.trim() || 'chutes:Qwen/Qwen3-32B-TEE';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("ZAI Tag Model")
+      .setDesc("Model for tags when provider is ZAI.")
+      .addText(text => text
+        .setValue(this.plugin.settings.zaiTagModel || '')
+        .setPlaceholder("glm-4.6")
+        .onChange(async value => {
+          this.plugin.settings.zaiTagModel = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Ollama Tag Model")
+      .setDesc("Model for tags when provider is Ollama.")
+      .addText(text => text
+        .setValue(this.plugin.settings.ollamaTagModel || '')
+        .setPlaceholder("gemma4:31b-cloud")
+        .onChange(async value => {
+          this.plugin.settings.ollamaTagModel = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    // Article summary model (separate from YouTube summary)
+    containerEl.createEl('h3', { text: 'Article Summary Model (separate from YouTube)' });
+    new Setting(containerEl)
+      .setName("Article summary provider")
+      .setDesc("Provider for web article summaries. Defaults to your main provider.")
+      .addDropdown((dd) => {
+        dd.addOption('openrouter', 'OpenRouter');
+        dd.addOption('ollama', 'Ollama');
+        dd.addOption('chutes', 'Chutes');
+        dd.addOption('zai', 'ZAI');
+        dd.addOption('proxy', 'OpenAI Proxy');
+        dd.setValue(this.plugin.settings.articleSummaryProvider || 'openrouter');
+        dd.onChange(async (value) => {
+          this.plugin.settings.articleSummaryProvider = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Article summary model")
+      .setDesc("Model for web article summaries. Defaults to the summary model for the selected provider.")
+      .addText((text) =>
+        text
+          .setPlaceholder('e.g. gemma4:31b-cloud')
+          .setValue(this.plugin.settings.articleSummaryModel || '')
+          .onChange(async (value) => {
+            this.plugin.settings.articleSummaryModel = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   addLanguageSettings(containerEl: HTMLElement): void {
