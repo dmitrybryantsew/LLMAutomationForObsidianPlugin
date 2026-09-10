@@ -1,6 +1,6 @@
 # LLM Automation For Obsidian Plugin
 
-Personal Obsidian plugin for LLM-assisted knowledge-base work: text generation, article and video summarization, transcript handling, quizzes, flashcards, and path/tag management.
+Personal Obsidian plugin for LLM-assisted knowledge-base work: text generation, article and video summarization, transcript handling, quizzes, flashcards, spaced repetition, a hybrid knowledge-retrieval (RAG) engine over the vault, coding exercises, and path/tag management.
 
 The repository name is `LLMAutomationForObsidianPlugin`, but the Obsidian plugin id intentionally remains `gpt4free-text-generator-plugin`. Keeping the id preserves compatibility with the existing installed plugin folder, local `data.json`, and local `transcripts.db`.
 
@@ -71,7 +71,7 @@ or:
 npm test
 ```
 
-Current baseline: `207` tests pass.
+Current baseline: `472` tests pass across 40 files (plus a separate pytest suite for the optional companion service).
 
 ## OpenAI-Compatible Proxy Provider
 
@@ -85,6 +85,50 @@ The plugin can use the local/VPS `openai-nim-proxy` as an additional text provid
 The same settings page also has default request controls for text generation: temperature, max tokens, top-p, presence penalty, and frequency penalty. The text generator options modal can override these values per run.
 
 For long video summaries, increase `Provider Timeout (seconds)` in the same settings section. The current default is 1200 seconds, and older saved values at or below 600 seconds are upgraded automatically on plugin load.
+
+## Knowledge Retrieval (RAG)
+
+The plugin has an optional hybrid retrieval engine over the vault, gated by
+`Retrieval` → `Enable retrieval` in Settings. When enabled it indexes markdown notes
+into a local SQLite database (FTS5 lexical search) and can optionally add semantic
+search via local Ollama embeddings or remote Chutes embeddings, fused by reciprocal
+rank. A `KnowledgeAgent` runs a bounded multi-step loop (search → optional reads →
+answer with `[S1]` citations) for quick-context queries.
+
+- `Search Knowledge Base` command — ranked, linkable lexical/hybrid results, no LLM required.
+- `Quick Query (Current Note Context)` — LLM answer grounded in retrieved evidence.
+- Lexical veto: when `embedding.lexicalVeto` is on (default), hybrid mode returns no
+  hits if lexical search finds nothing, preventing semantic-only hallucinated matches.
+
+The retrieval database uses a vendored FTS5-enabled `sql.js` wasm
+(`vendor/sqljs-fts5/`), because the upstream npm `sql.js` build does not enable FTS5.
+See `vendor/sqljs-fts5/README.md` for provenance and reproduction steps.
+
+## Optional Companion Service
+
+External/code-source indexing is handled by an optional Python FastAPI companion
+(loopback only), used for sources outside the vault such as code repositories. It
+performs tree-sitter chunking for code (Python, C#, TypeScript, JavaScript) and an
+allowlist-enforced scan.
+
+The companion code has **moved to GeneralTools** and is no longer in this repo:
+
+```
+H:\Common\Python\GeneralTools\bundled_projects\obsidian_companion
+```
+
+Start it from the GeneralTools GUI ("Obsidian Companion Server" plugin) or
+manually:
+
+```powershell
+cd H:\Common\Python\GeneralTools\bundled_projects\obsidian_companion
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 43110
+```
+
+Enable it in Settings under `Retrieval` → `Companion` and set the endpoint
+(default `http://127.0.0.1:43110`). See `companion/README.md` for details; the
+pytest suite lives with the code in GeneralTools.
 
 ## Deploy To Obsidian
 
