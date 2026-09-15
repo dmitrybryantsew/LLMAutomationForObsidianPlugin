@@ -631,10 +631,12 @@ export class FlashcardsFromBookModal extends Modal {
     const shown = this.generated.slice(0, 30);
     for (const question of shown) {
       const card = preview.createDiv({ cls: 'flashcards-from-book-preview-card' });
-      card.createEl('div', {
-        text: question.questionName ?? question.questionType,
-        cls: 'flashcards-from-book-row-meta',
-      });
+      const header = card.createEl('div', { cls: 'flashcards-from-book-row-meta' });
+      header.textContent = [
+        question.questionName ?? question.questionType,
+        question.topLevelLabel ? `§ ${question.topLevelLabel}` : null,
+        question.paragraphIndex != null ? `¶${question.paragraphIndex}` : null,
+      ].filter(Boolean).join(' · ');
       card.createEl('div', { text: question.questionText });
       card.createEl('div', { text: question.answerText ?? '', cls: 'flashcards-from-book-row-meta' });
     }
