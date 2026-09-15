@@ -5,6 +5,8 @@ import { GeneratedSpacedRepetitionQuestion } from '../utils/spacedRepetition/Spa
 import { QuestionType, SpacedRepetitionStudySetRecord } from '../types/spacedRepetition';
 import { TextProviderId } from '../types/providers';
 import { SpacedRepetitionEditCardModal } from '../modals/SpacedRepetitionEditCardModal';
+import { NotePickerModal } from '../modals/NotePickerModal';
+import { isThinkingModel, modelLabel, sortModelsByThinking } from '../utils/modelFilters';
 
 export class FlashcardGenerationView extends ItemView {
   private plugin: GptFreeTextGeneratorPlugin;
@@ -59,17 +61,40 @@ export class FlashcardGenerationView extends ItemView {
       cls: 'flashcard-generation-source',
     });
 
-    this.renderModelControls(container);
-    this.renderDeckControls(container);
-    this.renderGenerationControls(container);
-    this.renderContextControls(container);
+    if (this.plugin.isFlashcardUiActive()) {
+      header.createEl('button', {
+        text: 'Back to Hub',
+        cls: 'llm-automation-btn llm-automation-btn-secondary spaced-repetition-back-to-hub',
+        attr: { 'aria-label': 'Return to the flashcard hub' },
+      }).addEventListener('click', () => {
+        void this.plugin.returnToFlashcardHub();
+      });
+    }
+
+    const modelFieldset = this.createFieldset(container, 'Model');
+    this.renderModelControls(modelFieldset);
+
+    const deckFieldset = this.createFieldset(container, 'Deck');
+    this.renderDeckControls(deckFieldset);
+
+    const shapeFieldset = this.createFieldset(container, 'Card Shape');
+    this.renderGenerationControls(shapeFieldset);
+
+    const promptFieldset = this.createFieldset(container, 'Prompt & Context');
+    this.renderContextControls(promptFieldset);
+
     this.renderActions(container);
     this.renderPreview(container);
   }
 
-  private renderDeckControls(container: HTMLElement): void {
-    container.createEl('h3', { text: 'Deck' });
+  /** Wrapped labeled section (fieldset look) used to group generator settings. */
+  private createFieldset(container: HTMLElement, legend: string): HTMLElement {
+    const fieldset = container.createEl('fieldset', { cls: 'llm-automation-fieldset flashcard-generation-fieldset' });
+    fieldset.createEl('legend', { text: legend });
+    return fieldset;
+  }
 
+  private renderDeckControls(container: HTMLElement): void {
     new Setting(container)
       .setName('Save To Deck')
       .setDesc('Optional study set for generated cards.')
@@ -97,8 +122,6 @@ export class FlashcardGenerationView extends ItemView {
   }
 
   private renderModelControls(container: HTMLElement): void {
-    container.createEl('h3', { text: 'Model' });
-
     new Setting(container)
       .setName('Provider')
       .addDropdown((dropdown) => {
@@ -109,6 +132,7 @@ export class FlashcardGenerationView extends ItemView {
             zai: 'ZAI',
             ollama: 'Ollama',
             proxy: 'OpenAI Proxy',
+            qwengate: 'QwenGate',
           })
           .setValue(this.plugin.settings.flashcardGenerationProvider)
           .onChange(async (value) => {
@@ -120,22 +144,24 @@ export class FlashcardGenerationView extends ItemView {
           });
       });
 
-    new Setting(container)
+    const modelSetting = new Setting(container)
       .setName('Model')
-      .addDropdown((dropdown) => {
+      .setDesc(isThinkingModel(this.plugin.settings.flashcardGenerationModel)
+        ? 'Thinking model selected — slower, and it may burn output tokens on hidden reasoning. JSON is extracted from the final answer only.'
+        : '');
+    modelSetting.addDropdown((dropdown) => {
         dropdown
           .addOptions(this.getModelOptions(this.plugin.settings.flashcardGenerationProvider))
           .setValue(this.plugin.settings.flashcardGenerationModel)
           .onChange(async (value) => {
             this.plugin.settings.flashcardGenerationModel = value;
             await this.plugin.saveSettings();
+            this.render();
           });
       });
   }
 
   private renderGenerationControls(container: HTMLElement): void {
-    container.createEl('h3', { text: 'Card Shape' });
-
     new Setting(container)
       .setName('Question Count')
       .addText((text) => text
@@ -180,8 +206,6 @@ export class FlashcardGenerationView extends ItemView {
   }
 
   private renderContextControls(container: HTMLElement): void {
-    container.createEl('h3', { text: 'Context And Prompt' });
-
     new Setting(container)
       .setName('Prompt')
       .addTextArea((text) => {
@@ -212,6 +236,16 @@ export class FlashcardGenerationView extends ItemView {
           this.render();
         }))
       .addButton((button) => button
+        .setButtonText('Pick Note...')
+        .onClick(() => {
+          new NotePickerModal(this.app, async (file) => {
+            this.sourceFile = file;
+            this.context = await this.app.vault.read(file);
+            this.generatedQuestions = [];
+            this.render();
+          }).open();
+        }))
+      .addButton((button) => button
         .setButtonText(this.isGenerating ? 'Generating...' : 'Generate Preview')
         .setDisabled(this.isGenerating)
         .setCta()
@@ -227,7 +261,7 @@ export class FlashcardGenerationView extends ItemView {
     preview.createEl('h3', { text: `Preview (${this.generatedQuestions.length})` });
 
     if (this.generatedQuestions.length === 0) {
-      preview.createEl('p', { text: 'No generated cards yet.' });
+      preview.createEl('p', { text: 'No generated cards yet.', cls: 'flashcard-generation-preview-empty' });
       return;
     }
 
@@ -244,14 +278,14 @@ export class FlashcardGenerationView extends ItemView {
       const actions = header.createDiv({ cls: 'flashcard-generation-preview-actions' });
 
       // Edit button
-      actions.createEl('button', { text: 'Edit', cls: 'mod-cta' }).addEventListener('click', () => {
+      actions.createEl('button', { text: 'Edit', cls: 'llm-automation-btn llm-automation-btn-secondary' }).addEventListener('click', () => {
         this.editCard(index);
       });
 
       // Exclude toggle button
       const excludeBtn = actions.createEl('button', {
         text: isExcluded ? 'Include' : 'Exclude',
-        cls: isExcluded ? 'mod-warning' : '',
+        cls: isExcluded ? 'llm-automation-btn llm-automation-btn-muted' : 'llm-automation-btn llm-automation-btn-secondary',
       });
       excludeBtn.addEventListener('click', () => {
         if (this.excludedIndices.has(index)) {
@@ -263,7 +297,10 @@ export class FlashcardGenerationView extends ItemView {
       });
 
       // Regenerate single card button
-      actions.createEl('button', { text: 'Regenerate' }).addEventListener('click', () => {
+      actions.createEl('button', {
+        text: 'Regenerate',
+        cls: 'llm-automation-btn llm-automation-btn-secondary',
+      }).addEventListener('click', () => {
         this.regenerateSingleCard(index);
       });
 
@@ -301,7 +338,7 @@ export class FlashcardGenerationView extends ItemView {
       this.isGenerating = true;
       this.render();
       const file = this.sourceFile ?? ({ path: 'Pasted Flashcard Context.md', basename: 'Pasted Flashcard Context' } as TFile);
-      this.generatedQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
+      const { questions: generatedQuestions } = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
         file,
         noteContent: this.context,
         provider: this.plugin.settings.flashcardGenerationProvider,
@@ -312,7 +349,10 @@ export class FlashcardGenerationView extends ItemView {
         outputLanguage: this.plugin.settings.defaultOutputLanguage || 'english',
         temperature: this.plugin.settings.flashcardGenerationTemperature,
         maxTokens: this.plugin.settings.flashcardGenerationMaxTokens,
+        twoPass: this.plugin.settings.flashcardTwoPassGeneration,
+        stripThinking: this.plugin.settings.flashcardStripThinking,
       });
+      this.generatedQuestions = generatedQuestions;
       new Notice(`Generated ${this.generatedQuestions.length} card(s)`);
     } catch (error) {
       console.error('Failed to generate flashcards:', error);
@@ -466,6 +506,7 @@ export class FlashcardGenerationView extends ItemView {
       case 'chutes': return this.plugin.settings.chutesTextModel || 'deepseek-ai/DeepSeek-V3.2-Speciale-TEE';
       case 'zai': return this.plugin.settings.zaiTextModel || 'glm-4.6';
       case 'proxy': return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate': return this.plugin.settings.qwengateTextModel || 'qwen3.7-plus';
       case 'ollama':
       default:
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
@@ -474,8 +515,11 @@ export class FlashcardGenerationView extends ItemView {
 
   private getModelOptions(provider: TextProviderId): Record<string, string> {
     if (provider === 'openrouter' && this.plugin.settings.openRouterModels?.length) {
-      return this.plugin.settings.openRouterModels.reduce((acc: Record<string, string>, model) => {
-        acc[model.id] = model.name;
+      const sorted = [...this.plugin.settings.openRouterModels].sort(
+        (a, b) => (Number(isThinkingModel(a.id)) - Number(isThinkingModel(b.id))) || a.name.localeCompare(b.name),
+      );
+      return sorted.reduce((acc: Record<string, string>, model) => {
+        acc[model.id] = modelLabel(model.id, model.name);
         return acc;
       }, {});
     }
@@ -486,10 +530,11 @@ export class FlashcardGenerationView extends ItemView {
       zai: [this.getDefaultModelForProvider('zai')],
       ollama: this.plugin.settings.ollamaModels?.length ? this.plugin.settings.ollamaModels : [this.getDefaultModelForProvider('ollama')],
       proxy: this.plugin.settings.proxyModels?.length ? this.plugin.settings.proxyModels : [this.getDefaultModelForProvider('proxy')],
+      qwengate: this.plugin.settings.qwengateModels?.length ? this.plugin.settings.qwengateModels : [this.getDefaultModelForProvider('qwengate')],
     };
 
-    return modelLists[provider].reduce((acc: Record<string, string>, model) => {
-      acc[model] = model;
+    return sortModelsByThinking(modelLists[provider]).reduce((acc: Record<string, string>, model) => {
+      acc[model] = modelLabel(model);
       return acc;
     }, {});
   }
@@ -523,7 +568,7 @@ export class FlashcardGenerationView extends ItemView {
       this.isGenerating = true;
       this.render();
       const file = this.sourceFile ?? ({ path: 'Pasted Flashcard Context.md', basename: 'Pasted Flashcard Context' } as TFile);
-      const newQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
+      const { questions: newQuestions } = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
         file,
         noteContent: this.context,
         provider: this.plugin.settings.flashcardGenerationProvider,
@@ -534,6 +579,8 @@ export class FlashcardGenerationView extends ItemView {
         outputLanguage: this.plugin.settings.defaultOutputLanguage || 'english',
         temperature: this.plugin.settings.flashcardGenerationTemperature,
         maxTokens: this.plugin.settings.flashcardGenerationMaxTokens,
+        twoPass: false,
+        stripThinking: this.plugin.settings.flashcardStripThinking,
       });
       if (newQuestions.length > 0) {
         this.generatedQuestions[index] = newQuestions[0];

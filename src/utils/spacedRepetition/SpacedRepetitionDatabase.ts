@@ -11,7 +11,7 @@ import {
   StudySetSourceType
 } from '../../types/spacedRepetition';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export interface SpacedRepetitionDatabaseConfig {
   dbPath: string;
@@ -88,6 +88,10 @@ export interface CardManagementQuery {
   archived?: boolean | null;
   studySetId?: string | null;
   questionType?: string | null;
+  bookPath?: string | null;
+  topLevelLabel?: string | null;
+  paragraphIndex?: number | null;
+  paragraphPage?: number | null;
   limit?: number;
 }
 
@@ -109,6 +113,13 @@ export interface CardManagementRecord {
   lastReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  bookPath: string | null;
+  bookName: string | null;
+  topLevelLabel: string | null;
+  topLevelPageStart: number | null;
+  topLevelPageEnd: number | null;
+  paragraphIndex: number | null;
+  paragraphPage: number | null;
 }
 
 export class SpacedRepetitionDatabase {
@@ -238,9 +249,10 @@ export class SpacedRepetitionDatabase {
         INSERT INTO questions (
           id, note_id, study_set_id, question_name, question_text, question_type, answer_text,
           choices_json, answer_check_mode, metadata_json, created_at, updated_at, next_repeat_at,
-          enabled
+          enabled, book_path, book_name, top_level_label, top_level_page_start, top_level_page_end,
+          paragraph_index, paragraph_page
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           id,
@@ -257,6 +269,13 @@ export class SpacedRepetitionDatabase {
           now,
           question.nextRepeatAt ?? now,
           question.enabled === false ? 0 : 1,
+          question.bookPath ?? null,
+          question.bookName ?? null,
+          question.topLevelLabel ?? null,
+          question.topLevelPageStart ?? null,
+          question.topLevelPageEnd ?? null,
+          question.paragraphIndex ?? null,
+          question.paragraphPage ?? null,
         ]
       );
 
@@ -285,6 +304,51 @@ export class SpacedRepetitionDatabase {
     }
 
     await this.persist();
+  }
+
+  getExistingQuestionTexts(bookPath: string, topLevelLabel?: string): string[] {
+    const db = this.requireDb();
+    const conditions = ['book_path = ?'];
+    const params: unknown[] = [bookPath];
+    if (topLevelLabel) {
+      conditions.push('top_level_label = ?');
+      params.push(topLevelLabel);
+    }
+    const rows = this.select<{ question_text: string }>(
+      `SELECT question_text FROM questions WHERE ${conditions.join(' AND ')}`,
+      params,
+    );
+    return rows.map((row) => String(row.question_text));
+  }
+
+  getCachedConcepts(bookPath: string, unitKey: string, textHash: string): any[] | null {
+    const db = this.requireDb();
+    const rows = this.select<{ concepts_json: string; text_hash: string }>(
+      'SELECT concepts_json, text_hash FROM book_concept_cache WHERE book_path = ? AND unit_key = ?',
+      [bookPath, unitKey],
+    );
+    if (rows.length === 0) return null;
+    if (rows[0].text_hash !== textHash) return null;
+    try {
+      return JSON.parse(rows[0].concepts_json);
+    } catch {
+      return null;
+    }
+  }
+
+  cacheConcepts(bookPath: string, unitKey: string, textHash: string, concepts: any[]): void {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    db.run(
+      `INSERT INTO book_concept_cache (book_path, unit_key, text_hash, concepts_json, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(book_path, unit_key) DO UPDATE SET
+         text_hash = excluded.text_hash,
+         concepts_json = excluded.concepts_json,
+         created_at = excluded.created_at`,
+      [bookPath, unitKey, textHash, JSON.stringify(concepts), now],
+    );
+    this.persist();
   }
 
   getDueQuestions(now: Date = new Date(), limit = 50): DueQuestionRecord[] {
@@ -525,6 +589,12 @@ export class SpacedRepetitionDatabase {
   }
 
   async setQuestionStudySet(questionId: string, studySetId: string | null): Promise<void> {
+    this.setQuestionStudySetUnchecked(questionId, studySetId);
+    await this.persist();
+  }
+
+  /** Moves one card without persisting (used by bulk operations). */
+  private setQuestionStudySetUnchecked(questionId: string, studySetId: string | null): void {
     const db = this.requireDb();
     const now = new Date().toISOString();
     const questionRows = this.select<Record<string, unknown>>(
@@ -572,8 +642,36 @@ export class SpacedRepetitionDatabase {
         [studySetId, noteId, now]
       );
     }
+  }
 
-    await this.persist();
+  /**
+   * Bulk variant of setQuestionStudySet: moves many cards to one deck (or to
+   * No deck) in a single persist. Cards that cannot be moved (e.g. deck-only
+   * cards being detached from their deck) are skipped and reported by id.
+   */
+  async moveQuestionsToStudySet(
+    questionIds: string[],
+    studySetId: string | null,
+  ): Promise<{ movedCount: number; skippedIds: string[] }> {
+    const db = this.requireDb();
+    let movedCount = 0;
+    const skippedIds: string[] = [];
+
+    for (const questionId of questionIds) {
+      try {
+        this.setQuestionStudySetUnchecked(questionId, studySetId);
+        movedCount += 1;
+      } catch (error) {
+        console.error(`Failed to move question ${questionId} to deck:`, error);
+        skippedIds.push(questionId);
+      }
+    }
+
+    if (movedCount > 0) {
+      await this.persist();
+    }
+
+    return { movedCount, skippedIds };
   }
 
   async updateStudySet(input: {
@@ -701,6 +799,19 @@ export class SpacedRepetitionDatabase {
     }));
   }
 
+  getBookProvenance(): Array<{ bookPath: string; bookName: string; topLevelLabel: string | null }> {
+    return this.select<Record<string, unknown>>(
+      `SELECT DISTINCT book_path as bookPath, book_name as bookName, top_level_label as topLevelLabel
+       FROM questions
+       WHERE book_path IS NOT NULL
+       ORDER BY book_name, topLevelLabel`
+    ).map((row) => ({
+      bookPath: String(row.bookPath),
+      bookName: String(row.bookName),
+      topLevelLabel: row.topLevelLabel ? String(row.topLevelLabel) : null,
+    }));
+  }
+
   getStudySetReviewStats(now: Date = new Date()): StudySetReviewStats[] {
     const sets = this.getStudySets();
     return sets.map((set) => ({
@@ -762,6 +873,26 @@ export class SpacedRepetitionDatabase {
       params.push(query.questionType);
     }
 
+    if (query.bookPath) {
+      conditions.push('q.book_path = ?');
+      params.push(query.bookPath);
+    }
+
+    if (query.topLevelLabel) {
+      conditions.push('q.top_level_label = ?');
+      params.push(query.topLevelLabel);
+    }
+
+    if (query.paragraphIndex !== null && query.paragraphIndex !== undefined) {
+      conditions.push('q.paragraph_index = ?');
+      params.push(query.paragraphIndex);
+    }
+
+    if (query.paragraphPage !== null && query.paragraphPage !== undefined) {
+      conditions.push('q.paragraph_page = ?');
+      params.push(query.paragraphPage);
+    }
+
     const search = query.search?.trim();
     if (search) {
       conditions.push('(q.question_text LIKE ? OR q.answer_text LIKE ? OR q.question_name LIKE ? OR n.note_path LIKE ? OR ss.name LIKE ?)');
@@ -779,7 +910,10 @@ export class SpacedRepetitionDatabase {
         q.question_name as questionName, q.question_text as questionText,
         q.question_type as questionType, q.answer_text as answerText,
         q.metadata_json as metadataJson, q.enabled, q.archived_at as archivedAt, q.next_repeat_at as nextRepeatAt,
-        q.last_reviewed_at as lastReviewedAt, q.created_at as createdAt, q.updated_at as updatedAt
+        q.last_reviewed_at as lastReviewedAt, q.created_at as createdAt, q.updated_at as updatedAt,
+        q.book_path as bookPath, q.book_name as bookName,
+        q.top_level_label as topLevelLabel, q.top_level_page_start as topLevelPageStart, q.top_level_page_end as topLevelPageEnd,
+        q.paragraph_index as paragraphIndex, q.paragraph_page as paragraphPage
       FROM questions q
       LEFT JOIN notes n ON n.id = q.note_id
       LEFT JOIN study_sets ss ON ss.id = q.study_set_id
@@ -808,6 +942,13 @@ export class SpacedRepetitionDatabase {
       lastReviewedAt: row.lastReviewedAt ? String(row.lastReviewedAt) : null,
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
+      bookPath: row.bookPath ? String(row.bookPath) : null,
+      bookName: row.bookName ? String(row.bookName) : null,
+      topLevelLabel: row.topLevelLabel ? String(row.topLevelLabel) : null,
+      topLevelPageStart: row.topLevelPageStart != null ? Number(row.topLevelPageStart) : null,
+      topLevelPageEnd: row.topLevelPageEnd != null ? Number(row.topLevelPageEnd) : null,
+      paragraphIndex: row.paragraphIndex != null ? Number(row.paragraphIndex) : null,
+      paragraphPage: row.paragraphPage != null ? Number(row.paragraphPage) : null,
     }));
   }
 
@@ -1053,6 +1194,17 @@ export class SpacedRepetitionDatabase {
       );
     `);
 
+    db.run(`
+      CREATE TABLE IF NOT EXISTS book_concept_cache (
+        book_path TEXT NOT NULL,
+        unit_key TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        concepts_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (book_path, unit_key)
+      );
+    `);
+
     db.run(
       `
       INSERT INTO schema_meta (key, value)
@@ -1063,6 +1215,13 @@ export class SpacedRepetitionDatabase {
     );
 
     this.ensureColumn('questions', 'archived_at', 'TEXT');
+    this.ensureColumn('questions', 'book_path', 'TEXT');
+    this.ensureColumn('questions', 'book_name', 'TEXT');
+    this.ensureColumn('questions', 'top_level_label', 'TEXT');
+    this.ensureColumn('questions', 'top_level_page_start', 'INTEGER');
+    this.ensureColumn('questions', 'top_level_page_end', 'INTEGER');
+    this.ensureColumn('questions', 'paragraph_index', 'INTEGER');
+    this.ensureColumn('questions', 'paragraph_page', 'INTEGER');
   }
 
   private ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {

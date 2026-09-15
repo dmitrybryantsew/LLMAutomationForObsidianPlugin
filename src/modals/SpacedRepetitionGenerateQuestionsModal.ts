@@ -186,7 +186,7 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
       // Build extra context from selected author notes
       const extraContext = await this.buildExtraContext();
 
-      const generatedQuestions = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
+      const { questions: generatedQuestions } = await this.plugin.services.spacedRepetitionGenerator.generateQuestionsForNote({
         file: this.sourceFile,
         noteContent,
         provider: this.provider,
@@ -246,6 +246,8 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
       case 'proxy':
         return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate':
+        return this.plugin.settings.qwengateTextModel || 'qwen3.7-plus';
       default:
         return this.plugin.settings.defaultTextModel || 'gpt-4o';
     }
@@ -286,6 +288,15 @@ export class SpacedRepetitionGenerateQuestionsModal extends Modal {
         const models = this.plugin.settings.proxyModels?.length
           ? this.plugin.settings.proxyModels
           : [this.getDefaultModelForProvider('proxy')];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+      case 'qwengate': {
+        const models = this.plugin.settings.qwengateModels?.length
+          ? this.plugin.settings.qwengateModels
+          : [this.getDefaultModelForProvider('qwengate')];
         return models.reduce((acc: Record<string, string>, model) => {
           acc[model] = model;
           return acc;

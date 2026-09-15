@@ -101,6 +101,13 @@ export interface SpacedRepetitionQuestionInput {
   metadata?: Record<string, unknown>;
   nextRepeatAt?: string;
   enabled?: boolean;
+  bookPath?: string | null;
+  bookName?: string | null;
+  topLevelLabel?: string | null;
+  topLevelPageStart?: number | null;
+  topLevelPageEnd?: number | null;
+  paragraphIndex?: number | null;
+  paragraphPage?: number | null;
 }
 
 export interface NoteChatRecord {

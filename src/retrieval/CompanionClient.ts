@@ -49,6 +49,37 @@ export interface CompanionAllowlistEntry {
   addedAt: number;
 }
 
+export interface CompanionPdfFile {
+  relativePath: string;
+  bytes: number;
+  modifiedAt: number;
+}
+
+export interface CompanionPdfChapter {
+  title: string;
+  level: number;
+  startPage: number;
+  endPage: number;
+}
+
+export interface CompanionPdfInfo {
+  path: string;
+  pageCount: number;
+  hasOutline: boolean;
+  chapters: CompanionPdfChapter[];
+}
+
+export interface CompanionPdfPage {
+  page: number;
+  text: string;
+}
+
+export interface CompanionPdfParagraph {
+  page: number;
+  paragraphIndex: number;
+  text: string;
+}
+
 export interface CompanionScanRequest {
   rootPath: string;
   includeGlobs?: string[];
@@ -174,5 +205,68 @@ export class CompanionClient {
     }
     if (!res.ok) throw new Error(`Companion /source/index failed: ${res.status}`);
     return await res.json() as CompanionIndexResult;
+  }
+
+  supportsPdf(): boolean {
+    return this.cachedStatus?.capabilities?.includes('pdf') === true;
+  }
+
+  async listPdfs(rootPath: string): Promise<CompanionPdfFile[]> {
+    const res = await this.postPdf(`${this.endpoint}/pdf/list`, { path: rootPath });
+    const data = await res.json();
+    return data.files as CompanionPdfFile[];
+  }
+
+  async getPdfInfo(pdfPath: string): Promise<CompanionPdfInfo> {
+    const res = await this.postPdf(`${this.endpoint}/pdf/info`, { path: pdfPath });
+    return await res.json() as CompanionPdfInfo;
+  }
+
+  async getPdfText(
+    pdfPath: string,
+    startPage: number,
+    endPage: number,
+  ): Promise<CompanionPdfPage[]> {
+    const res = await this.postPdf(`${this.endpoint}/pdf/text`, {
+      path: pdfPath,
+      startPage,
+      endPage,
+    });
+    const data = await res.json();
+    return data.pages as CompanionPdfPage[];
+  }
+
+  async getPdfParagraphs(
+    pdfPath: string,
+    startPage: number,
+    endPage: number,
+  ): Promise<CompanionPdfParagraph[]> {
+    const res = await this.postPdf(`${this.endpoint}/pdf/text`, {
+      path: pdfPath,
+      startPage,
+      endPage,
+      withParagraphs: true,
+    });
+    const data = await res.json();
+    return data.paragraphs as CompanionPdfParagraph[];
+  }
+
+  private async postPdf(url: string, body: Record<string, unknown>): Promise<Response> {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 403) {
+      throw new Error(`Companion rejected path (not allowlisted): ${body.path}`);
+    }
+    if (res.status === 404) {
+      throw new Error('Companion could not find the PDF file');
+    }
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Companion ${url} failed: ${res.status} ${err}`);
+    }
+    return res;
   }
 }
