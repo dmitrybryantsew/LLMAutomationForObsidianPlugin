@@ -1,3 +1,210 @@
+/* ==========================================================================
+   LLM Automation — design tokens & shared components
+   All colors reference Obsidian CSS variables so the UI adapts to the
+   user's theme (light/dark) automatically. No hardcoded hex values.
+   ========================================================================== */
+
+.llm-automation-flashcard-hub-view,
+.spaced-repetition-review-view,
+.spaced-repetition-card-management-view,
+.flashcard-generation-view {
+    --llm-gap-xs: 4px;
+    --llm-gap-sm: 8px;
+    --llm-gap-md: 16px;
+    --llm-gap-lg: 24px;
+    --llm-radius-sm: 4px;
+    --llm-radius-md: 8px;
+    --llm-radius-lg: 12px;
+    --llm-surface: var(--background-primary);
+    --llm-surface-raised: var(--background-secondary);
+    --llm-surface-inset: var(--background-primary-alt);
+    --llm-border: var(--background-modifier-border);
+    --llm-border-strong: var(--background-modifier-border-hover);
+    --llm-text: var(--text-normal);
+    --llm-text-muted: var(--text-muted);
+    --llm-text-faint: var(--text-faint);
+    --llm-accent: var(--interactive-accent);
+    --llm-accent-hover: var(--interactive-accent-hover);
+    --llm-accent-text: var(--text-on-accent);
+    --llm-danger: var(--text-error);
+    --llm-danger-bg: var(--background-modifier-error-hover);
+    --llm-success: var(--text-success);
+    --llm-warning: var(--text-warning);
+    --llm-control-height: 32px;
+    --llm-container-max: 820px;
+}
+
+/* Shared button system.
+   One primary (accent) action per panel; secondary = outline;
+   muted = quiet destructive-ish; danger = red. */
+
+.llm-automation-btn {
+    min-height: var(--llm-control-height);
+    padding: 6px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--llm-radius-sm);
+    background: transparent;
+    color: var(--llm-text);
+    font-size: var(--font-ui-small);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+}
+
+.llm-automation-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.llm-automation-btn:focus-visible {
+    outline: 2px solid var(--llm-accent);
+    outline-offset: 2px;
+}
+
+.llm-automation-btn-primary {
+    background: var(--llm-accent);
+    border-color: var(--llm-accent);
+    color: var(--llm-accent-text);
+    font-weight: var(--font-semibold);
+}
+
+.llm-automation-btn-primary:hover:not(:disabled) {
+    background: var(--llm-accent-hover);
+    border-color: var(--llm-accent-hover);
+}
+
+.llm-automation-btn-secondary {
+    background: var(--llm-surface);
+    border-color: var(--llm-border-strong);
+    color: var(--llm-text);
+}
+
+.llm-automation-btn-secondary:hover:not(:disabled) {
+    background: var(--background-modifier-hover);
+    border-color: var(--llm-border-strong);
+}
+
+.llm-automation-btn-muted {
+    background: transparent;
+    border-color: var(--llm-border);
+    color: var(--llm-text-muted);
+}
+
+.llm-automation-btn-muted:hover:not(:disabled) {
+    background: var(--background-modifier-hover);
+    color: var(--llm-text);
+}
+
+.llm-automation-btn-danger {
+    background: transparent;
+    border-color: var(--llm-border);
+    color: var(--llm-danger);
+}
+
+.llm-automation-btn-danger:hover:not(:disabled) {
+    background: var(--llm-danger-bg);
+    border-color: var(--llm-danger);
+}
+
+/* Fieldset grouping for generator-style settings panels. */
+
+.llm-automation-fieldset {
+    margin: 0 0 var(--llm-gap-md);
+    padding: var(--llm-gap-sm) var(--llm-gap-md) var(--llm-gap-md);
+    border: 1px solid var(--llm-border);
+    border-radius: var(--llm-radius-md);
+    background: var(--llm-surface);
+    min-width: 0;
+}
+
+.llm-automation-fieldset legend {
+    padding: 0 var(--llm-gap-sm);
+    color: var(--llm-text-muted);
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-semibold);
+    letter-spacing: 0.02em;
+}
+
+/* Form rows: label column on wide panes, stacked on narrow ones.
+   Uses container queries (Obsidian is Chromium ≥ 105) so sidebar-width
+   panes stack while wide focus-mode tabs keep the two-column layout. */
+
+.llm-automation-fieldset {
+    container-type: inline-size;
+}
+
+.llm-automation-fieldset .setting-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--llm-gap-xs);
+    padding: var(--llm-gap-sm) 0;
+    border: none;
+}
+
+.llm-automation-fieldset .setting-item-control {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: var(--llm-gap-sm);
+}
+
+@container (min-width: 560px) {
+    .llm-automation-fieldset .setting-item {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .llm-automation-fieldset .setting-item-info {
+        flex: 0 0 280px;
+    }
+}
+
+.llm-automation-fieldset textarea,
+.llm-automation-fieldset input[type='text'] {
+    min-height: 32px;
+}
+
+/* Shared stat tiles. */
+
+.llm-automation-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border: 1px solid var(--llm-border);
+    border-radius: var(--llm-radius-md);
+    background: var(--llm-surface-raised);
+}
+
+.llm-automation-tile-value {
+    font-size: var(--font-ui-larger);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--llm-text);
+}
+
+.llm-automation-tile-label {
+    color: var(--llm-text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+/* kbd chips. */
+
+.llm-automation-kbd,
+kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 2px 6px;
+    border: 1px solid var(--llm-border-strong);
+    border-bottom-width: 2px;
+    border-radius: var(--llm-radius-sm);
+    background: var(--llm-surface-raised);
+    color: var(--llm-text-muted);
+    font-family: var(--font-interface);
+    font-size: var(--font-ui-smaller);
+    text-align: center;
+    line-height: 1.4;
+}
+
 .generate-text-layout {
     display: flex;
     flex-direction: column;
@@ -291,17 +498,18 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--llm-gap-md, 16px);
+    padding: var(--llm-gap-md, 16px);
+    container-type: inline-size;
 }
 
 .spaced-repetition-review-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    padding-bottom: 8px;
+    gap: var(--llm-gap-sm, 8px);
+    border-bottom: 1px solid var(--llm-border, var(--background-modifier-border));
+    padding-bottom: var(--llm-gap-sm, 8px);
 }
 
 .spaced-repetition-review-header h2 {
@@ -312,7 +520,7 @@
 .spaced-repetition-card-label,
 .spaced-repetition-card-context,
 .spaced-repetition-source-path {
-    color: var(--text-muted);
+    color: var(--llm-text-muted, var(--text-muted));
     font-size: var(--font-ui-small);
 }
 
@@ -320,22 +528,64 @@
 .spaced-repetition-empty-state {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-width: 760px;
+    gap: var(--llm-gap-md, 16px);
+    max-width: var(--llm-container-max, 760px);
     width: 100%;
+    margin: 0 auto;
+}
+
+/* Friendly centered empty state. */
+.spaced-repetition-empty-state {
+    align-items: center;
+    text-align: center;
+    padding: var(--llm-gap-lg, 24px) var(--llm-gap-md, 16px);
+    border: 1px dashed var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-lg, 12px);
+    margin-top: var(--llm-gap-lg, 24px);
+}
+
+.spaced-repetition-empty-emoji {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    background: var(--llm-surface-raised, var(--background-secondary));
+    color: var(--llm-success, var(--text-success));
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.spaced-repetition-empty-state h3 {
+    margin: 0;
+}
+
+.spaced-repetition-empty-hint {
+    max-width: 480px;
+    color: var(--llm-text-muted, var(--text-muted));
+}
+
+.spaced-repetition-empty-state .setting-item {
+    border: none;
+    justify-content: center;
 }
 
 .spaced-repetition-deck-browser-view {
-    padding: 16px;
+    padding: var(--llm-gap-md, 16px);
     overflow-y: auto;
+    max-width: var(--llm-container-max, 820px);
+    margin: 0 auto;
+    container-type: inline-size;
 }
 
 .spaced-repetition-deck-browser-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--llm-gap-sm, 8px);
+    margin-bottom: var(--llm-gap-sm, 8px);
 }
 
 .spaced-repetition-deck-browser-header h2 {
@@ -345,45 +595,56 @@
 .spaced-repetition-deck-browser-summary,
 .spaced-repetition-deck-card-description,
 .spaced-repetition-deck-card-counts {
-    color: var(--text-muted);
+    color: var(--llm-text-muted, var(--text-muted));
     font-size: var(--font-ui-small);
 }
 
 .spaced-repetition-deck-list-section {
-    margin-top: 18px;
+    margin-top: var(--llm-gap-lg, 24px);
 }
 
 .spaced-repetition-stats-section {
-    margin-top: 16px;
+    margin-top: var(--llm-gap-md, 16px);
 }
 
 .spaced-repetition-stats-section h3 {
     margin: 0 0 10px;
 }
 
+/* Stat tiles: equal-width grid, 4-up wide / 2-up narrow, big numerals. */
 .spaced-repetition-stats-metrics {
     display: grid;
-    grid-template-columns: repeat(4, minmax(90px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--llm-gap-sm, 8px);
     margin-bottom: 10px;
 }
 
+@container (min-width: 560px) {
+    .spaced-repetition-stats-metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 .spaced-repetition-stats-metric {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    padding: 8px;
-    background: var(--background-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--llm-surface-raised, var(--background-secondary));
 }
 
 .spaced-repetition-stats-metric-value {
-    font-size: var(--font-ui-large);
-    font-weight: 600;
+    font-size: var(--font-ui-larger);
+    font-weight: 700;
+    line-height: 1.1;
 }
 
 .spaced-repetition-stats-metric-label,
 .spaced-repetition-stats-text {
-    color: var(--text-muted);
-    font-size: var(--font-ui-small);
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-smaller);
 }
 
 .spaced-repetition-stats-panels {
@@ -465,16 +726,19 @@
 }
 
 .spaced-repetition-card-management-view {
-    padding: 16px;
+    padding: var(--llm-gap-md, 16px);
     overflow-y: auto;
+    max-width: var(--llm-container-max, 820px);
+    margin: 0 auto;
+    container-type: inline-size;
 }
 
 .spaced-repetition-card-management-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--llm-gap-sm, 8px);
+    margin-bottom: var(--llm-gap-sm, 8px);
 }
 
 .spaced-repetition-card-management-header h2 {
@@ -483,29 +747,60 @@
 
 .spaced-repetition-card-management-summary,
 .spaced-repetition-card-management-context {
-    color: var(--text-muted);
+    color: var(--llm-text-muted, var(--text-muted));
     font-size: var(--font-ui-small);
 }
 
 .spaced-repetition-card-management-filters {
-    margin-bottom: 14px;
+    margin-bottom: var(--llm-gap-md, 16px);
 }
 
 .spaced-repetition-card-management-list {
     display: grid;
-    gap: 10px;
+    gap: var(--llm-gap-sm, 8px);
 }
 
+/* Card rows: front/back hierarchy, hover + focus states. */
 .spaced-repetition-card-management-row {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    padding: 10px;
-    background: var(--background-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--llm-gap-xs, 4px);
+    padding: var(--llm-gap-sm, 8px) var(--llm-gap-md, 16px);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--llm-surface, var(--background-primary));
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.spaced-repetition-card-management-row-top {
+    display: flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+}
+
+.spaced-repetition-card-management-title {
+    font-weight: var(--font-semibold);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.spaced-repetition-card-management-row:hover,
+.spaced-repetition-card-management-row:focus-within {
+    border-color: var(--llm-border-strong, var(--background-modifier-border-hover));
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.spaced-repetition-card-management-row:focus-visible {
+    outline: 2px solid var(--llm-accent, var(--interactive-accent));
+    outline-offset: 2px;
 }
 
 .spaced-repetition-card-management-row-suspended {
     opacity: 0.78;
-    background: var(--background-primary-alt);
+    background: var(--llm-surface-inset, var(--background-primary-alt));
 }
 
 .spaced-repetition-card-management-row-archived {
@@ -513,56 +808,76 @@
     border-style: dashed;
 }
 
-.spaced-repetition-card-management-row-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 4px;
-}
-
-.spaced-repetition-card-management-title {
-    font-weight: 600;
-}
-
 .spaced-repetition-card-management-status {
-    color: var(--text-success);
+    color: var(--llm-success, var(--text-success));
     font-size: var(--font-ui-smaller);
     white-space: nowrap;
 }
 
 .spaced-repetition-card-management-status-suspended {
-    color: var(--text-warning);
+    color: var(--llm-warning, var(--text-warning));
 }
 
 .spaced-repetition-card-management-question,
 .spaced-repetition-card-management-answer {
-    margin-top: 8px;
+    margin-top: 0;
     white-space: pre-wrap;
     line-height: 1.45;
 }
 
+.spaced-repetition-card-management-text-block {
+    margin-top: var(--llm-gap-sm, 8px);
+}
+
+.spaced-repetition-card-management-question {
+    font-weight: var(--font-semibold);
+}
+
 .spaced-repetition-card-management-answer {
-    color: var(--text-muted);
-    border-left: 2px solid var(--background-modifier-border);
-    padding-left: 8px;
+    color: var(--llm-text-muted, var(--text-muted));
+    border-left: 2px solid var(--llm-border, var(--background-modifier-border));
+    padding-left: var(--llm-gap-sm, 8px);
+}
+
+/* Long-text clamp + expand toggle. */
+.spaced-repetition-card-management-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.spaced-repetition-card-management-clamp-toggle {
+    display: inline-block;
+    margin-top: var(--llm-gap-xs, 4px);
+    padding: 2px 8px;
+    min-height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--llm-accent, var(--interactive-accent));
+    font-size: var(--font-ui-smaller);
+    cursor: pointer;
+}
+
+.spaced-repetition-card-management-clamp-toggle:hover {
+    text-decoration: underline;
 }
 
 .spaced-repetition-card-management-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--llm-gap-sm, 8px);
     margin-top: 10px;
 }
 
 .spaced-repetition-card-management-edit {
     display: grid;
-    gap: 8px;
+    gap: var(--llm-gap-sm, 8px);
     margin-top: 10px;
 }
 
 .spaced-repetition-card-management-help {
-    color: var(--text-muted);
+    color: var(--llm-text-muted, var(--text-muted));
     font-size: var(--font-ui-small);
 }
 
@@ -570,11 +885,11 @@
     width: 100%;
     min-height: 88px;
     resize: vertical;
-    padding: 8px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background: var(--background-primary);
-    color: var(--text-normal);
+    padding: var(--llm-gap-sm, 8px);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+    background: var(--llm-surface, var(--background-primary));
+    color: var(--llm-text, var(--text-normal));
     font-family: var(--font-text);
 }
 
@@ -582,22 +897,34 @@
     font-size: var(--font-ui-large);
     line-height: 1.5;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .spaced-repetition-answer-text {
-    border-left: 3px solid var(--interactive-accent);
+    border-left: 3px solid var(--llm-accent, var(--interactive-accent));
     padding: 10px 12px;
-    background: var(--background-primary-alt);
+    border-radius: 0 var(--llm-radius-sm, 4px) var(--llm-radius-sm, 4px) 0;
+    background: var(--llm-surface-inset, var(--background-primary-alt));
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .spaced-repetition-answer-input {
     width: 100%;
-    padding: 8px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background: var(--background-primary);
-    color: var(--text-normal);
+    min-height: var(--llm-control-height, 32px);
+    padding: var(--llm-gap-sm, 8px);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+    background: var(--llm-surface, var(--background-primary));
+    color: var(--llm-text, var(--text-normal));
+}
+
+.spaced-repetition-answer-input:focus-visible,
+.spaced-repetition-card-management-textarea:focus-visible,
+.spaced-repetition-deck-edit-description:focus-visible {
+    outline: 2px solid var(--llm-accent, var(--interactive-accent));
+    outline-offset: 1px;
+    border-color: var(--llm-accent, var(--interactive-accent));
 }
 
 .spaced-repetition-field-inputs {
@@ -618,17 +945,28 @@
 
 .spaced-repetition-grade-buttons {
     display: grid;
-    grid-template-columns: repeat(6, minmax(82px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--llm-gap-sm, 8px);
+}
+
+@container (min-width: 640px) {
+    .spaced-repetition-grade-buttons {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
 }
 
 .spaced-repetition-grade-button {
     min-height: 36px;
-    border-radius: 4px;
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+.spaced-repetition-grade-button:focus-visible {
+    outline: 2px solid var(--llm-accent, var(--interactive-accent));
+    outline-offset: 2px;
 }
 
 .spaced-repetition-grade-later {
-    border-color: var(--interactive-accent);
+    border-color: var(--llm-accent, var(--interactive-accent));
 }
 
 .spaced-repetition-card-management {
@@ -651,55 +989,101 @@
 }
 
 .flashcard-generation-view {
-    padding: 16px;
+    padding: var(--llm-gap-md, 16px);
     overflow-y: auto;
+    max-width: var(--llm-container-max, 820px);
+    margin: 0 auto;
+    container-type: inline-size;
 }
 
 .flashcard-generation-header {
-    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--llm-gap-sm, 8px);
+    margin-bottom: var(--llm-gap-md, 16px);
 }
 
 .flashcard-generation-header h2 {
-    margin: 0 0 4px;
+    margin: 0 0 var(--llm-gap-xs, 4px);
 }
 
 .flashcard-generation-source,
 .flashcard-generation-preview-label {
-    color: var(--text-muted);
-    font-size: 12px;
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-smaller);
+}
+
+/* Textareas: roomy, monospace context. */
+.flashcard-generation-view .setting-item textarea,
+.flashcard-generation-context-input {
+    width: 100%;
+    min-height: 140px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    line-height: 1.5;
 }
 
 .flashcard-generation-context-input {
     min-height: 240px;
-    font-family: var(--font-monospace);
 }
 
 .flashcard-generation-preview {
-    margin-top: 16px;
+    margin-top: var(--llm-gap-md, 16px);
+}
+
+.flashcard-generation-preview-empty {
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-small);
 }
 
 .flashcard-generation-preview-card {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 10px;
-    background: var(--background-secondary);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    padding: var(--llm-gap-sm, 8px) var(--llm-gap-md, 16px);
+    margin-bottom: var(--llm-gap-sm, 8px);
+    background: var(--llm-surface, var(--background-primary));
+    transition: border-color 0.15s;
+}
+
+.flashcard-generation-preview-card:hover,
+.flashcard-generation-preview-card:focus-within {
+    border-color: var(--llm-border-strong, var(--background-modifier-border-hover));
+}
+
+.flashcard-generation-preview-card-excluded {
+    opacity: 0.55;
+    border-style: dashed;
+}
+
+.flashcard-generation-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    flex-wrap: wrap;
+}
+
+.flashcard-generation-preview-actions {
+    display: flex;
+    gap: var(--llm-gap-xs, 4px);
+    flex-wrap: wrap;
 }
 
 .flashcard-generation-preview-question {
-    font-weight: 600;
+    font-weight: var(--font-semibold);
     margin: 6px 0;
 }
 
 .flashcard-generation-preview-answer {
-    color: var(--text-normal);
+    color: var(--llm-text-muted, var(--text-muted));
     white-space: pre-wrap;
 }
 
 .flashcard-generation-preview-fields {
-    margin: 8px 0 0;
+    margin: var(--llm-gap-sm, 8px) 0 0;
     padding-left: 20px;
-    color: var(--text-muted);
+    color: var(--llm-text-muted, var(--text-muted));
 }
 
 .spaced-repetition-match-ok {
@@ -898,14 +1282,11 @@
     flex: 1 1 180px;
 }
 
+/* Responsive fallback for very narrow panes (container queries handle the
+   main layouts above; this covers grade buttons in tiny sidebars). */
 @media (max-width: 520px) {
     .spaced-repetition-grade-buttons {
-        grid-template-columns: 1fr;
-    }
-
-    .spaced-repetition-stats-metrics,
-    .spaced-repetition-stats-panels {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -1378,4 +1759,517 @@
 .quick-query-modal .agent-generate-btn {
     margin-top: 8px;
 }
+
+/* ==========================================================================
+   Flashcard UI (Mnemosyne-style focus mode)
+   Toggled by the "Toggle Flashcard UI" command. Hides all Obsidian chrome
+   (ribbon, sidebars, tab bar, status bar) so the flashcard hub / review view
+   owns the entire window. Calling the command again restores the default UI.
+   ========================================================================== */
+
+body.llm-automation-flashcard-ui-active .workspace-ribbon.mod-left {
+    display: none;
+}
+
+body.llm-automation-flashcard-ui-active .workspace-split.mod-left-split,
+body.llm-automation-flashcard-ui-active .workspace-split.mod-right-split {
+    display: none;
+}
+
+/* Tab bar stays visible in flashcard mode for tab switching. */
+
+body.llm-automation-flashcard-ui-active .status-bar {
+    display: none;
+}
+
+/* Review cards center comfortably since they now own the window
+   (base rule already centers; keep for explicitness). */
+body.llm-automation-flashcard-ui-active .spaced-repetition-review-card,
+body.llm-automation-flashcard-ui-active .spaced-repetition-empty-state {
+    max-width: var(--llm-container-max, 760px);
+    margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Flashcard Hub view
+   -------------------------------------------------------------------------- */
+
+.llm-automation-flashcard-hub-view {
+    padding: var(--llm-gap-md, 16px) var(--llm-gap-md, 16px) var(--llm-gap-lg, 24px);
+    overflow-y: auto;
+    height: 100%;
+    container-type: inline-size;
+}
+
+.llm-automation-flashcard-hub-container {
+    max-width: var(--llm-container-max, 820px);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--llm-gap-lg, 24px);
+}
+
+.llm-automation-flashcard-hub-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--llm-gap-sm, 8px);
+}
+
+.llm-automation-flashcard-hub-title h1 {
+    margin: 0;
+    font-size: var(--font-ui-larger);
+    font-weight: 700;
+}
+
+.llm-automation-flashcard-hub-exit {
+    padding: 6px 14px;
+}
+
+.llm-automation-flashcard-hub-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--llm-gap-sm, 8px);
+    padding: var(--llm-gap-lg, 24px) 32px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-lg, 12px);
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.llm-automation-flashcard-hub-status {
+    font-size: var(--font-ui-large);
+    font-weight: 600;
+}
+
+.llm-automation-flashcard-hub-substatus {
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-small);
+}
+
+/* Primary CTA of the hub home screen (styled by .llm-automation-btn-primary). */
+.llm-automation-flashcard-hub-start {
+    margin-top: var(--llm-gap-sm, 8px);
+    padding: 10px 26px;
+    font-size: var(--font-ui-medium);
+}
+
+.llm-automation-flashcard-hub-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--llm-gap-sm, 8px);
+}
+
+/* Stat tiles: 4-up wide / 2-up narrow. */
+.llm-automation-flashcard-hub-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--llm-gap-sm, 8px);
+}
+
+@container (min-width: 560px) {
+    .llm-automation-flashcard-hub-metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.llm-automation-flashcard-hub-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.llm-automation-flashcard-hub-metric-value {
+    font-size: var(--font-ui-larger);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.llm-automation-flashcard-hub-metric-label,
+.llm-automation-flashcard-hub-muted,
+.llm-automation-flashcard-hub-deck-counts,
+.llm-automation-flashcard-hub-forecast-label {
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-smaller);
+}
+
+.llm-automation-flashcard-hub-forecast {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: var(--llm-text-faint, var(--text-faint));
+    font-size: var(--font-ui-smaller);
+}
+
+/* kbd shortcut chips. */
+.llm-automation-flashcard-hub-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+    padding-top: var(--llm-gap-sm, 8px);
+    border-top: 1px solid var(--llm-border, var(--background-modifier-border));
+}
+
+.llm-automation-flashcard-hub-shortcuts-label {
+    color: var(--llm-text-muted, var(--text-muted));
+    font-weight: var(--font-semibold);
+    font-size: var(--font-ui-smaller);
+}
+
+.llm-automation-flashcard-hub-shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-ui-smaller);
+    color: var(--llm-text-muted, var(--text-muted));
+}
+
+.llm-automation-flashcard-hub-shortcut kbd {
+    font-size: var(--font-ui-smaller);
+}
+
+.llm-automation-flashcard-hub-decks h2 {
+    margin: 0 0 10px;
+}
+
+.llm-automation-flashcard-hub-deck-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--llm-gap-sm, 8px);
+    align-items: center;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    padding: 10px var(--llm-gap-md, 16px);
+    margin-bottom: var(--llm-gap-sm, 8px);
+    background: var(--llm-surface, var(--background-primary));
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.llm-automation-flashcard-hub-deck-row:hover,
+.llm-automation-flashcard-hub-deck-row:focus-within {
+    border-color: var(--llm-border-strong, var(--background-modifier-border-hover));
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.llm-automation-flashcard-hub-deck-row-disabled {
+    opacity: 0.55;
+}
+
+.llm-automation-flashcard-hub-deck-title {
+    font-weight: var(--font-semibold);
+}
+
+.llm-automation-flashcard-hub-deck-actions {
+    display: flex;
+    gap: var(--llm-gap-xs, 4px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Back-to-hub button shown in review / manage / generation views
+   while flashcard focus mode is active. */
+.spaced-repetition-back-to-hub {
+    padding: 4px 12px;
+    white-space: nowrap;
+}
+
+/* Deck manage sub-page. */
+.llm-automation-flashcard-hub-back-row {
+    margin-bottom: var(--llm-gap-xs, 4px);
+}
+
+.llm-automation-flashcard-hub-back-row button {
+    padding: 4px 12px;
+}
+
+.llm-automation-flashcard-hub-deck-manage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--llm-gap-md, 16px);
+}
+
+.llm-automation-flashcard-hub-deck-manage h2 {
+    margin: 0;
+}
+
+.llm-automation-flashcard-hub-deck-edit {
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    padding: var(--llm-gap-sm, 8px) var(--llm-gap-md, 16px);
+    background: var(--llm-surface-raised, var(--background-secondary));
+    display: flex;
+    flex-direction: column;
+    gap: var(--llm-gap-sm, 8px);
+}
+
+.llm-automation-flashcard-hub-deck-edit-description {
+    resize: vertical;
+    min-height: 64px;
+}
+
+.llm-automation-flashcard-hub-deck-cards h3 {
+    margin: 0 0 var(--llm-gap-sm, 8px);
+}
+
+.llm-automation-flashcard-hub-deck-card-row {
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+    padding: var(--llm-gap-sm, 8px) 12px;
+    margin-bottom: 6px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.llm-automation-flashcard-hub-deck-card-row:hover {
+    border-color: var(--llm-border-strong, var(--background-modifier-border-hover));
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.llm-automation-flashcard-hub-deck-card-title {
+    font-weight: var(--font-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Bulk selection + move (card manager & hub deck page). */
+.spaced-repetition-card-management-bulk-bar,
+.llm-automation-flashcard-hub-bulk-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    margin-bottom: var(--llm-gap-sm, 8px);
+    padding: var(--llm-gap-sm, 8px) var(--llm-gap-md, 16px);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--llm-surface-raised, var(--background-secondary));
+}
+
+.spaced-repetition-card-management-bulk-toggle,
+.llm-automation-flashcard-hub-bulk-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.spaced-repetition-card-management-bulk-count,
+.llm-automation-flashcard-hub-bulk-count {
+    color: var(--llm-accent, var(--interactive-accent));
+    font-weight: var(--font-semibold);
+    font-size: var(--font-ui-small);
+    white-space: nowrap;
+}
+
+.spaced-repetition-card-management-bulk-move,
+.llm-automation-flashcard-hub-bulk-move {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.spaced-repetition-card-management-bulk-move select,
+.llm-automation-flashcard-hub-bulk-move select {
+    min-height: var(--llm-control-height, 32px);
+}
+
+/* Per-row select checkbox. */
+.spaced-repetition-card-management-select,
+.llm-automation-flashcard-hub-deck-card-select {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--llm-accent, var(--interactive-accent));
+    flex: 0 0 auto;
+}
+
+.llm-automation-flashcard-hub-deck-card-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+}
+
+.llm-automation-flashcard-hub-deck-card-select {
+    flex: 0 0 auto;
+}
+
+.llm-automation-flashcard-hub-deck-card-title {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.llm-automation-flashcard-hub-deck-counts {
+    flex: 0 1 auto;
+}
+
+/* Selected row highlight (visible, not color-only: border + background). */
+.spaced-repetition-card-management-row-selected,
+.llm-automation-flashcard-hub-deck-card-row-selected {
+    border-color: var(--llm-accent, var(--interactive-accent));
+    background: var(--llm-surface-raised, var(--background-secondary));
+    box-shadow: inset 2px 0 0 var(--llm-accent, var(--interactive-accent));
+}
+
+/* New deck form (reuses deck-edit card look). */
+.llm-automation-flashcard-hub-new-deck h3 {
+    margin: 0;
+}
+
+/* Flashcards from Book modal. */
+.flashcards-from-book-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--llm-gap-md, 16px);
+}
+
+.flashcards-from-book-section h3,
+.flashcards-from-book-header h3 {
+    margin: 0 0 6px;
+}
+
+.flashcards-from-book-hint p {
+    margin: 8px 0 0;
+    color: var(--llm-text-muted, var(--text-muted));
+}
+
+.flashcards-from-book-list {
+    display: grid;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.flashcards-from-book-row {
+    display: flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    padding: 8px 12px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+.flashcards-from-book-row-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--font-semibold);
+}
+
+.flashcards-from-book-row-meta {
+    color: var(--llm-text-muted, var(--text-muted));
+    font-size: var(--font-ui-smaller);
+    flex: 0 0 auto;
+}
+
+.flashcards-from-book-chapter-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    margin-bottom: 6px;
+}
+
+.flashcards-from-book-chapter-controls span {
+    margin-right: auto;
+}
+
+.flashcards-from-book-chapters {
+    display: grid;
+    gap: 4px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: var(--llm-gap-sm, 8px);
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+.flashcards-from-book-chapter-row {
+    display: flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    padding: 4px 6px;
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+.flashcards-from-book-chapter-row:hover {
+    background: var(--background-modifier-hover);
+}
+
+.flashcards-from-book-chapter-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.flashcards-from-book-chapter-selected {
+    background: var(--llm-surface-raised, var(--background-secondary));
+    box-shadow: inset 2px 0 0 var(--llm-accent, var(--interactive-accent));
+}
+
+.flashcards-from-book-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.flashcards-from-book-preview h3 {
+    margin: 0;
+}
+
+.flashcards-from-book-preview-card {
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+    padding: 8px 12px;
+}
+
+/* Companion allowlist manager (settings). */
+.companion-allowlist-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.companion-allowlist-row {
+    display: flex;
+    align-items: center;
+    gap: var(--llm-gap-sm, 8px);
+    padding: 6px 10px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+.companion-allowlist-path {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+}
+
+.companion-allowlist-add {
+    margin-top: 8px;
+    padding: var(--llm-gap-sm, 8px) var(--llm-gap-md, 16px);
+    border: 1px dashed var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-sm, 4px);
+}
+
+
+
+
+
 

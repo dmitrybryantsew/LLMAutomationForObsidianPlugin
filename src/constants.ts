@@ -5,6 +5,7 @@ const VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER = "llm-automation-spaced-repetiti
 const VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT = "llm-automation-spaced-repetition-card-management";
 const VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT = "llm-automation-spaced-repetition-note-chat";
 const VIEW_TYPE_FLASHCARD_GENERATION = "llm-automation-flashcard-generation";
+const VIEW_TYPE_FLASHCARD_HUB = "llm-automation-flashcard-hub";
 const VIEW_TYPE_CODING_EXERCISES = "llm-automation-coding-exercises";
 const HIERARCHY_PLUGIN_ID = "obsidian-gpt4free-hierarchy-plugin";
 const DEFAULT_SETTINGS = {
@@ -24,7 +25,9 @@ const DEFAULT_SETTINGS = {
   flashcardGenerationProvider: 'ollama',
   flashcardGenerationModel: 'gemma4:31b-cloud',
   flashcardGenerationTemperature: 0.2,
-  flashcardGenerationMaxTokens: 3000,
+  flashcardGenerationMaxTokens: 8000,
+  flashcardTwoPassGeneration: true,
+  flashcardStripThinking: true,
   codingExercisesFolder: "Coding Exercises",
   // Legacy summaryModel for backward compatibility (deprecated - use provider-specific models)
   summaryModel: "openrouter/deepseek/deepseek-r1:free",
@@ -53,10 +56,12 @@ const DEFAULT_SETTINGS = {
   defaultFrequencyPenalty: 0,
   ollamaBaseUrl: "http://localhost:11434",
   proxyBaseUrl: "http://localhost:3000/v1",
+  qwengateBaseUrl: "http://localhost:26405/v1",
   helperServerUrl: "http://127.0.0.1:8001",
   ollamaTimeout: 120000,
   ollamaModels: [],
   proxyModels: [],
+  qwengateModels: ["qwen3.7-plus", "qwen3.8-max", "qwen3.7-max", "qwen3.6-plus", "qwen3.5-plus", "qwen3.5-omni-plus"],
   // Provider-specific summary models (NEW)
   openrouterSummaryModel: "openrouter/deepseek/deepseek-r1:free",
   openrouterTagModel: "google/gemma-4-31b-it",
@@ -68,12 +73,15 @@ const DEFAULT_SETTINGS = {
   ollamaTagModel: "gemma4:31b-cloud",
   proxySummaryModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   proxyTagModel: "chutes:Qwen/Qwen3-32B-TEE",
+  qwengateSummaryModel: "qwen3.7-plus",
+  qwengateTagModel: "qwen3.7-plus",
   // Provider-specific text models (NEW)
   openrouterTextModel: "openrouter/deepseek/deepseek-r1:free",
   chutesTextModel: "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
   zaiTextModel: "glm-4.6",
   ollamaTextModel: "gemma4:31b-cloud",
   proxyTextModel: "nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  qwengateTextModel: "qwen3.7-plus",
   // Article summary model (separate from YouTube summary)
   articleSummaryProvider: "openrouter",
   articleSummaryModel: "openrouter/deepseek/deepseek-r1:free",
@@ -200,5 +208,6 @@ export { VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER };
 export { VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT };
 export { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT };
 export { VIEW_TYPE_FLASHCARD_GENERATION };
+export { VIEW_TYPE_FLASHCARD_HUB };
 export { VIEW_TYPE_CODING_EXERCISES };
 export {HIERARCHY_PLUGIN_ID};

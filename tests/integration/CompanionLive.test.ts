@@ -83,8 +83,9 @@ describe('CompanionClient live integration', () => {
     const status = await client.checkStatus(true);
     expect(status).not.toBeNull();
     expect(status!.running).toBe(true);
-    expect(status!.version).toBe('0.1.0');
+    expect(status!.version).toBe('0.2.0');
     expect(status!.capabilities).toContain('scan');
+    expect(status!.capabilities).toContain('pdf');
   });
 
   it('adds root to allowlist, scans, and indexes', async () => {

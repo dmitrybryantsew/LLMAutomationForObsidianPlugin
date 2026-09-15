@@ -104,6 +104,7 @@ import {
           'zai': 'ZAI',
           'ollama': 'Ollama',
           'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate',
           'g4f': 'G4F (Local - Legacy)'
         });
         dropdown
@@ -163,6 +164,8 @@ import {
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
       case 'proxy':
         return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate':
+        return this.plugin.settings.qwengateTextModel || 'qwen3.7-plus';
       default:
         return this.plugin.settings.defaultTextModel;
     }
@@ -186,6 +189,9 @@ import {
       case 'proxy':
         this.plugin.settings.proxyTextModel = model;
         break;
+      case 'qwengate':
+        this.plugin.settings.qwengateTextModel = model;
+        break;
       default:
         this.plugin.settings.defaultTextModel = model;
     }
@@ -204,6 +210,8 @@ import {
         return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
       case 'proxy':
         return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate':
+        return this.plugin.settings.qwengateSummaryModel || 'qwen3.7-plus';
       default:
         return this.plugin.settings.summaryModel;
     }
@@ -226,6 +234,9 @@ import {
         break;
       case 'proxy':
         this.plugin.settings.proxySummaryModel = model;
+        break;
+      case 'qwengate':
+        this.plugin.settings.qwengateSummaryModel = model;
         break;
       default:
         this.plugin.settings.summaryModel = model;
@@ -398,7 +409,8 @@ import {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.plugin.settings.codingExerciseProvider)
@@ -492,7 +504,8 @@ import {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.plugin.settings.flashcardGenerationProvider)
@@ -524,10 +537,30 @@ import {
       await this.plugin.saveSettings();
     }, 0, 2);
 
-    this.addNumberSetting(containerEl, "Flashcard Generation Max Tokens", "Maximum output tokens for generated flashcard JSON.", this.plugin.settings.flashcardGenerationMaxTokens, async value => {
+    this.addNumberSetting(containerEl, "Flashcard Generation Max Tokens", "Maximum output tokens for generated flashcard JSON. The budget is auto-scaled up when more questions are requested.", this.plugin.settings.flashcardGenerationMaxTokens, async value => {
       this.plugin.settings.flashcardGenerationMaxTokens = Math.max(500, Math.round(value));
       await this.plugin.saveSettings();
     }, 500);
+
+    new Setting(containerEl)
+      .setName("Two-Pass Research Pipeline")
+      .setDesc("Extract key concepts first, then generate questions grounded in them. Higher quality, but two LLM calls per unit.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.flashcardTwoPassGeneration)
+        .onChange(async value => {
+          this.plugin.settings.flashcardTwoPassGeneration = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Strip Thinking-Model Noise")
+      .setDesc("Remove chain-of-thought blocks and reasoning chatter before parsing flashcard JSON. Keep enabled for reasoning models (nemotron-reasoning, R1, QwQ, o1/o3).")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.flashcardStripThinking)
+        .onChange(async value => {
+          this.plugin.settings.flashcardStripThinking = value;
+          await this.plugin.saveSettings();
+        }));
   }
 
   addStudySourceSettings(containerEl: HTMLElement): void {
@@ -839,6 +872,7 @@ import {
         dd.addOption('chutes', 'Chutes');
         dd.addOption('zai', 'ZAI');
         dd.addOption('proxy', 'OpenAI Proxy');
+        dd.addOption('qwengate', 'QwenGate');
         dd.setValue(retrieval.agenticProvider || '');
         dd.onChange(async (value) => {
           retrieval.agenticProvider = value;
@@ -871,6 +905,7 @@ import {
         dd.addOption('chutes', 'Chutes');
         dd.addOption('zai', 'ZAI');
         dd.addOption('proxy', 'OpenAI Proxy');
+        dd.addOption('qwengate', 'QwenGate');
         dd.setValue(retrieval.quickQueryProvider || '');
         dd.onChange(async (value) => {
           retrieval.quickQueryProvider = value;
@@ -1251,6 +1286,7 @@ import {
         .onChange(async (value) => {
           companion.enabled = value;
           await this.plugin.saveSettings();
+          void checkCompanion();
         }));
 
     new Setting(containerEl)
@@ -1294,6 +1330,111 @@ import {
       }
     };
     checkCompanion();
+
+    // --- Companion allowlist management (add/remove source roots) ---
+    containerEl.createEl('h5', { text: 'Companion sources (allowlist)' });
+    const allowlistContainer = containerEl.createDiv({ cls: 'companion-allowlist-container' });
+    const renderAllowlist = async () => {
+      allowlistContainer.empty();
+      if (!companion.enabled) {
+        allowlistContainer.createEl('p', {
+          text: 'Enable the companion to manage source roots.',
+          cls: 'retrieval-companion-status',
+        });
+        return;
+      }
+
+      const client = this.plugin.services.companionClient;
+      if (!client) {
+        allowlistContainer.createEl('p', {
+          text: 'Companion client not initialized (reload plugin).',
+          cls: 'retrieval-companion-status',
+        });
+        return;
+      }
+
+      let roots: Array<{ id: string; path: string }> = [];
+      try {
+        roots = await client.getSources();
+      } catch (error) {
+        allowlistContainer.createEl('p', {
+          text: `Companion offline — start it, then click Re-check. (${error instanceof Error ? error.message : 'unknown error'})`,
+          cls: 'retrieval-companion-status',
+        });
+        return;
+      }
+
+      if (roots.length === 0) {
+        allowlistContainer.createEl('p', {
+          text: 'No source roots registered yet.',
+          cls: 'retrieval-companion-status',
+        });
+      }
+
+      for (const root of roots) {
+        const row = allowlistContainer.createDiv({ cls: 'companion-allowlist-row' });
+        row.createSpan({ text: root.path, cls: 'companion-allowlist-path' });
+        const removeBtn = row.createEl('button', { text: 'Remove' });
+        removeBtn.addEventListener('click', async () => {
+          try {
+            await client.removeAllowlistRoot(root.id);
+            new Notice(`Removed companion source: ${root.path}`);
+            await renderAllowlist();
+            void checkCompanion();
+          } catch (error) {
+            new Notice(`Failed to remove source: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        });
+      }
+
+      // --- Add root form ---
+      let newRootPath = '';
+      let newRootId = '';
+      const addForm = allowlistContainer.createDiv({ cls: 'companion-allowlist-add' });
+      new Setting(addForm)
+        .setName('Source root path')
+        .setDesc('Absolute path to a folder (e.g. your books folder or an external repo).')
+        .addText((text) => text
+          .setPlaceholder('E:\\Books')
+          .onChange((value) => {
+            newRootPath = value.trim();
+          }));
+      new Setting(addForm)
+        .setName('Source id')
+        .setDesc('Short slug used to identify this root (e.g. "books", "pfe-game").')
+        .addText((text) => text
+          .setPlaceholder('books')
+          .onChange((value) => {
+            newRootId = value.trim();
+          }));
+      new Setting(addForm)
+        .addButton((button) => button
+          .setButtonText('Add Source Root')
+          .setCta()
+          .onClick(async () => {
+            if (!newRootPath || !newRootId) {
+              new Notice('Provide both a path and an id for the source root');
+              return;
+            }
+            try {
+              await client.addAllowlistRoot(newRootId, newRootPath);
+              new Notice(`Added companion source: ${newRootPath}`);
+              await renderAllowlist();
+              void checkCompanion();
+            } catch (error) {
+              new Notice(`Failed to add source: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          }));
+    };
+    void renderAllowlist();
+
+    new Setting(containerEl)
+      .addButton((button) => button
+        .setButtonText('Re-check Companion')
+        .onClick(async () => {
+          await checkCompanion();
+          await renderAllowlist();
+        }));
   }
 
   addStudyPathSettings(containerEl: HTMLElement): void {
@@ -1308,7 +1449,8 @@ import {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.plugin.settings.studyPathProvider)
@@ -1481,6 +1623,7 @@ import {
         dd.addOption('chutes', 'Chutes');
         dd.addOption('zai', 'ZAI');
         dd.addOption('proxy', 'OpenAI Proxy');
+        dd.addOption('qwengate', 'QwenGate');
         dd.setValue(this.plugin.settings.articleSummaryProvider || 'openrouter');
         dd.onChange(async (value) => {
           this.plugin.settings.articleSummaryProvider = value;
@@ -1693,7 +1836,8 @@ import {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.plugin.settings.defaultLLMProvider)
@@ -1777,6 +1921,60 @@ import {
         .onChange(async value => {
           this.plugin.settings.proxyApiKey = value;
           await this.plugin.saveSettings();
+        }));
+
+    // QwenGate (local OpenAI-compatible Qwen gateway)
+    new Setting(containerEl)
+      .setName("QwenGate Base URL")
+      .setDesc("Local QwenGate gateway endpoint, e.g. http://localhost:26405/v1. No API key required.")
+      .addText(text => text
+        .setValue(this.plugin.settings.qwengateBaseUrl || 'http://localhost:26405/v1')
+        .onChange(async value => {
+          this.plugin.settings.qwengateBaseUrl = value.trim() || 'http://localhost:26405/v1';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("QwenGate Models")
+      .setDesc("Comma-separated list of models exposed by the gateway (e.g. qwen3.7-plus, qwen3.8-max).")
+      .addText(text => text
+        .setValue((this.plugin.settings.qwengateModels ?? []).join(', '))
+        .onChange(async value => {
+          this.plugin.settings.qwengateModels = value.split(',').map(m => m.trim()).filter(Boolean);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Refresh Models from QwenGate")
+      .setDesc("Fetch the live model list from the gateway (/v1/models).")
+      .addButton(button => button
+        .setButtonText("Refresh QwenGate Models")
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Refreshing...");
+          try {
+            const client = LLMClientFactory.createQwenGateClient(
+              this.plugin.settings.qwengateBaseUrl,
+              this.plugin.settings.debugMode,
+              30000,
+            );
+            const models = await client.listModels();
+            if (models.length > 0) {
+              this.plugin.settings.qwengateModels = models;
+              if (!models.includes(this.plugin.settings.qwengateTextModel)) {
+                this.plugin.settings.qwengateTextModel = models[0];
+              }
+              await this.plugin.saveSettings();
+              new Notice(`Fetched ${models.length} QwenGate models`);
+              this.display();
+            } else {
+              new Notice("Gateway returned no models");
+            }
+          } catch (error) {
+            console.error('Failed to refresh QwenGate models:', error);
+            new Notice(`Failed to refresh QwenGate models: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Refresh QwenGate Models");
+          }
         }));
 
     // Helper Server (Article Fetch & YouTube Transcripts)
@@ -1978,7 +2176,17 @@ import {
           return acc;
         }, {});
       }
-      
+
+      case 'qwengate': {
+        const models = this.plugin.settings.qwengateModels?.length
+          ? this.plugin.settings.qwengateModels
+          : [this.plugin.settings.qwengateTextModel || 'qwen3.7-plus'];
+        return models.reduce((acc: Record<string, string>, model) => {
+          acc[model] = model;
+          return acc;
+        }, {});
+      }
+
       default:
         // Fallback to G4F models for backward compatibility
         return {

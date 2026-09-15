@@ -43,6 +43,8 @@ export class PlaylistSummaryModal extends Modal {
         return this.plugin.settings.ollamaSummaryModel || 'gemma4:31b-cloud';
       case 'proxy':
         return this.plugin.settings.proxySummaryModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate':
+        return this.plugin.settings.qwengateSummaryModel || 'qwen3.7-plus';
       default:
         return this.plugin.settings.summaryModel;
     }
@@ -145,7 +147,8 @@ export class PlaylistSummaryModal extends Modal {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.provider)

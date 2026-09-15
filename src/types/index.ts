@@ -46,6 +46,8 @@ export interface PluginSettings {
     flashcardGenerationModel: string;
     flashcardGenerationTemperature: number;
     flashcardGenerationMaxTokens: number;
+    flashcardTwoPassGeneration: boolean; // Extract concepts before generating questions
+    flashcardStripThinking: boolean; // Strip reasoning-model noise before parsing JSON
     codingExercisesFolder: string; // Folder for storing generated coding exercises
     
     // Summary generation settings
@@ -69,7 +71,7 @@ export interface PluginSettings {
     minContextLength: number;             // Minimum context length filter
     
     // Backend selection
-    defaultBackend: 'g4f' | 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy'; // Added for backend selection
+    defaultBackend: 'g4f' | 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy' | 'qwengate'; // Added for backend selection
     
     // Content storage location settings
     transcriptStorageLocation: 'database' | 'note'; // Where to store transcripts
@@ -95,6 +97,7 @@ export interface PluginSettings {
     zaiBaseUrl?: string; // Custom ZAI endpoint
     ollamaBaseUrl: string; // Ollama local/server endpoint
     proxyBaseUrl: string; // OpenAI-compatible proxy endpoint
+    qwengateBaseUrl: string; // QwenGate local gateway endpoint
     /** Base URL of the optional local/remote helper server used for article scraping and YouTube transcript fetching (e.g. http://127.0.0.1:8001 or http://your-remote-machine:8001). */
     helperServerUrl: string;
     ollamaTimeout: number; // Ollama request timeout in milliseconds
@@ -104,6 +107,7 @@ export interface PluginSettings {
     zaiModels?: string[]; // List of available ZAI models
     ollamaModels?: string[]; // List of available Ollama models
     proxyModels?: string[]; // List of available proxy models
+    qwengateModels?: string[]; // List of available QwenGate models
     
     // Provider-specific summary models (NEW)
     openrouterSummaryModel: string; // Default summary model for OpenRouter
@@ -116,6 +120,8 @@ export interface PluginSettings {
     ollamaTagModel: string; // Default tag model for Ollama video/local transcript tagging
     proxySummaryModel: string; // Default summary model for OpenAI-compatible proxy
     proxyTagModel: string; // Default tag model for OpenAI-compatible proxy video/local transcript tagging
+    qwengateSummaryModel: string; // Default summary model for QwenGate
+    qwengateTagModel: string; // Default tag model for QwenGate video/local transcript tagging
     
     // Provider-specific text models (NEW)
     openrouterTextModel: string; // Default text model for OpenRouter
@@ -123,6 +129,7 @@ export interface PluginSettings {
     zaiTextModel: string; // Default text model for ZAI
     ollamaTextModel: string; // Default text model for Ollama
     proxyTextModel: string; // Default text model for OpenAI-compatible proxy
+    qwengateTextModel: string; // Default text model for QwenGate
 
     // Article summary model (separate from YouTube summary)
     articleSummaryProvider: string;

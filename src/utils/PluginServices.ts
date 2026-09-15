@@ -484,6 +484,21 @@ export class PluginServices {
       });
     }
 
+    // Keep the companion client in sync with settings so toggling
+    // "Enable companion" (or changing the endpoint) takes effect without a
+    // plugin reload.
+    const companionCfg = settings.retrieval.companion;
+    if (companionCfg?.enabled && companionCfg.endpoint) {
+      if (!this._companionClient) {
+        this._companionClient = new CompanionClient(companionCfg.endpoint);
+      } else {
+        this._companionClient.setEndpoint(companionCfg.endpoint);
+      }
+      this._companionClient.checkStatus(true).catch(() => {});
+    } else {
+      this._companionClient = null;
+    }
+
     // If settings affect service configuration (like folder paths for PathManager's JSON/backups),
     // the service might need a specific update method or re-initialization.
     // Re-initializing PathManager here would lose its cached structure.

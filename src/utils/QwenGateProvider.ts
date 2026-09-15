@@ -2,7 +2,7 @@ import { BaseLLMClient } from './BaseLLMClient';
 import {
     ProviderApiResponse,
     ProviderRequestPayload,
-    ProxyConfig
+    QwenGateConfig
 } from '../types/providers';
 import {
     AnalysisResponse,
@@ -12,19 +12,26 @@ import {
 } from '../types/openrouter';
 import { DebugLogger } from './DebugLogger';
 
-interface ProxyModelsResponse {
+interface QwenGateModelsResponse {
     data?: Array<{
         id?: string;
         name?: string;
     }>;
 }
 
-export class ProxyProvider extends BaseLLMClient {
+/**
+ * Client for a local QwenGate instance (OpenAI-compatible Qwen gateway).
+ * The gateway runs on the user's machine and does not require an API key.
+ * Qwen models are thinking models: the visible answer arrives in `content`
+ * while chain-of-thought arrives in `reasoning_content` — this client uses
+ * content only, falling back to reasoning_content if content is empty.
+ */
+export class QwenGateProvider extends BaseLLMClient {
     private apiBase: string;
 
-    constructor(config: ProxyConfig, debugMode: boolean = false) {
-        super(config, debugMode, 'ProxyProvider');
-        this.apiBase = this.normalizeApiBase(config.baseUrl || 'http://localhost:3000/v1');
+    constructor(config: QwenGateConfig, debugMode: boolean = false) {
+        super(config, debugMode, 'QwenGateProvider');
+        this.apiBase = this.normalizeApiBase(config.baseUrl || 'http://localhost:26405/v1');
     }
 
     updateBaseUrl(baseUrl: string): void {
@@ -40,7 +47,7 @@ export class ProxyProvider extends BaseLLMClient {
         });
 
         this.debug.logStart('Text generation', {
-            provider: 'OpenAI Proxy',
+            provider: 'QwenGate',
             model: options.model,
             messageLength: messageContent.length,
             temperature: options.temperature,
@@ -80,14 +87,14 @@ export class ProxyProvider extends BaseLLMClient {
             };
         } catch (error) {
             this.debug.logError(error instanceof Error ? error : new Error(String(error)), {
-                provider: 'OpenAI Proxy',
+                provider: 'QwenGate',
                 model: options.model,
                 operation: 'generateText'
             });
             const detail = error instanceof Error ? error.message : 'Unknown error';
             const status = (error as { statusCode?: number })?.statusCode;
             const statusPrefix = status ? ` (HTTP ${status})` : '';
-            throw new Error(`Proxy text generation error${statusPrefix}: ${detail}`);
+            throw new Error(`QwenGate text generation error${statusPrefix}: ${detail}`);
         }
     }
 
@@ -127,19 +134,21 @@ export class ProxyProvider extends BaseLLMClient {
                 headers: this.buildHeaders()
             }
         );
-        const result: ProxyModelsResponse = await response.json();
+
+        const result: QwenGateModelsResponse = await response.json();
         return (result.data ?? [])
             .map(model => model.id || model.name)
             .filter((model): model is string => Boolean(model));
     }
 
     protected getProviderName(_response: ProviderApiResponse): string {
-        return 'OpenAI Proxy';
+        return 'QwenGate';
     }
 
     protected buildHeaders(): Record<string, string> {
+        // Local gateway — no real auth, but keep the header for OpenAI-compat shape.
         return {
-            Authorization: `Bearer ${this.config.apiKey}`,
+            Authorization: `Bearer ${this.config.apiKey || 'local'}`,
             'Content-Type': 'application/json'
         };
     }
@@ -205,8 +214,8 @@ export class ProxyProvider extends BaseLLMClient {
                 .join('\n');
         }
 
-        // Some thinking models return the answer only in a reasoning field when
-        // content is empty (DeepSeek reasoning_content / OpenRouter reasoning).
+        // Qwen thinking models may return the answer only in reasoning_content
+        // when content is empty.
         if (!text.trim()) {
             const reasoning = message?.reasoning ?? (message as any)?.reasoning_content;
             if (typeof reasoning === 'string' && reasoning.trim()) {

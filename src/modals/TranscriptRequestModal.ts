@@ -34,7 +34,8 @@ export class TranscriptRequestModal extends Modal {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.provider)

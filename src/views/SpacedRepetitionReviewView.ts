@@ -98,6 +98,16 @@ export class SpacedRepetitionReviewView extends ItemView {
       cls: 'spaced-repetition-review-count',
     });
 
+    if (this.plugin.isFlashcardUiActive()) {
+      header.createEl('button', {
+        text: 'Back to Hub',
+        cls: 'llm-automation-btn llm-automation-btn-secondary spaced-repetition-back-to-hub',
+        attr: { 'aria-label': 'Return to the flashcard hub' },
+      }).addEventListener('click', () => {
+        void this.plugin.returnToFlashcardHub();
+      });
+    }
+
     if (!this.currentCard) {
       this.renderEmptyState(container);
       return;
@@ -156,8 +166,18 @@ export class SpacedRepetitionReviewView extends ItemView {
 
   private renderEmptyState(container: HTMLElement): void {
     const empty = container.createDiv({ cls: 'spaced-repetition-empty-state' });
-    empty.createEl('h3', { text: 'No due cards' });
-    empty.createEl('p', { text: this.reviewMode.includeNotDue ? 'No cards matched this cram session.' : 'Add manual questions from a note or wait until scheduled cards become due.' });
+
+    const emoji = empty.createDiv({ cls: 'spaced-repetition-empty-emoji' });
+    emoji.textContent = '✓';
+    emoji.setAttribute('aria-hidden', 'true');
+
+    empty.createEl('h3', { text: this.reviewMode.includeNotDue ? 'No cards matched' : 'All caught up!' });
+    empty.createEl('p', {
+      text: this.reviewMode.includeNotDue
+        ? 'No cards matched this cram session. Try different filters or generate new cards.'
+        : 'Nothing is due right now. Come back later or start a cram session to review ahead.',
+      cls: 'spaced-repetition-empty-hint',
+    });
 
     new Setting(empty)
       .addButton((button) => {
@@ -167,6 +187,16 @@ export class SpacedRepetitionReviewView extends ItemView {
             this.dueCards = [];
             await this.loadNextCard();
           });
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-secondary');
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Cram All')
+          .onClick(() => this.plugin.activateReviewView({
+            title: 'Cram: All Cards',
+            includeNotDue: true,
+          }));
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-secondary');
       });
   }
 
@@ -349,12 +379,12 @@ export class SpacedRepetitionReviewView extends ItemView {
 
     actions.createEl('button', {
       text: 'Bury Tomorrow',
-      cls: 'spaced-repetition-card-management-button',
+      cls: 'llm-automation-btn llm-automation-btn-muted spaced-repetition-card-management-button',
     }).addEventListener('click', () => this.buryCurrentCardUntilTomorrow());
 
     actions.createEl('button', {
       text: 'Suspend',
-      cls: 'spaced-repetition-card-management-button spaced-repetition-card-management-danger',
+      cls: 'llm-automation-btn llm-automation-btn-muted spaced-repetition-card-management-button spaced-repetition-card-management-danger',
     }).addEventListener('click', () => this.suspendCurrentCard());
   }
 
@@ -456,7 +486,22 @@ export class SpacedRepetitionReviewView extends ItemView {
   }
 
   private handleKey(event: KeyboardEvent): void {
-    if (!this.currentCard || !(this.leaf as any).view || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    if (!this.currentCard) {
+      return;
+    }
+
+    if (this.app.workspace.activeLeaf?.view !== this) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || (target instanceof HTMLElement && target.isContentEditable)) {
       return;
     }
 

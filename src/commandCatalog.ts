@@ -40,6 +40,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the review view for due spaced repetition cards.',
   },
   {
+    id: 'toggle-flashcard-ui',
+    name: 'Toggle Flashcard UI',
+    group: 'Spaced Repetition',
+    description: 'Switches the whole Obsidian window into a Mnemosyne-style flashcard UI (hides sidebars, ribbon, and tab bar). Run again to restore the default UI.',
+  },
+  {
     id: 'open-spaced-repetition-decks',
     name: 'Open Flashcard Decks',
     group: 'Spaced Repetition',
@@ -189,6 +195,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     name: 'Generate Flashcards from Context',
     group: 'Learning',
     description: 'Opens the flashcard generation side panel with editable context, prompt, preview, and spaced repetition save.',
+  },
+  {
+    id: 'generate-flashcards-from-book',
+    name: 'Generate Flashcards from Book (PDF)',
+    group: 'Learning',
+    description: 'Generates flashcards from chapters or page ranges of an external PDF book via the companion service, with book/cards language and question count options.',
   },
   {
     id: 'migrate-legacy-flashcards',

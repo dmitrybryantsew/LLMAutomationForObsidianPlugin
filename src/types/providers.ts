@@ -11,7 +11,8 @@ export enum LLMProvider {
     CHUTES = 'chutes',
     ZAI = 'zai',
     OLLAMA = 'ollama',
-    PROXY = 'proxy'
+    PROXY = 'proxy',
+    QWENGATE = 'qwengate'
 }
 
 /**
@@ -19,7 +20,7 @@ export enum LLMProvider {
  * that works with plain strings rather than the enum. Keep this in sync with
  * the LLMProvider enum above — if you add a provider, update both.
  */
-export type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy';
+export type TextProviderId = 'openrouter' | 'chutes' | 'zai' | 'ollama' | 'proxy' | 'qwengate';
 
 /** Canonical display names, for any UI that needs a label for a TextProviderId. */
 export const TEXT_PROVIDER_LABELS: Record<TextProviderId, string> = {
@@ -28,6 +29,7 @@ export const TEXT_PROVIDER_LABELS: Record<TextProviderId, string> = {
     zai: 'ZAI',
     ollama: 'Ollama',
     proxy: 'OpenAI Proxy',
+    qwengate: 'QwenGate',
 };
 
 /**
@@ -87,6 +89,15 @@ export interface OllamaConfig extends ProviderConfig {
 export interface ProxyConfig extends ProviderConfig {
     provider: LLMProvider.PROXY;
     /** Proxy base URL, for example http://server:3000/v1 or http://server:3000 */
+    baseUrl: string;
+}
+
+/**
+ * QwenGate configuration (local OpenAI-compatible Qwen gateway)
+ */
+export interface QwenGateConfig extends ProviderConfig {
+    provider: LLMProvider.QWENGATE;
+    /** QwenGate base URL, for example http://localhost:26405/v1 */
     baseUrl: string;
 }
 

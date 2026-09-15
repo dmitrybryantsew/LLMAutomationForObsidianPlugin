@@ -49,7 +49,8 @@ class TestProviderConnectionModal extends Modal {
                     'chutes': 'Chutes',
                     'zai': 'ZAI',
                     'ollama': 'Ollama',
-                    'proxy': 'OpenAI Proxy'
+                    'proxy': 'OpenAI Proxy',
+                    'qwengate': 'QwenGate'
                 });
                 dropdown
                     .setValue(this.selectedProvider.toLowerCase())
@@ -107,7 +108,8 @@ class TestProviderConnectionModal extends Modal {
         try {
             // Check if API key is configured
             const apiKey = this.getApiKeyForProvider(this.selectedProvider);
-            if (this.selectedProvider !== LLMProvider.OLLAMA && !apiKey) {
+            if (this.selectedProvider !== LLMProvider.OLLAMA
+                && this.selectedProvider !== LLMProvider.QWENGATE && !apiKey) {
                 this.testResult = {
                     success: false,
                     message: "API key not configured",
@@ -130,6 +132,7 @@ class TestProviderConnectionModal extends Modal {
                 zaiBaseUrl: this.plugin.settings.zaiBaseUrl,
                 ollamaBaseUrl: this.plugin.settings.ollamaBaseUrl,
                 proxyBaseUrl: this.plugin.settings.proxyBaseUrl,
+                qwengateBaseUrl: this.plugin.settings.qwengateBaseUrl,
                 ollamaTimeout: this.plugin.settings.ollamaTimeout,
                 providerTimeout: this.plugin.settings.providerTimeout,
                 providerRetryCount: this.plugin.settings.providerRetryCount,
@@ -186,6 +189,8 @@ class TestProviderConnectionModal extends Modal {
                 return '';
             case LLMProvider.PROXY:
                 return this.plugin.settings.proxyApiKey;
+            case LLMProvider.QWENGATE:
+                return '';
             default:
                 return undefined;
         }
@@ -203,6 +208,8 @@ class TestProviderConnectionModal extends Modal {
                 return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
             case LLMProvider.PROXY:
                 return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+            case LLMProvider.QWENGATE:
+                return this.plugin.settings.qwengateTextModel || 'qwen3.7-plus';
             default:
                 return this.plugin.settings.defaultTextModel;
         }

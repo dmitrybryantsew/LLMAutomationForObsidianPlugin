@@ -52,6 +52,8 @@ import {
         return this.plugin.settings.ollamaTextModel || 'gemma4:31b-cloud';
       case 'proxy':
         return this.plugin.settings.proxyTextModel || 'nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+      case 'qwengate':
+        return this.plugin.settings.qwengateTextModel || 'qwen3.7-plus';
       default:
         return this.plugin.settings.defaultTextModel;
     }
@@ -73,7 +75,8 @@ import {
           'chutes': 'Chutes',
           'zai': 'ZAI',
           'ollama': 'Ollama',
-          'proxy': 'OpenAI Proxy'
+          'proxy': 'OpenAI Proxy',
+          'qwengate': 'QwenGate'
         });
         dropdown
           .setValue(this.provider)

@@ -8,6 +8,7 @@ import { ChutesProvider } from './ChutesProvider';
 import { ZAIProvider } from './ZAIProvider';
 import { OllamaProvider } from './OllamaProvider';
 import { ProxyProvider } from './ProxyProvider';
+import { QwenGateProvider } from './QwenGateProvider';
 import {
     LLMProvider,
     ProviderConfig,
@@ -15,10 +16,11 @@ import {
     ChutesConfig,
     ZAIConfig,
     OllamaConfig,
-    ProxyConfig
+    ProxyConfig,
+    QwenGateConfig
 } from '../types/providers';
 
-export type LLMClient = OpenRouterProvider | ChutesProvider | ZAIProvider | OllamaProvider | ProxyProvider;
+export type LLMClient = OpenRouterProvider | ChutesProvider | ZAIProvider | OllamaProvider | ProxyProvider | QwenGateProvider;
 
 /**
  * LLM Client Factory
@@ -50,7 +52,10 @@ export class LLMClientFactory {
 
             case LLMProvider.PROXY:
                 return new ProxyProvider(config as ProxyConfig);
-            
+
+            case LLMProvider.QWENGATE:
+                return new QwenGateProvider(config as QwenGateConfig);
+
             default:
                 throw new Error(`Unsupported provider: ${provider}`);
         }
@@ -177,6 +182,22 @@ export class LLMClientFactory {
         return new ProxyProvider(config, debugMode || false);
     }
 
+    static createQwenGateClient(
+        baseUrl?: string,
+        debugMode?: boolean,
+        timeout?: number,
+        maxRetries?: number
+    ): QwenGateProvider {
+        const config: QwenGateConfig = {
+            apiKey: '',
+            baseUrl: baseUrl || 'http://localhost:26405/v1',
+            timeout,
+            maxRetries,
+            provider: LLMProvider.QWENGATE
+        };
+        return new QwenGateProvider(config, debugMode || false);
+    }
+
     /**
      * Parse provider from string
      * @param providerString - Provider string (e.g., "openrouter", "chutes", "zai")
@@ -196,6 +217,8 @@ export class LLMClientFactory {
                 return LLMProvider.OLLAMA;
             case 'proxy':
                 return LLMProvider.PROXY;
+            case 'qwengate':
+                return LLMProvider.QWENGATE;
             default:
                 throw new Error(`Unknown provider: ${providerString}`);
         }
@@ -218,6 +241,8 @@ export class LLMClientFactory {
                 return 'Ollama';
             case LLMProvider.PROXY:
                 return 'OpenAI Proxy';
+            case LLMProvider.QWENGATE:
+                return 'QwenGate';
         }
     }
 }
@@ -241,6 +266,7 @@ export function createLLMClientFromSettings(
         zaiBaseUrl?: string;
         ollamaBaseUrl?: string;
         proxyBaseUrl?: string;
+        qwengateBaseUrl?: string;
         ollamaTimeout?: number;
         providerTimeout?: number;
         providerRetryCount?: number;
@@ -303,7 +329,15 @@ export function createLLMClientFromSettings(
                 settings.providerTimeout,
                 settings.providerRetryCount
             );
-        
+
+        case LLMProvider.QWENGATE:
+            return LLMClientFactory.createQwenGateClient(
+                settings.qwengateBaseUrl,
+                settings.debugMode,
+                settings.providerTimeout,
+                settings.providerRetryCount
+            );
+
         default:
             throw new Error(`Unsupported provider: ${provider}`);
     }

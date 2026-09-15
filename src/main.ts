@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
-import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
+import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_FLASHCARD_HUB, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import type { EmbeddingConfig, CompanionConfig } from './types/retrieval';
 import { GenerateTextView } from './views/GenerateTextView';
@@ -38,13 +38,18 @@ import { SpacedRepetitionDeckBrowserView } from './views/SpacedRepetitionDeckBro
 import { SpacedRepetitionCardManagementView } from './views/SpacedRepetitionCardManagementView';
 import { SpacedRepetitionNoteChatView } from './views/SpacedRepetitionNoteChatView';
 import { FlashcardGenerationView } from './views/FlashcardGenerationView';
+import { FlashcardHubView } from './views/FlashcardHubView';
 import { CodingExerciseView } from './views/CodingExerciseView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
 import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
 import { SearchKnowledgeModal } from './modals/SearchKnowledgeModal';
+import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
 
 import './styles/styles.css';
+
+/** Body class applied while the Mnemosyne-style flashcard UI is active. */
+const FLASHCARD_UI_BODY_CLASS = 'llm-automation-flashcard-ui-active';
 
 export default class GptFreeTextGeneratorPlugin extends Plugin {
   settings!: PluginSettings;
@@ -77,6 +82,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.registerView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, (leaf) => new SpacedRepetitionCardManagementView(leaf, this));
     this.registerView(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, (leaf) => new SpacedRepetitionNoteChatView(leaf, this));
     this.registerView(VIEW_TYPE_FLASHCARD_GENERATION, (leaf) => new FlashcardGenerationView(leaf, this));
+    this.registerView(VIEW_TYPE_FLASHCARD_HUB, (leaf) => new FlashcardHubView(leaf, this));
     this.registerView(VIEW_TYPE_CODING_EXERCISES, (leaf) => new CodingExerciseView(leaf, this));
 
     // Initialize VideoQueueManager after plugin is fully initialized
@@ -332,6 +338,20 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         title: 'Due Review',
         includeNotDue: false,
       }),
+    });
+
+    this.addCommand({
+      id: 'toggle-flashcard-ui',
+      name: 'Toggle Flashcard UI',
+      callback: () => this.toggleFlashcardUi(),
+    });
+
+    this.addCommand({
+      id: 'generate-flashcards-from-book',
+      name: 'Generate Flashcards from Book (PDF)',
+      callback: () => {
+        new FlashcardsFromBookModal(this.app, this).open();
+      },
     });
 
     this.addCommand({
@@ -913,6 +933,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.flashcardGenerationModel = this.settings.flashcardGenerationModel ?? DEFAULT_SETTINGS.flashcardGenerationModel;
     this.settings.flashcardGenerationTemperature = this.settings.flashcardGenerationTemperature ?? DEFAULT_SETTINGS.flashcardGenerationTemperature;
     this.settings.flashcardGenerationMaxTokens = this.settings.flashcardGenerationMaxTokens ?? DEFAULT_SETTINGS.flashcardGenerationMaxTokens;
+    this.settings.flashcardTwoPassGeneration = this.settings.flashcardTwoPassGeneration ?? DEFAULT_SETTINGS.flashcardTwoPassGeneration;
+    this.settings.flashcardStripThinking = this.settings.flashcardStripThinking ?? DEFAULT_SETTINGS.flashcardStripThinking;
     this.settings.codingExercisesFolder = this.settings.codingExercisesFolder ?? DEFAULT_SETTINGS.codingExercisesFolder;
     this.settings.proxyApiKey = this.settings.proxyApiKey ?? DEFAULT_SETTINGS.proxyApiKey;
     this.settings.proxyBaseUrl = this.settings.proxyBaseUrl ?? DEFAULT_SETTINGS.proxyBaseUrl;
@@ -920,6 +942,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.proxyModels = this.settings.proxyModels ?? DEFAULT_SETTINGS.proxyModels;
     this.settings.proxyTextModel = this.settings.proxyTextModel ?? DEFAULT_SETTINGS.proxyTextModel;
     this.settings.proxySummaryModel = this.settings.proxySummaryModel ?? DEFAULT_SETTINGS.proxySummaryModel;
+    this.settings.qwengateBaseUrl = this.settings.qwengateBaseUrl ?? DEFAULT_SETTINGS.qwengateBaseUrl;
+    this.settings.qwengateModels = this.settings.qwengateModels ?? DEFAULT_SETTINGS.qwengateModels;
+    this.settings.qwengateTextModel = this.settings.qwengateTextModel ?? DEFAULT_SETTINGS.qwengateTextModel;
+    this.settings.qwengateSummaryModel = this.settings.qwengateSummaryModel ?? DEFAULT_SETTINGS.qwengateSummaryModel;
+    this.settings.qwengateTagModel = this.settings.qwengateTagModel ?? DEFAULT_SETTINGS.qwengateTagModel;
     this.settings.defaultTemperature = this.settings.defaultTemperature ?? DEFAULT_SETTINGS.defaultTemperature;
     this.settings.defaultMaxTokens = this.settings.defaultMaxTokens ?? DEFAULT_SETTINGS.defaultMaxTokens;
     this.settings.defaultTopP = this.settings.defaultTopP ?? DEFAULT_SETTINGS.defaultTopP;
@@ -998,6 +1025,18 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         return;
       }
 
+      // While the flashcard UI is active, sidebars are hidden; open views as
+      // main-area tabs instead of the right sidebar.
+      if (document.body.classList.contains(FLASHCARD_UI_BODY_CLASS)) {
+        const leaf = this.app.workspace.getLeaf('tab');
+        await leaf.setViewState({
+          type: viewType,
+          active: true,
+        });
+        this.app.workspace.revealLeaf(leaf);
+        return;
+      }
+
       let leaf = this.app.workspace.getRightLeaf(false);
       if (!leaf) {
         // Fallback to creating a new leaf if no right leaf exists or is obtainable
@@ -1030,6 +1069,101 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   
   async activateVideoProcessingView() {
     await this.activateView(VIEW_TYPE_VIDEO_PROCESSING);
+  }
+
+  /**
+   * Toggle the Mnemosyne-style distraction-free flashcard UI.
+   * First call hides all Obsidian chrome (sidebars, tabs, ribbon) via a body
+   * class and shows the flashcard hub; calling again restores the default UI.
+   */
+  async toggleFlashcardUi(): Promise<void> {
+    const body = document.body;
+    if (body.classList.contains(FLASHCARD_UI_BODY_CLASS)) {
+      await this.exitFlashcardUi();
+      return;
+    }
+
+    try {
+      body.classList.add(FLASHCARD_UI_BODY_CLASS);
+
+      const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_FLASHCARD_HUB);
+      if (existing.length > 0) {
+        this.app.workspace.revealLeaf(existing[0]);
+        return;
+      }
+
+      // Open the hub as a new tab in the main editor area, so it takes over
+      // the whole workspace instead of living in a sidebar.
+      const leaf = this.app.workspace.getLeaf('tab');
+      await leaf.setViewState({
+        type: VIEW_TYPE_FLASHCARD_HUB,
+        active: true,
+      });
+      this.app.workspace.revealLeaf(leaf);
+    } catch (error: unknown) {
+      // Roll the body class back off so a failed open never leaves the user
+      // trapped in a chrome-less window.
+      body.classList.remove(FLASHCARD_UI_BODY_CLASS);
+      ErrorHandler.handleError(error, "VIEW_ACTIVATION_ERROR", {
+        operation: "toggle-flashcard-ui",
+        viewType: VIEW_TYPE_FLASHCARD_HUB,
+      });
+      new Notice('Failed to open flashcard UI');
+    }
+  }
+
+  private async exitFlashcardUi(): Promise<void> {
+    document.body.classList.remove(FLASHCARD_UI_BODY_CLASS);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_FLASHCARD_HUB);
+  }
+
+  /**
+   * Called by FlashcardHubView.onClose so that closing the hub tab by hand
+   * (e.g. with the X button) also restores the default UI.
+   */
+  handleFlashcardHubClosed(): void {
+    if (document.body.classList.contains(FLASHCARD_UI_BODY_CLASS)) {
+      document.body.classList.remove(FLASHCARD_UI_BODY_CLASS);
+    }
+  }
+
+  /** True while the Mnemosyne-style flashcard UI owns the window. */
+  isFlashcardUiActive(): boolean {
+    return document.body.classList.contains(FLASHCARD_UI_BODY_CLASS);
+  }
+
+  /** Opens the "Flashcards from Book" (external PDF) modal. */
+  openFlashcardsFromBookModal(): void {
+    new FlashcardsFromBookModal(this.app, this).open();
+  }
+
+  /** Returns to the flashcard hub tab (used by views in focus mode). */
+  async returnToFlashcardHub(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FLASHCARD_HUB);
+    if (leaves.length > 0) {
+      this.app.workspace.revealLeaf(leaves[0]);
+      return;
+    }
+
+    await this.toggleFlashcardUi();
+  }
+
+  /**
+   * Opens this plugin's settings page. Uses the internal settings API
+   * (not exposed in the official typings) guarded by a runtime check.
+   */
+  openPluginSettings(): void {
+    const appWithSettings = this.app as unknown as {
+      setting?: { open?: () => void; openTabById?: (id: string) => void };
+    };
+
+    try {
+      appWithSettings.setting?.open?.();
+      appWithSettings.setting?.openTabById?.(this.manifest.id);
+    } catch (error) {
+      console.error('Failed to open plugin settings:', error);
+      new Notice('Failed to open settings — open them via Obsidian Settings manually');
+    }
   }
 
   async activateReviewView(mode?: SpacedRepetitionReviewMode) {
@@ -1237,7 +1371,10 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_FLASHCARD_GENERATION);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_FLASHCARD_HUB);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CODING_EXERCISES);
+
+    document.body.classList.remove(FLASHCARD_UI_BODY_CLASS);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services

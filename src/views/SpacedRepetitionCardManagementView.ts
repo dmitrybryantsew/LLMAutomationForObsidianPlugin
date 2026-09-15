@@ -13,6 +13,7 @@ import {
   chooseDuplicateKeeper,
   findFlashcardDuplicateGroups,
 } from '../utils/spacedRepetition/FlashcardDedupe';
+import { exportFlashcards } from '../utils/spacedRepetition/FlashcardExport';
 
 type CardStatusFilter = 'available' | 'enabled' | 'suspended' | 'archived' | 'all';
 
@@ -40,6 +41,11 @@ export class SpacedRepetitionCardManagementView extends ItemView {
   private draftExactFieldsText = '';
   private draftStudySetId = '__none__';
   private duplicateGroups: FlashcardDuplicateGroup<CardManagementRecord>[] = [];
+
+  /** Multi-select: ids of cards currently checked for bulk operations. */
+  private selectedCardIds = new Set<string>();
+  /** Target deck id for the bulk-move control; '' = not chosen yet. */
+  private bulkMoveTargetId = '';
 
   constructor(leaf: WorkspaceLeaf, plugin: GptFreeTextGeneratorPlugin) {
     super(leaf);
@@ -97,6 +103,16 @@ export class SpacedRepetitionCardManagementView extends ItemView {
       text: this.loading ? 'Loading...' : `${this.cards.length} shown`,
       cls: 'spaced-repetition-card-management-summary',
     });
+
+    if (this.plugin.isFlashcardUiActive()) {
+      header.createEl('button', {
+        text: 'Back to Hub',
+        cls: 'llm-automation-btn llm-automation-btn-secondary spaced-repetition-back-to-hub',
+        attr: { 'aria-label': 'Return to the flashcard hub' },
+      }).addEventListener('click', () => {
+        void this.plugin.returnToFlashcardHub();
+      });
+    }
 
     this.renderFilters(container);
     this.renderDuplicateGroups(container);
@@ -193,21 +209,128 @@ export class SpacedRepetitionCardManagementView extends ItemView {
         .onClick(() => this.loadCards()));
 
     new Setting(filters)
-      .addButton((button) => button
-        .setButtonText('Find Duplicates')
-        .onClick(() => this.findDuplicates()))
-      .addButton((button) => button
-        .setButtonText('Archive Duplicates')
-        .setDisabled(this.duplicateGroups.length === 0)
-        .onClick(() => this.archiveDuplicateCards()))
-      .addButton((button) => button
-        .setButtonText('Export Markdown')
-        .setDisabled(this.cards.length === 0)
-        .onClick(() => this.exportShownCards('markdown')))
-      .addButton((button) => button
-        .setButtonText('Export JSON')
-        .setDisabled(this.cards.length === 0)
-        .onClick(() => this.exportShownCards('json')));
+      .addButton((button) => {
+        button
+          .setButtonText('Find Duplicates')
+          .onClick(() => this.findDuplicates());
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-secondary');
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Archive Duplicates')
+          .setDisabled(this.duplicateGroups.length === 0)
+          .onClick(() => this.archiveDuplicateCards());
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-muted');
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Export Markdown')
+          .setDisabled(this.cards.length === 0)
+          .onClick(() => this.exportShownCards('markdown'));
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-secondary');
+      })
+      .addButton((button) => {
+        button
+          .setButtonText('Export JSON')
+          .setDisabled(this.cards.length === 0)
+          .onClick(() => this.exportShownCards('json'));
+        button.buttonEl.addClass('llm-automation-btn', 'llm-automation-btn-secondary');
+      });
+
+    this.renderBulkActions(container);
+  }
+
+  /** Bulk selection bar: select-all toggle + move-to-deck + clear selection. */
+  private renderBulkActions(container: HTMLElement): void {
+    const bar = container.createDiv({ cls: 'spaced-repetition-card-management-bulk-bar' });
+
+    const selectAllLabel = bar.createEl('label', { cls: 'spaced-repetition-card-management-bulk-toggle' });
+    const selectAll = selectAllLabel.createEl('input', { type: 'checkbox' });
+    selectAll.checked = this.cards.length > 0 && this.cards.every((card) => this.selectedCardIds.has(card.id));
+    selectAll.disabled = this.cards.length === 0;
+    selectAll.addEventListener('change', () => {
+      if (selectAll.checked) {
+        for (const card of this.cards) {
+          this.selectedCardIds.add(card.id);
+        }
+      } else {
+        this.selectedCardIds.clear();
+      }
+      this.render();
+    });
+    selectAllLabel.createSpan({ text: 'Select all shown' });
+
+    const counter = bar.createSpan({
+      text: this.selectedCardIds.size > 0 ? `${this.selectedCardIds.size} selected` : '',
+      cls: 'spaced-repetition-card-management-bulk-count',
+    });
+
+    if (this.selectedCardIds.size === 0) {
+      return;
+    }
+
+    const moveControl = bar.createDiv({ cls: 'spaced-repetition-card-management-bulk-move' });
+    const deckSelect = moveControl.createEl('select', { cls: 'dropdown' });
+    deckSelect.createEl('option', { text: 'Move to deck...', attr: { value: '' } });
+    deckSelect.createEl('option', { text: 'No deck', attr: { value: '__none__' } });
+    for (const set of this.studySets) {
+      deckSelect.createEl('option', { text: set.name, attr: { value: set.id } });
+    }
+    deckSelect.value = this.bulkMoveTargetId;
+    deckSelect.addEventListener('change', () => {
+      this.bulkMoveTargetId = deckSelect.value;
+    });
+
+    moveControl.createEl('button', {
+      text: 'Move',
+      cls: 'llm-automation-btn llm-automation-btn-primary',
+    }).addEventListener('click', () => void this.moveSelectedCards());
+
+    moveControl.createEl('button', {
+      text: 'Clear selection',
+      cls: 'llm-automation-btn llm-automation-btn-secondary',
+    }).addEventListener('click', () => {
+      this.selectedCardIds.clear();
+      this.bulkMoveTargetId = '';
+      this.render();
+    });
+  }
+
+  private async moveSelectedCards(): Promise<void> {
+    if (this.selectedCardIds.size === 0) {
+      return;
+    }
+
+    if (!this.bulkMoveTargetId) {
+      new Notice('Choose a deck to move the selected cards to');
+      return;
+    }
+
+    const targetStudySetId = this.bulkMoveTargetId === '__none__' ? null : this.bulkMoveTargetId;
+    const targetName = targetStudySetId
+      ? this.studySets.find((set) => set.id === targetStudySetId)?.name ?? 'deck'
+      : 'No deck';
+
+    try {
+      const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+      const { movedCount, skippedIds } = await database.moveQuestionsToStudySet(
+        Array.from(this.selectedCardIds),
+        targetStudySetId,
+      );
+
+      if (skippedIds.length > 0) {
+        new Notice(`Moved ${movedCount} card(s) to ${targetName}; ${skippedIds.length} could not be moved (deck-only cards can't go to No deck)`);
+      } else {
+        new Notice(`Moved ${movedCount} card(s) to ${targetName}`);
+      }
+
+      this.selectedCardIds.clear();
+      this.bulkMoveTargetId = '';
+      await this.loadCards();
+    } catch (error) {
+      console.error('Failed to move selected cards:', error);
+      new Notice(`Failed to move cards: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   private renderDuplicateGroups(container: HTMLElement): void {
@@ -238,7 +361,25 @@ export class SpacedRepetitionCardManagementView extends ItemView {
 
   private renderCard(container: HTMLElement, card: CardManagementRecord): void {
     const row = container.createDiv({
-      cls: this.getCardRowClass(card),
+      cls: this.getCardRowClass(card) + (this.selectedCardIds.has(card.id)
+        ? ' spaced-repetition-card-management-row-selected'
+        : ''),
+    });
+
+    // Bulk-select checkbox
+    const select = row.createEl('input', {
+      type: 'checkbox',
+      cls: 'spaced-repetition-card-management-select',
+      attr: { 'aria-label': `Select card: ${card.questionName || card.questionText.slice(0, 60)}` },
+    });
+    select.checked = this.selectedCardIds.has(card.id);
+    select.addEventListener('change', () => {
+      if (select.checked) {
+        this.selectedCardIds.add(card.id);
+      } else {
+        this.selectedCardIds.delete(card.id);
+      }
+      row.toggleClass('spaced-repetition-card-management-row-selected', select.checked);
     });
 
     const top = row.createDiv({ cls: 'spaced-repetition-card-management-row-top' });
@@ -268,29 +409,56 @@ export class SpacedRepetitionCardManagementView extends ItemView {
     if (this.editingCardId === card.id) {
       this.renderEditForm(row, card);
     } else {
-      row.createEl('div', {
-        text: card.questionText,
-        cls: 'spaced-repetition-card-management-question',
-      });
-      row.createEl('div', {
-        text: card.answerText ?? '',
-        cls: 'spaced-repetition-card-management-answer',
-      });
+      this.renderClampedText(row, card.questionText, 'spaced-repetition-card-management-question');
+      this.renderClampedText(row, card.answerText ?? '', 'spaced-repetition-card-management-answer');
       this.renderCardActions(row, card);
     }
+  }
+
+  /** Renders question/answer text, line-clamped with a toggle when long. */
+  private renderClampedText(container: HTMLElement, text: string, cls: string): void {
+    const wrapper = container.createDiv({ cls: 'spaced-repetition-card-management-text-block' });
+    const el = wrapper.createEl('div', { text, cls });
+
+    const lineBreaks = text.split('\n').length;
+    if (text.length <= 220 && lineBreaks <= 4) {
+      return;
+    }
+
+    el.addClass('spaced-repetition-card-management-clamped');
+    const toggle = wrapper.createEl('button', {
+      text: 'Show more',
+      cls: 'spaced-repetition-card-management-clamp-toggle',
+    });
+    toggle.addEventListener('click', () => {
+      const collapsed = el.hasClass('spaced-repetition-card-management-clamped');
+      if (collapsed) {
+        el.removeClass('spaced-repetition-card-management-clamped');
+        toggle.textContent = 'Show less';
+      } else {
+        el.addClass('spaced-repetition-card-management-clamped');
+        toggle.textContent = 'Show more';
+      }
+    });
   }
 
   private renderCardActions(container: HTMLElement, card: CardManagementRecord): void {
     const actions = container.createDiv({ cls: 'spaced-repetition-card-management-actions' });
 
-    actions.createEl('button', { text: 'Edit' })
-      .addEventListener('click', () => this.startEditing(card));
+    actions.createEl('button', {
+      text: 'Edit',
+      cls: 'llm-automation-btn llm-automation-btn-secondary',
+    }).addEventListener('click', () => this.startEditing(card));
 
-    actions.createEl('button', { text: card.enabled ? 'Suspend' : 'Restore' })
-      .addEventListener('click', () => this.setCardEnabled(card, !card.enabled));
+    actions.createEl('button', {
+      text: card.enabled ? 'Suspend' : 'Restore',
+      cls: 'llm-automation-btn llm-automation-btn-muted',
+    }).addEventListener('click', () => this.setCardEnabled(card, !card.enabled));
 
-    actions.createEl('button', { text: card.archivedAt ? 'Unarchive' : 'Archive' })
-      .addEventListener('click', () => this.setCardArchived(card, !card.archivedAt));
+    actions.createEl('button', {
+      text: card.archivedAt ? 'Unarchive' : 'Archive',
+      cls: 'llm-automation-btn llm-automation-btn-muted',
+    }).addEventListener('click', () => this.setCardArchived(card, !card.archivedAt));
   }
 
   private renderEditForm(container: HTMLElement, card: CardManagementRecord): void {
@@ -491,28 +659,9 @@ export class SpacedRepetitionCardManagementView extends ItemView {
   }
 
   private async exportShownCards(format: 'markdown' | 'json'): Promise<void> {
-    if (!this.cards.length) {
-      new Notice('No cards to export');
-      return;
-    }
-
-    try {
-      const folder = normalizePath(`${this.plugin.settings.flashcardFolder || 'Flashcards'}/Exports`);
-      await this.ensureVaultFolder(folder);
-      const timestamp = this.createTimestamp();
-      const extension = format === 'json' ? 'json' : 'md';
-      const path = normalizePath(`${folder}/flashcards-export-${timestamp}.${extension}`);
-      const content = format === 'json'
-        ? this.renderCardsJson(this.cards)
-        : this.renderCardsMarkdown(this.cards);
-
-      const file = await this.app.vault.create(path, content);
-      await this.app.workspace.getLeaf(false).openFile(file);
-      new Notice(`Exported ${this.cards.length} card(s) to ${path}`);
-    } catch (error) {
-      console.error('Failed to export flashcards:', error);
-      new Notice(`Failed to export cards: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    await exportFlashcards(this.app, this.plugin, this.cards, format, {
+      openFile: !document.body.classList.contains('llm-automation-flashcard-ui-active'),
+    });
   }
 
   private getEnabledFilter(): boolean | null {
@@ -595,71 +744,5 @@ export class SpacedRepetitionCardManagementView extends ItemView {
     }
 
     return date.toLocaleString();
-  }
-
-  private renderCardsJson(cards: CardManagementRecord[]): string {
-    return JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      filters: {
-        search: this.search,
-        status: this.statusFilter,
-        deck: this.deckFilter,
-        type: this.typeFilter,
-      },
-      cards,
-    }, null, 2);
-  }
-
-  private renderCardsMarkdown(cards: CardManagementRecord[]): string {
-    const lines = [
-      '# Flashcard Export',
-      '',
-      `Exported: ${new Date().toISOString()}`,
-      `Cards: ${cards.length}`,
-      '',
-    ];
-
-    for (const card of cards) {
-      lines.push(
-        `## ${card.questionName || card.questionType}`,
-        '',
-        `- ID: \`${card.id}\``,
-        `- Type: \`${card.questionType}\``,
-        `- Deck: ${card.studySetName ?? 'No deck'}`,
-        `- Note: ${card.notePath ?? 'No note'}`,
-        `- Status: ${this.getCardStatus(card).label}`,
-        `- Due: ${card.nextRepeatAt}`,
-        '',
-        '### Question',
-        '',
-        card.questionText,
-        '',
-        '### Answer',
-        '',
-        card.answerText ?? '',
-        ''
-      );
-
-      if (Object.keys(card.metadata).length) {
-        lines.push('### Metadata', '', '```json', JSON.stringify(card.metadata, null, 2), '```', '');
-      }
-    }
-
-    return lines.join('\n');
-  }
-
-  private async ensureVaultFolder(folder: string): Promise<void> {
-    const parts = normalizePath(folder).split('/').filter(Boolean);
-    let current = '';
-    for (const part of parts) {
-      current = current ? `${current}/${part}` : part;
-      if (!await this.app.vault.adapter.exists(current)) {
-        await this.app.vault.createFolder(current);
-      }
-    }
-  }
-
-  private createTimestamp(): string {
-    return new Date().toISOString().replace(/[:.]/g, '-');
   }
 }
