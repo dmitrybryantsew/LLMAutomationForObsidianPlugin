@@ -23,6 +23,7 @@ interface BookUnit {
   label: string;
   startPage: number;
   endPage: number;
+  topLevelLabel: string | null;
 }
 
 const PAGES_PER_CHUNK = 20;
@@ -635,6 +636,7 @@ export class FlashcardsFromBookModal extends Modal {
       header.textContent = [
         question.questionName ?? question.questionType,
         question.topLevelLabel ? `§ ${question.topLevelLabel}` : null,
+        question.sectionLabel ? `${question.sectionLabel}` : null,
         question.paragraphIndex != null ? `¶${question.paragraphIndex}` : null,
       ].filter(Boolean).join(' · ');
       card.createEl('div', { text: question.questionText });
@@ -657,6 +659,7 @@ export class FlashcardsFromBookModal extends Modal {
           label: chapter.title,
           startPage: chapter.startPage,
           endPage: chapter.endPage,
+          topLevelLabel: this.findTopLevelAncestor(chapter),
         }));
     }
 
@@ -669,9 +672,29 @@ export class FlashcardsFromBookModal extends Modal {
         label: `Pages ${page}–${chunkEnd}`,
         startPage: page,
         endPage: chunkEnd,
+        topLevelLabel: this.findTopLevelByPage(page),
       });
     }
     return units;
+  }
+
+  /** Find the level-0 chapter that contains the given sub-chapter. */
+  private findTopLevelAncestor(chapter: CompanionPdfChapter): string | null {
+    if (chapter.level === 0) {
+      return chapter.title;
+    }
+    const ancestors = this.chapters
+      .filter((c) => c.level === 0 && c.startPage <= chapter.startPage && c.endPage >= chapter.endPage)
+      .sort((a, b) => b.startPage - a.startPage);
+    return ancestors.length > 0 ? ancestors[0].title : null;
+  }
+
+  /** Find the level-0 chapter whose page range contains the given page. */
+  private findTopLevelByPage(page: number): string | null {
+    const containing = this.chapters
+      .filter((c) => c.level === 0 && c.startPage <= page && c.endPage >= page)
+      .sort((a, b) => b.startPage - a.startPage);
+    return containing.length > 0 ? containing[0].title : null;
   }
 
   private async generate(retryFailedOnly = false): Promise<void> {
@@ -819,9 +842,10 @@ export class FlashcardsFromBookModal extends Modal {
             };
             question.bookPath = pdfPath;
             question.bookName = fakeFile.basename;
-            question.topLevelLabel = unit.label;
+            question.topLevelLabel = unit.topLevelLabel;
             question.topLevelPageStart = unit.startPage;
             question.topLevelPageEnd = unit.endPage;
+            question.sectionLabel = unit.label;
             question.paragraphIndex = paraIdx;
             question.paragraphPage = para?.page ?? null;
             this.generated.push(question);

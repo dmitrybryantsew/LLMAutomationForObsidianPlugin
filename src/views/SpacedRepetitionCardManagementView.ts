@@ -36,7 +36,8 @@ export class SpacedRepetitionCardManagementView extends ItemView {
   private typeFilter = '';
   private bookFilter = '';
   private topLevelFilter = '';
-  private bookProvenance: Array<{ bookPath: string; bookName: string; topLevelLabel: string | null }> = [];
+  private sectionFilter = '';
+  private bookProvenance: Array<{ bookPath: string; bookName: string; topLevelLabel: string | null; sectionLabel: string | null }> = [];
   private editingCardId: string | null = null;
   private draftQuestionName = '';
   private draftQuestionText = '';
@@ -88,6 +89,7 @@ export class SpacedRepetitionCardManagementView extends ItemView {
         questionType: this.typeFilter || null,
         bookPath: this.bookFilter || null,
         topLevelLabel: this.topLevelFilter || null,
+        sectionLabel: this.sectionFilter || null,
         limit: 300,
       });
     } catch (error) {
@@ -195,13 +197,13 @@ export class SpacedRepetitionCardManagementView extends ItemView {
       });
 
     // Book provenance filters
-    const bookNames = [...new Set(this.bookProvenance.map((p) => p.bookName))].sort();
-    if (bookNames.length > 0) {
+    const bookEntries = [...new Map(this.bookProvenance.map((p) => [p.bookPath, p])).values()];
+    if (bookEntries.length > 0) {
       new Setting(filters)
         .setName('Book')
         .addDropdown((dropdown) => {
           dropdown.addOption('', 'All books');
-          for (const p of this.bookProvenance) {
+          for (const p of bookEntries) {
             dropdown.addOption(p.bookPath, p.bookName);
           }
           dropdown
@@ -209,6 +211,7 @@ export class SpacedRepetitionCardManagementView extends ItemView {
             .onChange((value) => {
               this.bookFilter = value;
               this.topLevelFilter = '';
+              this.sectionFilter = '';
               this.loadCards();
             });
         })
@@ -228,6 +231,26 @@ export class SpacedRepetitionCardManagementView extends ItemView {
             .setValue(this.topLevelFilter)
             .onChange((value) => {
               this.topLevelFilter = value;
+              this.sectionFilter = '';
+              this.loadCards();
+            });
+        })
+        .addDropdown((dropdown) => {
+          dropdown.addOption('', 'All subsections');
+          const sectionLabels = this.bookFilter && this.topLevelFilter
+            ? [...new Set(
+                this.bookProvenance
+                  .filter((p) => p.bookPath === this.bookFilter && p.topLevelLabel === this.topLevelFilter && p.sectionLabel)
+                  .map((p) => p.sectionLabel as string)
+              )].sort()
+            : [];
+          for (const label of sectionLabels) {
+            dropdown.addOption(label, label);
+          }
+          dropdown
+            .setValue(this.sectionFilter)
+            .onChange((value) => {
+              this.sectionFilter = value;
               this.loadCards();
             });
         });
@@ -247,6 +270,7 @@ export class SpacedRepetitionCardManagementView extends ItemView {
           this.typeFilter = '';
           this.bookFilter = '';
           this.topLevelFilter = '';
+          this.sectionFilter = '';
           this.editingCardId = null;
           this.duplicateGroups = [];
           this.loadCards();
@@ -445,7 +469,7 @@ export class SpacedRepetitionCardManagementView extends ItemView {
     const context = [
       card.studySetName ?? 'No deck',
       card.notePath,
-      card.bookName ? `${card.bookName} — ${card.topLevelLabel ?? ''}${card.paragraphIndex != null ? ` ¶${card.paragraphIndex}` : ''}` : null,
+      card.bookName ? `${card.bookName} — ${card.topLevelLabel ?? ''}${card.sectionLabel ? ` › ${card.sectionLabel}` : ''}${card.paragraphIndex != null ? ` ¶${card.paragraphIndex}` : ''}` : null,
       card.archivedAt ? `Archived: ${this.formatDate(card.archivedAt)}` : null,
       `Due: ${this.formatDate(card.nextRepeatAt)}`,
     ].filter((part): part is string => Boolean(part));

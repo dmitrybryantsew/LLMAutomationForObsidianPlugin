@@ -106,6 +106,7 @@ export interface SpacedRepetitionQuestionInput {
   topLevelLabel?: string | null;
   topLevelPageStart?: number | null;
   topLevelPageEnd?: number | null;
+  sectionLabel?: string | null;
   paragraphIndex?: number | null;
   paragraphPage?: number | null;
 }

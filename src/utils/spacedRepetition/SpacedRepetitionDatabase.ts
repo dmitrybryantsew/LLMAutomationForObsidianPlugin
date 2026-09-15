@@ -90,6 +90,7 @@ export interface CardManagementQuery {
   questionType?: string | null;
   bookPath?: string | null;
   topLevelLabel?: string | null;
+  sectionLabel?: string | null;
   paragraphIndex?: number | null;
   paragraphPage?: number | null;
   limit?: number;
@@ -118,6 +119,7 @@ export interface CardManagementRecord {
   topLevelLabel: string | null;
   topLevelPageStart: number | null;
   topLevelPageEnd: number | null;
+  sectionLabel: string | null;
   paragraphIndex: number | null;
   paragraphPage: number | null;
 }
@@ -250,9 +252,9 @@ export class SpacedRepetitionDatabase {
           id, note_id, study_set_id, question_name, question_text, question_type, answer_text,
           choices_json, answer_check_mode, metadata_json, created_at, updated_at, next_repeat_at,
           enabled, book_path, book_name, top_level_label, top_level_page_start, top_level_page_end,
-          paragraph_index, paragraph_page
+          section_label, paragraph_index, paragraph_page
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           id,
@@ -274,6 +276,7 @@ export class SpacedRepetitionDatabase {
           question.topLevelLabel ?? null,
           question.topLevelPageStart ?? null,
           question.topLevelPageEnd ?? null,
+          question.sectionLabel ?? null,
           question.paragraphIndex ?? null,
           question.paragraphPage ?? null,
         ]
@@ -306,13 +309,13 @@ export class SpacedRepetitionDatabase {
     await this.persist();
   }
 
-  getExistingQuestionTexts(bookPath: string, topLevelLabel?: string): string[] {
+  getExistingQuestionTexts(bookPath: string, sectionLabel?: string): string[] {
     const db = this.requireDb();
     const conditions = ['book_path = ?'];
     const params: unknown[] = [bookPath];
-    if (topLevelLabel) {
-      conditions.push('top_level_label = ?');
-      params.push(topLevelLabel);
+    if (sectionLabel) {
+      conditions.push('section_label = ?');
+      params.push(sectionLabel);
     }
     const rows = this.select<{ question_text: string }>(
       `SELECT question_text FROM questions WHERE ${conditions.join(' AND ')}`,
@@ -799,16 +802,17 @@ export class SpacedRepetitionDatabase {
     }));
   }
 
-  getBookProvenance(): Array<{ bookPath: string; bookName: string; topLevelLabel: string | null }> {
+  getBookProvenance(): Array<{ bookPath: string; bookName: string; topLevelLabel: string | null; sectionLabel: string | null }> {
     return this.select<Record<string, unknown>>(
-      `SELECT DISTINCT book_path as bookPath, book_name as bookName, top_level_label as topLevelLabel
+      `SELECT DISTINCT book_path as bookPath, book_name as bookName, top_level_label as topLevelLabel, section_label as sectionLabel
        FROM questions
        WHERE book_path IS NOT NULL
-       ORDER BY book_name, topLevelLabel`
+       ORDER BY book_name, topLevelLabel, sectionLabel`
     ).map((row) => ({
       bookPath: String(row.bookPath),
       bookName: String(row.bookName),
       topLevelLabel: row.topLevelLabel ? String(row.topLevelLabel) : null,
+      sectionLabel: row.sectionLabel ? String(row.sectionLabel) : null,
     }));
   }
 
@@ -883,6 +887,11 @@ export class SpacedRepetitionDatabase {
       params.push(query.topLevelLabel);
     }
 
+    if (query.sectionLabel) {
+      conditions.push('q.section_label = ?');
+      params.push(query.sectionLabel);
+    }
+
     if (query.paragraphIndex !== null && query.paragraphIndex !== undefined) {
       conditions.push('q.paragraph_index = ?');
       params.push(query.paragraphIndex);
@@ -913,7 +922,7 @@ export class SpacedRepetitionDatabase {
         q.last_reviewed_at as lastReviewedAt, q.created_at as createdAt, q.updated_at as updatedAt,
         q.book_path as bookPath, q.book_name as bookName,
         q.top_level_label as topLevelLabel, q.top_level_page_start as topLevelPageStart, q.top_level_page_end as topLevelPageEnd,
-        q.paragraph_index as paragraphIndex, q.paragraph_page as paragraphPage
+        q.section_label as sectionLabel, q.paragraph_index as paragraphIndex, q.paragraph_page as paragraphPage
       FROM questions q
       LEFT JOIN notes n ON n.id = q.note_id
       LEFT JOIN study_sets ss ON ss.id = q.study_set_id
@@ -947,6 +956,7 @@ export class SpacedRepetitionDatabase {
       topLevelLabel: row.topLevelLabel ? String(row.topLevelLabel) : null,
       topLevelPageStart: row.topLevelPageStart != null ? Number(row.topLevelPageStart) : null,
       topLevelPageEnd: row.topLevelPageEnd != null ? Number(row.topLevelPageEnd) : null,
+      sectionLabel: row.sectionLabel ? String(row.sectionLabel) : null,
       paragraphIndex: row.paragraphIndex != null ? Number(row.paragraphIndex) : null,
       paragraphPage: row.paragraphPage != null ? Number(row.paragraphPage) : null,
     }));
@@ -1220,6 +1230,7 @@ export class SpacedRepetitionDatabase {
     this.ensureColumn('questions', 'top_level_label', 'TEXT');
     this.ensureColumn('questions', 'top_level_page_start', 'INTEGER');
     this.ensureColumn('questions', 'top_level_page_end', 'INTEGER');
+    this.ensureColumn('questions', 'section_label', 'TEXT');
     this.ensureColumn('questions', 'paragraph_index', 'INTEGER');
     this.ensureColumn('questions', 'paragraph_page', 'INTEGER');
   }
