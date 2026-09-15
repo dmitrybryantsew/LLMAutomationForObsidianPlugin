@@ -28,6 +28,8 @@ const DEFAULT_SETTINGS = {
   flashcardGenerationMaxTokens: 8000,
   flashcardTwoPassGeneration: true,
   flashcardStripThinking: true,
+  flashcardConceptExtractionPrompt: "",
+  flashcardQuestionGenerationPrompt: "",
   codingExercisesFolder: "Coding Exercises",
   // Legacy summaryModel for backward compatibility (deprecated - use provider-specific models)
   summaryModel: "openrouter/deepseek/deepseek-r1:free",

@@ -56,6 +56,7 @@ export class FlashcardsFromBookModal extends Modal {
   private bookLanguage = 'en';
   private cardsLanguage = 'english';
   private questionCount = 8;
+  private additionalDirection = '';
   private includeSelfCheck = true;
   private includeTypedExact = true;
   private includeTypedFieldsExact = false;
@@ -534,6 +535,16 @@ export class FlashcardsFromBookModal extends Modal {
           }
         }));
 
+    new Setting(section)
+      .setName('Additional direction')
+      .setDesc('Extra instructions appended to the generation prompt for this run (e.g. "focus on async/await", "include edge cases").')
+      .addTextArea((text) => text
+        .setPlaceholder('Focus on a specific topic, difficulty, or style...')
+        .setValue(this.additionalDirection)
+        .onChange((value) => {
+          this.additionalDirection = value;
+        }));
+
     const typesSetting = new Setting(section).setName('Card types').setDesc('What kinds of questions to generate.');
     this.renderTypeToggles(typesSetting);
 
@@ -799,7 +810,7 @@ export class FlashcardsFromBookModal extends Modal {
             model: this.plugin.settings.flashcardGenerationModel,
             questionCount: this.questionCount,
             questionTypes,
-            additionalInstructions: this.buildUnitInstructions(unit),
+            additionalInstructions: this.buildUnitInstructions(unit) + (this.additionalDirection.trim() ? `\n${this.additionalDirection.trim()}` : ''),
             outputLanguage: this.cardsLanguage,
             temperature: this.plugin.settings.flashcardGenerationTemperature,
             maxTokens: this.plugin.settings.flashcardGenerationMaxTokens,
@@ -808,6 +819,8 @@ export class FlashcardsFromBookModal extends Modal {
             existingQuestions,
             cachedConcepts,
             paragraphs: paragraphContext,
+            conceptExtractionPrompt: this.plugin.settings.flashcardConceptExtractionPrompt,
+            questionGenerationPrompt: this.plugin.settings.flashcardQuestionGenerationPrompt,
             onProgress: (stage) => {
               this.generationLog.push(`${unit.label}: ${stage}`);
               this.render();

@@ -737,6 +737,19 @@ export class SpacedRepetitionDatabase {
     await this.persist();
   }
 
+  async deleteAllQuestions(): Promise<number> {
+    const db = this.requireDb();
+    const countRows = this.select<{ count: number }>('SELECT COUNT(*) as count FROM questions');
+    const count = Number(countRows[0]?.count ?? 0);
+    db.run('DELETE FROM questions');
+    db.run('DELETE FROM question_sources');
+    db.run('DELETE FROM schedules');
+    db.run('DELETE FROM review_history');
+    db.run('DELETE FROM book_concept_cache');
+    await this.persist();
+    return count;
+  }
+
   async updateQuestionContent(input: {
     questionId: string;
     questionName?: string | null;

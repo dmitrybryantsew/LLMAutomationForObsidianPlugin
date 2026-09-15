@@ -29,6 +29,10 @@ export interface GenerateQuestionsForNoteOptions {
   cachedConcepts?: ExtractedConcept[];
   /** Paragraph-level source chunks with stable indices, so the model can tag each question with its source paragraph. */
   paragraphs?: Array<{ index: number; page: number; text: string }>;
+  /** Custom instructions appended to the concept-extraction prompt. */
+  conceptExtractionPrompt?: string;
+  /** Custom instructions appended to the question-generation prompt. */
+  questionGenerationPrompt?: string;
 }
 
 export interface GeneratedQuestionSource {
@@ -299,7 +303,7 @@ Rules:
 - Skip trivia, page numbers, cross-references, and passing mentions.
 - Ground every concept in this text only.
 - Write names and summaries in ${language}.
-
+${options.conceptExtractionPrompt?.trim() ? `\nAdditional instructions:\n${options.conceptExtractionPrompt.trim()}\n` : ''}
 Source text:
 ${noteContent}`;
 
@@ -375,6 +379,10 @@ ${noteContent}`;
         .join('\n')}\n`
       : '';
 
+    const customPromptSection = options.questionGenerationPrompt?.trim()
+      ? `\nCustom generation instructions:\n${options.questionGenerationPrompt.trim()}\n`
+      : '';
+
     const retryPreamble = isRetry
       ? 'IMPORTANT: Your previous answer was not valid JSON. Respond now with ONLY the JSON object. No thinking out loud, no explanations, no markdown fences.\n\n'
       : '';
@@ -417,7 +425,7 @@ Rules:
 - For multiple_choice, choices must be exactly four strings and answerText must be the correct choice text.
 - Prefer questions that test durable understanding, definitions, distinctions, steps, and edge cases.
 - sourceQuote must be short and copied from the note when possible.
-${options.paragraphs?.length ? '- Each question MUST include sourceParagraphIndex (the paragraph number it is based on).\n' : ''}${additionalInstructions}${extraContextSection}${conceptSection}${existingSection}${paragraphSection}
+${options.paragraphs?.length ? '- Each question MUST include sourceParagraphIndex (the paragraph number it is based on).\n' : ''}${additionalInstructions}${extraContextSection}${conceptSection}${existingSection}${paragraphSection}${customPromptSection}
 Source note path: ${options.file.path}
 Source note title: ${options.file.basename}
 

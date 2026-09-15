@@ -351,6 +351,8 @@ export class FlashcardGenerationView extends ItemView {
         maxTokens: this.plugin.settings.flashcardGenerationMaxTokens,
         twoPass: this.plugin.settings.flashcardTwoPassGeneration,
         stripThinking: this.plugin.settings.flashcardStripThinking,
+        conceptExtractionPrompt: this.plugin.settings.flashcardConceptExtractionPrompt,
+        questionGenerationPrompt: this.plugin.settings.flashcardQuestionGenerationPrompt,
       });
       this.generatedQuestions = generatedQuestions;
       new Notice(`Generated ${this.generatedQuestions.length} card(s)`);

@@ -48,6 +48,8 @@ export interface PluginSettings {
     flashcardGenerationMaxTokens: number;
     flashcardTwoPassGeneration: boolean; // Extract concepts before generating questions
     flashcardStripThinking: boolean; // Strip reasoning-model noise before parsing JSON
+    flashcardConceptExtractionPrompt?: string; // Custom base prompt for concept extraction (pass 1)
+    flashcardQuestionGenerationPrompt?: string; // Custom base prompt for question generation (pass 2)
     codingExercisesFolder: string; // Folder for storing generated coding exercises
     
     // Summary generation settings

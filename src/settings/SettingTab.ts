@@ -561,6 +561,51 @@ import {
           this.plugin.settings.flashcardStripThinking = value;
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName("Concept Extraction Prompt (Pass 1)")
+      .setDesc("Custom instructions appended to the concept-extraction prompt. Leave empty to use the built-in default.")
+      .addTextArea(text => text
+        .setPlaceholder("e.g. Focus on C# language features. Include edge cases and performance implications.")
+        .setValue(this.plugin.settings.flashcardConceptExtractionPrompt ?? "")
+        .onChange(async value => {
+          this.plugin.settings.flashcardConceptExtractionPrompt = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Question Generation Prompt (Pass 2)")
+      .setDesc("Custom instructions appended to the question-generation prompt. Leave empty to use the built-in default.")
+      .addTextArea(text => text
+        .setPlaceholder("e.g. Prefer code-based questions. Include at least one edge-case question per concept.")
+        .setValue(this.plugin.settings.flashcardQuestionGenerationPrompt ?? "")
+        .onChange(async value => {
+          this.plugin.settings.flashcardQuestionGenerationPrompt = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Delete All Flashcards")
+      .setDesc("Permanently removes ALL cards, schedules, review history, and concept cache from the database. This cannot be undone.")
+      .addButton(button => button
+        .setButtonText("Delete All Cards")
+        .setWarning()
+        .onClick(async () => {
+          const confirm1 = confirm("This will permanently delete ALL flashcards from the database. This cannot be undone.\n\nClick OK to continue.");
+          if (!confirm1) return;
+          const confirm2 = confirm("Are you absolutely sure? Every card, schedule, and review record will be destroyed.");
+          if (!confirm2) return;
+          button.setDisabled(true).setButtonText("Deleting...");
+          try {
+            const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+            const count = await database.deleteAllQuestions();
+            new Notice(`Deleted ${count} card(s).`);
+          } catch (error) {
+            new Notice(`Failed to delete cards: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Delete All Cards");
+          }
+        }));
   }
 
   addStudySourceSettings(containerEl: HTMLElement): void {

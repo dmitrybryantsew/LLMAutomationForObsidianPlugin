@@ -935,6 +935,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.flashcardGenerationMaxTokens = this.settings.flashcardGenerationMaxTokens ?? DEFAULT_SETTINGS.flashcardGenerationMaxTokens;
     this.settings.flashcardTwoPassGeneration = this.settings.flashcardTwoPassGeneration ?? DEFAULT_SETTINGS.flashcardTwoPassGeneration;
     this.settings.flashcardStripThinking = this.settings.flashcardStripThinking ?? DEFAULT_SETTINGS.flashcardStripThinking;
+    this.settings.flashcardConceptExtractionPrompt = this.settings.flashcardConceptExtractionPrompt ?? DEFAULT_SETTINGS.flashcardConceptExtractionPrompt;
+    this.settings.flashcardQuestionGenerationPrompt = this.settings.flashcardQuestionGenerationPrompt ?? DEFAULT_SETTINGS.flashcardQuestionGenerationPrompt;
     this.settings.codingExercisesFolder = this.settings.codingExercisesFolder ?? DEFAULT_SETTINGS.codingExercisesFolder;
     this.settings.proxyApiKey = this.settings.proxyApiKey ?? DEFAULT_SETTINGS.proxyApiKey;
     this.settings.proxyBaseUrl = this.settings.proxyBaseUrl ?? DEFAULT_SETTINGS.proxyBaseUrl;
