@@ -201,8 +201,8 @@ export class SpacedRepetitionCardManagementView extends ItemView {
         .setName('Book')
         .addDropdown((dropdown) => {
           dropdown.addOption('', 'All books');
-          for (const name of bookNames) {
-            dropdown.addOption(name, name);
+          for (const p of this.bookProvenance) {
+            dropdown.addOption(p.bookPath, p.bookName);
           }
           dropdown
             .setValue(this.bookFilter)
@@ -217,7 +217,7 @@ export class SpacedRepetitionCardManagementView extends ItemView {
           const topLevelLabels = this.bookFilter
             ? [...new Set(
                 this.bookProvenance
-                  .filter((p) => p.bookName === this.bookFilter && p.topLevelLabel)
+                  .filter((p) => p.bookPath === this.bookFilter && p.topLevelLabel)
                   .map((p) => p.topLevelLabel as string)
               )].sort()
             : [];
