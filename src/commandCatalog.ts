@@ -185,6 +185,18 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Searches the local indexed vault for relevant note chunks and shows ranked, linkable results. No LLM required.',
   },
   {
+    id: 'open-study-hub',
+    name: 'Open Study Hub',
+    group: 'Learning',
+    description: 'Opens the central Study Hub dashboard connecting flashcards, quizzes, coding exercises, and study paths.',
+  },
+  {
+    id: 'open-quiz-hub',
+    name: 'Open Quiz Hub',
+    group: 'Learning',
+    description: 'Opens the Quiz Hub for browsing, taking, and generating interactive quizzes.',
+  },
+  {
     id: 'generate-quiz',
     name: 'Generate Quiz from Context',
     group: 'Learning',

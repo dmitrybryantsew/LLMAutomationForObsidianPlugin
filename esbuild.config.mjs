@@ -22,6 +22,7 @@ const outfile = path.join(packageDir, "main.js");
 async function copyStaticFiles() {
   await mkdir(packageDir, { recursive: true });
   await copyFile(path.join(rootDir, "manifest.json"), path.join(packageDir, "manifest.json"));
+  await copyFile(path.join(rootDir, "src", "styles", "styles.css"), path.join(packageDir, "styles.css"));
   // Use the vendored FTS5-enabled sql.js wasm (see vendor/sqljs-fts5/README.md).
   // The upstream npm sql.js wasm does NOT include FTS5, which RetrievalDatabase requires.
   await copyFile(

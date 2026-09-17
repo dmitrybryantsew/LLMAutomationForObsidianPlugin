@@ -57,7 +57,14 @@ export class CodingExerciseView extends ItemView {
     this.contentEl.addClass('coding-exercise-view');
 
     const header = this.contentEl.createDiv({ cls: 'coding-exercise-header' });
-    header.createEl('h2', { text: 'Coding Exercises' });
+    const headerTitle = header.createDiv({ cls: 'coding-exercise-header-title-row' });
+    headerTitle.createEl('h2', { text: 'Coding Exercises' });
+    headerTitle.createEl('button', {
+      text: '← Study Hub',
+      cls: 'llm-automation-btn llm-automation-btn-secondary',
+    }).addEventListener('click', () => {
+      void this.plugin.activateStudyHub();
+    });
     const status = header.createDiv({ cls: 'coding-exercise-status' });
     status.setText(`${this.plugin.settings.codingExerciseProvider} · ${this.plugin.settings.codingExerciseModel} · ${this.plugin.settings.allowLocalCodeExecution ? 'local run enabled' : 'local run disabled'}`);
 

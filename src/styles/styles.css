@@ -2268,6 +2268,572 @@ body.llm-automation-flashcard-ui-active .spaced-repetition-empty-state {
     border-radius: var(--llm-radius-sm, 4px);
 }
 
+/* Coding Exercise header title row */
+.coding-exercise-header-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+/* ==================================================================
+   Study Hub View
+   ================================================================== */
+
+.llm-automation-study-hub-view {
+    padding: 16px 24px;
+    overflow-y: auto;
+}
+
+.llm-automation-study-hub-container {
+    max-width: 1040px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.llm-automation-study-hub-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.llm-automation-study-hub-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.llm-automation-study-hub-title-group h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.llm-automation-study-hub-version-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.llm-automation-study-hub-topbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Hero section */
+.llm-automation-study-hub-hero {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 18px;
+}
+
+.llm-automation-study-hub-hero-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1 1 400px;
+}
+
+.llm-automation-study-hub-hero-greeting h2 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.llm-automation-study-hub-hero-status {
+    color: var(--text-muted);
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.llm-automation-study-hub-hero-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.llm-automation-study-hub-hero-stat-card {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-align: center;
+    min-width: 80px;
+}
+
+.llm-automation-study-hub-hero-stat-val {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-accent);
+}
+
+.llm-automation-study-hub-hero-stat-lbl {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+}
+
+.llm-automation-study-hub-hero-cta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.llm-automation-study-hub-hero-primary-btn {
+    font-weight: 600;
+    padding: 8px 18px;
+}
+
+/* Modules Grid */
+.llm-automation-study-hub-modules-section h2,
+.llm-automation-study-hub-recent-section h2 {
+    font-size: 1.2rem;
+    margin: 0 0 12px;
+}
+
+.llm-automation-study-hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.llm-automation-study-hub-card {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.llm-automation-study-hub-card:hover {
+    border-color: var(--interactive-accent);
+}
+
+.llm-automation-study-hub-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.llm-automation-study-hub-card-title-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.llm-automation-study-hub-card-title-area h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.llm-automation-study-hub-card-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-accent);
+}
+
+.llm-automation-study-hub-card-badge {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    background: var(--background-modifier-active-hover);
+    border-radius: 4px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.llm-automation-study-hub-card-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    line-height: 1.35;
+}
+
+.llm-automation-study-hub-card-details {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.llm-automation-study-hub-card-details li::before {
+    content: "•";
+    margin-right: 6px;
+    color: var(--text-accent);
+}
+
+.llm-automation-study-hub-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Recent Activity */
+.llm-automation-study-hub-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.llm-automation-study-hub-recent-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+}
+
+.llm-automation-study-hub-recent-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.llm-automation-study-hub-recent-detail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ==================================================================
+   Quiz Hub View & Runner
+   ================================================================== */
+
+.llm-automation-quiz-hub-view {
+    padding: 16px 24px;
+    overflow-y: auto;
+}
+
+.llm-automation-quiz-hub-container {
+    max-width: 920px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.llm-automation-quiz-hub-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.llm-automation-quiz-hub-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.llm-automation-quiz-hub-title-group h1 {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.llm-automation-quiz-hub-topbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.llm-automation-quiz-hub-search-bar {
+    width: 100%;
+}
+
+.llm-automation-quiz-hub-search-input {
+    width: 100%;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-secondary);
+    font-size: 0.9rem;
+}
+
+.llm-automation-quiz-hub-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.llm-automation-quiz-hub-empty {
+    padding: 36px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    background: var(--background-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--background-modifier-border);
+}
+
+.llm-automation-quiz-card {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.llm-automation-quiz-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.llm-automation-quiz-card-title-area h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.llm-automation-quiz-card-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.llm-automation-quiz-badge {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.llm-automation-quiz-badge-count {
+    background: var(--background-primary);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.llm-automation-quiz-card-path {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.llm-automation-quiz-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+/* Runner */
+.llm-automation-quiz-runner {
+    max-width: 740px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.llm-automation-quiz-runner-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.llm-automation-quiz-runner-header h2 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.llm-automation-quiz-runner-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.llm-automation-quiz-progress-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.llm-automation-quiz-progress-bar {
+    height: 6px;
+    background: var(--background-modifier-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.llm-automation-quiz-progress-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    transition: width 0.25s ease;
+}
+
+.llm-automation-quiz-question-card {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 22px 24px;
+}
+
+.llm-automation-quiz-question-title {
+    margin: 0 0 16px;
+    font-size: 1.1rem;
+    line-height: 1.45;
+}
+
+.llm-automation-quiz-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.llm-automation-quiz-choice-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    padding: 12px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.llm-automation-quiz-choice-btn:hover {
+    border-color: var(--interactive-accent);
+}
+
+.llm-automation-quiz-choice-btn.selected {
+    border-color: var(--interactive-accent);
+    background: var(--background-modifier-active-hover);
+}
+
+.llm-automation-quiz-choice-btn.correct {
+    border-color: var(--color-green, #48bb78);
+    background: rgba(72, 187, 120, 0.15);
+}
+
+.llm-automation-quiz-choice-btn.incorrect {
+    border-color: var(--color-red, #f56565);
+    background: rgba(245, 101, 101, 0.15);
+}
+
+.llm-automation-quiz-choice-key {
+    font-weight: 700;
+    min-width: 24px;
+    color: var(--text-accent);
+}
+
+.llm-automation-quiz-self-check-prompt {
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.llm-automation-quiz-explanation-box {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 6px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.llm-automation-quiz-feedback-correct {
+    font-weight: 700;
+    color: var(--color-green, #48bb78);
+    margin-bottom: 6px;
+}
+
+.llm-automation-quiz-feedback-incorrect {
+    font-weight: 700;
+    color: var(--color-red, #f56565);
+    margin-bottom: 6px;
+}
+
+.llm-automation-quiz-explanation-text {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.llm-automation-quiz-runner-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.llm-automation-quiz-results-box {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 36px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.llm-automation-quiz-results-box h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.llm-automation-quiz-score-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.llm-automation-quiz-score-val {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--interactive-accent);
+}
+
+.llm-automation-quiz-score-lbl {
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+.llm-automation-quiz-results-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+
 
 
 

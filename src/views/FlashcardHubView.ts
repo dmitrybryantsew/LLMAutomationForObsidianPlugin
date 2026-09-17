@@ -157,6 +157,12 @@ export class FlashcardHubView extends ItemView {
     const title = topbar.createDiv({ cls: 'llm-automation-flashcard-hub-title' });
     title.createEl('h1', { text: this.editingDeckId ? 'Manage Deck' : 'Flashcards' });
     topbar.createEl('button', {
+      text: '← Study Hub',
+      cls: 'llm-automation-btn llm-automation-btn-secondary',
+    }).addEventListener('click', () => {
+      void this.plugin.activateStudyHub();
+    });
+    topbar.createEl('button', {
       text: 'Exit Flashcard UI',
       cls: 'llm-automation-btn llm-automation-btn-secondary llm-automation-flashcard-hub-exit',
     }).addEventListener('click', () => {

@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile, Editor, MarkdownView, MarkdownFileInfo, normalizePath } from 'obsidian';
-import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_FLASHCARD_HUB, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
+import { VIEW_TYPE_GENERATE_TEXT, VIEW_TYPE_GENERATE_IMAGE, VIEW_TYPE_SPACED_REPETITION_REVIEW, VIEW_TYPE_SPACED_REPETITION_DECK_BROWSER, VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT, VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, VIEW_TYPE_FLASHCARD_GENERATION, VIEW_TYPE_FLASHCARD_HUB, VIEW_TYPE_STUDY_HUB, VIEW_TYPE_QUIZ_HUB, VIEW_TYPE_CODING_EXERCISES, DEFAULT_SETTINGS } from './constants';
 import { PluginSettings } from './types';
 import type { EmbeddingConfig, CompanionConfig } from './types/retrieval';
 import { GenerateTextView } from './views/GenerateTextView';
@@ -39,6 +39,8 @@ import { SpacedRepetitionCardManagementView } from './views/SpacedRepetitionCard
 import { SpacedRepetitionNoteChatView } from './views/SpacedRepetitionNoteChatView';
 import { FlashcardGenerationView } from './views/FlashcardGenerationView';
 import { FlashcardHubView } from './views/FlashcardHubView';
+import { StudyHubView } from './views/StudyHubView';
+import { QuizHubView } from './views/QuizHubView';
 import { CodingExerciseView } from './views/CodingExerciseView';
 import { SpacedRepetitionManualQuestionModal } from './modals/SpacedRepetitionManualQuestionModal';
 import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitionGenerateQuestionsModal';
@@ -83,7 +85,14 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.registerView(VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT, (leaf) => new SpacedRepetitionNoteChatView(leaf, this));
     this.registerView(VIEW_TYPE_FLASHCARD_GENERATION, (leaf) => new FlashcardGenerationView(leaf, this));
     this.registerView(VIEW_TYPE_FLASHCARD_HUB, (leaf) => new FlashcardHubView(leaf, this));
+    this.registerView(VIEW_TYPE_STUDY_HUB, (leaf) => new StudyHubView(leaf, this));
+    this.registerView(VIEW_TYPE_QUIZ_HUB, (leaf) => new QuizHubView(leaf, this));
     this.registerView(VIEW_TYPE_CODING_EXERCISES, (leaf) => new CodingExerciseView(leaf, this));
+
+    // Ribbon icon for quick access to the Study Hub
+    this.addRibbonIcon('graduation-cap', 'Open Study Hub', () => {
+      void this.activateStudyHub();
+    });
 
     // Initialize VideoQueueManager after plugin is fully initialized
     // It depends on TranscriptManager which might be doing async work internally
@@ -338,6 +347,18 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         title: 'Due Review',
         includeNotDue: false,
       }),
+    });
+
+    this.addCommand({
+      id: 'open-study-hub',
+      name: 'Open Study Hub',
+      callback: () => this.activateStudyHub(),
+    });
+
+    this.addCommand({
+      id: 'open-quiz-hub',
+      name: 'Open Quiz Hub',
+      callback: () => this.activateQuizHub(),
     });
 
     this.addCommand({
@@ -1148,6 +1169,43 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     }
 
     await this.toggleFlashcardUi();
+  }
+
+  /** Opens or reveals the central Study Hub. */
+  async activateStudyHub(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_STUDY_HUB);
+    if (existing.length > 0) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({
+      type: VIEW_TYPE_STUDY_HUB,
+      active: true,
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** Opens or reveals the Quiz Hub. */
+  async activateQuizHub(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_QUIZ_HUB);
+    if (existing.length > 0) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({
+      type: VIEW_TYPE_QUIZ_HUB,
+      active: true,
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** Returns to the Study Hub tab. */
+  async returnToStudyHub(): Promise<void> {
+    await this.activateStudyHub();
   }
 
   /**

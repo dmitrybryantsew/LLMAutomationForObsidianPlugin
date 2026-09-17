@@ -6,6 +6,8 @@ const VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT = "llm-automation-spaced-repet
 const VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT = "llm-automation-spaced-repetition-note-chat";
 const VIEW_TYPE_FLASHCARD_GENERATION = "llm-automation-flashcard-generation";
 const VIEW_TYPE_FLASHCARD_HUB = "llm-automation-flashcard-hub";
+const VIEW_TYPE_STUDY_HUB = "llm-automation-study-hub";
+const VIEW_TYPE_QUIZ_HUB = "llm-automation-quiz-hub";
 const VIEW_TYPE_CODING_EXERCISES = "llm-automation-coding-exercises";
 const HIERARCHY_PLUGIN_ID = "obsidian-gpt4free-hierarchy-plugin";
 const DEFAULT_SETTINGS = {
@@ -211,5 +213,7 @@ export { VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT };
 export { VIEW_TYPE_SPACED_REPETITION_NOTE_CHAT };
 export { VIEW_TYPE_FLASHCARD_GENERATION };
 export { VIEW_TYPE_FLASHCARD_HUB };
+export { VIEW_TYPE_STUDY_HUB };
+export { VIEW_TYPE_QUIZ_HUB };
 export { VIEW_TYPE_CODING_EXERCISES };
 export {HIERARCHY_PLUGIN_ID};
