@@ -722,6 +722,33 @@ export class SpacedRepetitionDatabase {
     await this.persist();
   }
 
+  async deleteStudySet(studySetId: string): Promise<{ deletedQuestionsCount: number }> {
+    const db = this.requireDb();
+    const countRows = this.select<{ count: number }>(
+      'SELECT COUNT(*) as count FROM questions WHERE study_set_id = ?',
+      [studySetId]
+    );
+    const deletedQuestionsCount = Number(countRows[0]?.count ?? 0);
+
+    const questionIds = this.select<{ id: string }>(
+      'SELECT id FROM questions WHERE study_set_id = ?',
+      [studySetId]
+    ).map((r) => r.id);
+
+    if (questionIds.length > 0) {
+      const placeholders = questionIds.map(() => '?').join(',');
+      db.run(`DELETE FROM schedules WHERE question_id IN (${placeholders})`, questionIds);
+      db.run(`DELETE FROM question_sources WHERE question_id IN (${placeholders})`, questionIds);
+      db.run(`DELETE FROM review_history WHERE question_id IN (${placeholders})`, questionIds);
+      db.run(`DELETE FROM questions WHERE study_set_id = ?`, [studySetId]);
+    }
+
+    db.run('DELETE FROM study_set_notes WHERE study_set_id = ?', [studySetId]);
+    db.run('DELETE FROM study_sets WHERE id = ?', [studySetId]);
+    await this.persist();
+    return { deletedQuestionsCount };
+  }
+
   async deleteEmptyStudySet(studySetId: string): Promise<void> {
     const db = this.requireDb();
     const countRows = this.select<{ count: number }>(
@@ -733,8 +760,7 @@ export class SpacedRepetitionDatabase {
       throw new Error('Only empty decks can be deleted');
     }
 
-    db.run('DELETE FROM study_sets WHERE id = ?', [studySetId]);
-    await this.persist();
+    await this.deleteStudySet(studySetId);
   }
 
   async deleteAllQuestions(): Promise<number> {

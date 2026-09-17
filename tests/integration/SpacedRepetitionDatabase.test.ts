@@ -481,6 +481,12 @@ describe('SpacedRepetitionDatabase', () => {
     await database.deleteEmptyStudySet(emptyDeckId);
     expect(database.getStudySets().some((deck) => deck.id === emptyDeckId)).toBe(false);
 
+    const deleteResult = await database.deleteStudySet(deckId);
+    expect(deleteResult.deletedQuestionsCount).toBe(1);
+    expect(database.getStudySets().some((deck) => deck.id === deckId)).toBe(false);
+    expect(database.getReviewQuestions({ studySetId: deckId, includeNotDue: true })).toHaveLength(0);
+    expect(database.getCardsForManagement({ studySetId: deckId })).toHaveLength(0);
+
     await database.close();
   });
 

@@ -464,6 +464,15 @@ export class FlashcardHubView extends ItemView {
       });
       manageButton.disabled = false;
       manageButton.addEventListener('click', () => this.openDeckManagePage(row.studySetId as string));
+
+      const deleteButton = actions.createEl('button', {
+        text: 'Delete',
+        cls: 'llm-automation-btn llm-automation-btn-danger',
+      });
+      const totalCards = row.totalCount + (row.suspendedCount ?? 0) + (row.archivedCount ?? 0);
+      deleteButton.addEventListener('click', () => {
+        void this.deleteDeck(row.studySetId as string, row.title, totalCards);
+      });
     }
 
     const reviewButton = actions.createEl('button', {
@@ -594,12 +603,12 @@ export class FlashcardHubView extends ItemView {
     this.addQuickAction(actions, 'Export Deck (JSON)', this.deckCards.length > 0, () =>
       this.exportDeckCards(deck.name, 'json'));
 
+    const totalDeckCards = deck.totalCount + deck.suspendedCount + deck.archivedCount;
     const deleteButton = actions.createEl('button', {
-      text: 'Delete Empty Deck',
+      text: 'Delete Deck',
       cls: 'llm-automation-btn llm-automation-btn-danger',
     });
-    deleteButton.disabled = (deck.totalCount + deck.suspendedCount + deck.archivedCount) > 0;
-    deleteButton.addEventListener('click', () => this.deleteEmptyDeck(deck.studySetId, deck.name));
+    deleteButton.addEventListener('click', () => this.deleteDeck(deck.studySetId, deck.name, totalDeckCards));
 
     // --- Deck card list (first 100) with bulk move-out ---
     const listSection = section.createDiv({ cls: 'llm-automation-flashcard-hub-deck-cards' });
@@ -789,18 +798,27 @@ export class FlashcardHubView extends ItemView {
     }
   }
 
-  private async deleteEmptyDeck(studySetId: string, name: string): Promise<void> {
-    if (!window.confirm(`Delete empty deck "${name}"?`)) {
+  private async deleteDeck(studySetId: string, name: string, totalCards?: number): Promise<void> {
+    const cardCount = totalCards ?? (this.deckCards.length > 0 ? this.deckCards.length : 0);
+    const confirmMessage = cardCount > 0
+      ? `Delete deck "${name}" and all ${cardCount} card(s) in it? This action cannot be undone.`
+      : `Delete empty deck "${name}"?`;
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
       const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
-      await database.deleteEmptyStudySet(studySetId);
-      new Notice('Empty deck deleted');
-      this.closeDeckManagePage();
+      await database.deleteStudySet(studySetId);
+      new Notice(`Deck "${name}" deleted`);
+      if (this.editingDeckId === studySetId) {
+        this.closeDeckManagePage();
+      } else {
+        await this.refresh();
+      }
     } catch (error) {
-      console.error('Failed to delete empty deck:', error);
+      console.error('Failed to delete deck:', error);
       new Notice(`Failed to delete deck: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

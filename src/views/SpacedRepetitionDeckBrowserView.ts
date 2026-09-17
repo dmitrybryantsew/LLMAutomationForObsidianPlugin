@@ -279,9 +279,9 @@ export class SpacedRepetitionDeckBrowserView extends ItemView {
     actions.createEl('button', { text: row.enabled === false ? 'Enable' : 'Disable' })
       .addEventListener('click', () => this.setDeckEnabled(row.studySetId as string, row.enabled === false));
 
-    const deleteButton = actions.createEl('button', { text: 'Delete Empty' });
-    deleteButton.disabled = (row.totalCount + (row.suspendedCount ?? 0) + (row.archivedCount ?? 0)) > 0;
-    deleteButton.addEventListener('click', () => this.deleteEmptyDeck(row.studySetId as string, row.title));
+    const totalCards = row.totalCount + (row.suspendedCount ?? 0) + (row.archivedCount ?? 0);
+    const deleteButton = actions.createEl('button', { text: 'Delete' });
+    deleteButton.addEventListener('click', () => this.deleteDeck(row.studySetId as string, row.title, totalCards));
   }
 
   private renderDeckEditForm(container: HTMLElement, studySetId: string): void {
@@ -357,18 +357,22 @@ export class SpacedRepetitionDeckBrowserView extends ItemView {
     }
   }
 
-  private async deleteEmptyDeck(studySetId: string, name: string): Promise<void> {
-    if (!window.confirm(`Delete empty deck "${name}"?`)) {
+  private async deleteDeck(studySetId: string, name: string, totalCards = 0): Promise<void> {
+    const confirmMessage = totalCards > 0
+      ? `Delete deck "${name}" and all ${totalCards} card(s) in it? This action cannot be undone.`
+      : `Delete empty deck "${name}"?`;
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
       const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
-      await database.deleteEmptyStudySet(studySetId);
-      new Notice('Empty deck deleted');
+      await database.deleteStudySet(studySetId);
+      new Notice(`Deck "${name}" deleted`);
       await this.loadDecks();
     } catch (error) {
-      console.error('Failed to delete empty deck:', error);
+      console.error('Failed to delete deck:', error);
       new Notice(`Failed to delete deck: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
