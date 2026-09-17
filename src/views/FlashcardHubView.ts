@@ -14,10 +14,12 @@ const HUB_SHORTCUTS: Array<{ keys: string; label: string }> = [
   { keys: 'R', label: 'Review due' },
   { keys: 'C', label: 'Cram all' },
   { keys: 'A', label: 'Add question' },
-  { keys: 'G', label: 'Generate' },
+  { keys: 'G', label: 'AI Generate' },
   { keys: 'B', label: 'From book' },
-  { keys: 'M', label: 'Manage cards' },
-  { keys: 'D', label: 'Manage decks' },
+  { keys: 'M', label: 'Browse cards' },
+  { keys: 'N', label: 'New deck' },
+  { keys: 'F', label: 'Filter decks' },
+  { keys: 'D', label: 'Manage deck' },
   { keys: 'S', label: 'Settings' },
   { keys: 'E', label: 'Export MD' },
   { keys: 'Shift+E', label: 'Export JSON' },
@@ -38,6 +40,15 @@ export class FlashcardHubView extends ItemView {
   private ungroupedTotal = 0;
   private deckStats: StudySetReviewStats[] = [];
   private reviewStats: ReviewStats | null = null;
+
+  /** Filter & search state for the deck list */
+  private deckSearchQuery = '';
+  private deckFilterMode: 'all' | 'due' | 'active' = 'all';
+  private deckSortOrder: 'due-desc' | 'name-asc' | 'total-desc' = 'due-desc';
+  private activeDeckMenuId: string | null = null;
+
+  /** Search query for cards within the manage sub-page */
+  private deckCardSearchQuery = '';
 
   /** Deck currently opened in the manage sub-page, null = home screen. */
   private editingDeckId: string | null = null;
@@ -84,6 +95,15 @@ export class FlashcardHubView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass('llm-automation-flashcard-hub-view');
     window.addEventListener('keydown', this.keyHandler);
+    this.contentEl.addEventListener('click', (e) => {
+      if (this.activeDeckMenuId) {
+        const target = e.target as HTMLElement | null;
+        if (!target?.closest('.llm-automation-flashcard-hub-deck-menu-wrapper')) {
+          this.activeDeckMenuId = null;
+          this.render();
+        }
+      }
+    });
     this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
       if (leaf === this.leaf) {
         // Skip refresh if one just completed (quick hub<->review round-trips).
@@ -154,16 +174,25 @@ export class FlashcardHubView extends ItemView {
     const shell = container.createDiv({ cls: 'llm-automation-flashcard-hub-container' });
 
     const topbar = shell.createDiv({ cls: 'llm-automation-flashcard-hub-topbar' });
-    const title = topbar.createDiv({ cls: 'llm-automation-flashcard-hub-title' });
+    const titleGroup = topbar.createDiv({ cls: 'llm-automation-flashcard-hub-title-group' });
+    const title = titleGroup.createDiv({ cls: 'llm-automation-flashcard-hub-title' });
     title.createEl('h1', { text: this.editingDeckId ? 'Manage Deck' : 'Flashcards' });
-    topbar.createEl('button', {
+    if (!this.editingDeckId && this.totalCards > 0) {
+      titleGroup.createSpan({
+        text: `${this.totalCards} cards`,
+        cls: 'llm-automation-badge llm-automation-badge-muted',
+      });
+    }
+
+    const topbarActions = topbar.createDiv({ cls: 'llm-automation-flashcard-hub-topbar-actions' });
+    topbarActions.createEl('button', {
       text: '← Study Hub',
       cls: 'llm-automation-btn llm-automation-btn-secondary',
     }).addEventListener('click', () => {
       void this.plugin.activateStudyHub();
     });
-    topbar.createEl('button', {
-      text: 'Exit Flashcard UI',
+    topbarActions.createEl('button', {
+      text: 'Exit Focus (Esc)',
       cls: 'llm-automation-btn llm-automation-btn-secondary llm-automation-flashcard-hub-exit',
     }).addEventListener('click', () => {
       void this.plugin.toggleFlashcardUi();
@@ -179,10 +208,10 @@ export class FlashcardHubView extends ItemView {
     if (this.creatingDeck) {
       this.renderNewDeckForm(shell);
     }
-    this.renderShortcutHints(shell);
     this.renderMetrics(shell);
     this.renderForecast(shell);
     this.renderDeckList(shell);
+    this.renderShortcutHints(shell);
   }
 
   // ------------------------------------------------------------------
@@ -193,64 +222,100 @@ export class FlashcardHubView extends ItemView {
     const hero = container.createDiv({ cls: 'llm-automation-flashcard-hub-hero' });
 
     if (this.loading) {
-      hero.createEl('div', { text: 'Loading...', cls: 'llm-automation-flashcard-hub-status' });
+      hero.createEl('div', { text: 'Loading flashcard statistics...', cls: 'llm-automation-flashcard-hub-status' });
       return;
     }
 
+    const header = hero.createDiv({ cls: 'llm-automation-flashcard-hub-hero-header' });
     if (this.totalDue > 0) {
-      hero.createEl('div', {
-        text: `You have ${this.totalDue} card${this.totalDue === 1 ? '' : 's'} to review.`,
+      header.createEl('div', {
+        text: `You have ${this.totalDue} card${this.totalDue === 1 ? '' : 's'} due for review`,
         cls: 'llm-automation-flashcard-hub-status',
       });
     } else if (this.totalCards > 0) {
-      hero.createEl('div', {
-        text: 'No cards are due right now. Nice work.',
+      header.createEl('div', {
+        text: 'All caught up! 🎉 No cards are due right now.',
         cls: 'llm-automation-flashcard-hub-status',
       });
     } else {
-      hero.createEl('div', {
-        text: 'No cards yet. Generate flashcards from a note to get started.',
+      header.createEl('div', {
+        text: 'Your flashcard collection is empty.',
         cls: 'llm-automation-flashcard-hub-status',
       });
     }
 
+    const todayReviewed = this.reviewStats?.reviewedToday ?? 0;
+    const subtextParts = [`${this.totalCards} card${this.totalCards === 1 ? '' : 's'} total`];
+    if (todayReviewed > 0) {
+      subtextParts.push(`🔥 ${todayReviewed} reviewed today`);
+    }
+    subtextParts.push(`${this.deckStats.length} active deck${this.deckStats.length === 1 ? '' : 's'}`);
+
     hero.createEl('div', {
-      text: `${this.totalCards} card${this.totalCards === 1 ? '' : 's'} in collection`,
+      text: subtextParts.join(' • '),
       cls: 'llm-automation-flashcard-hub-substatus',
     });
 
-    const start = hero.createEl('button', {
-      text: this.totalDue > 0 ? 'Start Reviewing' : 'Cram All Cards',
-      cls: 'llm-automation-btn llm-automation-btn-primary llm-automation-flashcard-hub-start',
-    });
-    start.disabled = this.totalCards === 0;
-    start.addEventListener('click', () => {
-      if (this.totalDue > 0) {
+    const ctaRow = hero.createDiv({ cls: 'llm-automation-flashcard-hub-hero-ctas' });
+    if (this.totalDue > 0) {
+      const start = ctaRow.createEl('button', {
+        text: `Start Due Review (${this.totalDue}) [R]`,
+        cls: 'llm-automation-btn llm-automation-btn-primary llm-automation-flashcard-hub-start',
+      });
+      start.addEventListener('click', () => {
         void this.plugin.activateReviewView({ title: 'Due Review', includeNotDue: false });
-      } else {
+      });
+
+      const cram = ctaRow.createEl('button', {
+        text: 'Cram All Cards [C]',
+        cls: 'llm-automation-btn llm-automation-btn-secondary',
+      });
+      cram.addEventListener('click', () => {
         void this.plugin.activateReviewView({ title: 'Cram: All Cards', includeNotDue: true });
-      }
-    });
+      });
+    } else if (this.totalCards > 0) {
+      const cram = ctaRow.createEl('button', {
+        text: 'Cram All Cards [C]',
+        cls: 'llm-automation-btn llm-automation-btn-primary llm-automation-flashcard-hub-start',
+      });
+      cram.addEventListener('click', () => {
+        void this.plugin.activateReviewView({ title: 'Cram: All Cards', includeNotDue: true });
+      });
+    } else {
+      const addFirst = ctaRow.createEl('button', {
+        text: '+ Add First Card [A]',
+        cls: 'llm-automation-btn llm-automation-btn-primary llm-automation-flashcard-hub-start',
+      });
+      addFirst.addEventListener('click', () => this.openManualQuestionModal());
+
+      const genFirst = ctaRow.createEl('button', {
+        text: '✨ Generate Flashcards [G]',
+        cls: 'llm-automation-btn llm-automation-btn-secondary',
+      });
+      genFirst.addEventListener('click', () => void this.plugin.activateView(VIEW_TYPE_FLASHCARD_GENERATION));
+    }
   }
 
   private renderQuickActions(container: HTMLElement): void {
-    const actions = container.createDiv({ cls: 'llm-automation-flashcard-hub-actions' });
-    this.addQuickAction(actions, 'Review Due (R)', this.totalDue > 0, () =>
-      this.plugin.activateReviewView({ title: 'Due Review', includeNotDue: false }));
-    this.addQuickAction(actions, 'Cram All (C)', this.totalCards > 0, () =>
-      this.plugin.activateReviewView({ title: 'Cram: All Cards', includeNotDue: true }));
-    this.addQuickAction(actions, 'Add Manual Question (A)', true, () => this.openManualQuestionModal());
-    this.addQuickAction(actions, 'Generate Flashcards (G)', true, () =>
+    const toolbar = container.createDiv({ cls: 'llm-automation-flashcard-hub-toolbar' });
+
+    // Primary Creation & Card Management Group
+    const mainGroup = toolbar.createDiv({ cls: 'llm-automation-flashcard-hub-toolbar-group' });
+    this.addQuickAction(mainGroup, '+ Add Question (A)', true, () => this.openManualQuestionModal());
+    this.addQuickAction(mainGroup, '✨ AI Generate (G)', true, () =>
       this.plugin.activateView(VIEW_TYPE_FLASHCARD_GENERATION));
-    this.addQuickAction(actions, 'Flashcards from Book (B)', true, () =>
+    this.addQuickAction(mainGroup, '📖 From Book (B)', true, () =>
       this.plugin.openFlashcardsFromBookModal());
-    this.addQuickAction(actions, 'Manage Cards (M)', true, () =>
+    this.addQuickAction(mainGroup, '🗂 Browse Cards (M)', true, () =>
       this.plugin.activateView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT));
-    this.addQuickAction(actions, 'New Deck', true, () => this.openNewDeckForm());
-    this.addQuickAction(actions, 'Plugin Settings (S)', true, () => this.openPluginSettings());
-    this.addQuickAction(actions, 'Export MD (E)', true, () => this.exportAllCards('markdown'));
-    this.addQuickAction(actions, 'Export JSON (Shift+E)', true, () => this.exportAllCards('json'));
-    this.addQuickAction(actions, 'Refresh', true, () => this.refresh());
+    this.addQuickAction(mainGroup, '➕ New Deck (N)', true, () => this.openNewDeckForm());
+
+    // Utility & Settings Group
+    const auxGroup = toolbar.createDiv({ cls: 'llm-automation-flashcard-hub-toolbar-group is-aux' });
+    this.addQuickAction(auxGroup, 'Export MD (E)', this.totalCards > 0, () => this.exportAllCards('markdown'));
+    this.addQuickAction(auxGroup, 'Export JSON (Shift+E)', this.totalCards > 0, () => this.exportAllCards('json'));
+    this.addQuickAction(auxGroup, 'Settings (S)', true, () => this.openPluginSettings());
+    this.addQuickAction(auxGroup, '↻ Refresh', true, () => this.refresh());
   }
 
   /** Opens the inline "create deck" form on the home page. */
@@ -327,7 +392,8 @@ export class FlashcardHubView extends ItemView {
     }).addEventListener('click', () => this.closeNewDeckForm());
   }
 
-  private renderShortcutHints(container: HTMLElement): void {    const hints = container.createDiv({ cls: 'llm-automation-flashcard-hub-shortcuts' });
+  private renderShortcutHints(container: HTMLElement): void {
+    const hints = container.createDiv({ cls: 'llm-automation-flashcard-hub-shortcuts' });
     hints.createEl('span', {
       text: 'Shortcuts',
       cls: 'llm-automation-flashcard-hub-shortcuts-label',
@@ -362,14 +428,27 @@ export class FlashcardHubView extends ItemView {
     }
 
     const metrics = container.createDiv({ cls: 'llm-automation-flashcard-hub-metrics' });
-    this.renderMetric(metrics, 'Due now', String(this.totalDue));
-    this.renderMetric(metrics, 'Reviewed today', String(this.reviewStats.reviewedToday));
+    this.renderMetric(metrics, 'Due now', String(this.totalDue), this.totalDue > 0 ? 'is-due' : '');
+    this.renderMetric(metrics, 'Reviewed today', `${this.reviewStats.reviewedToday} 🔥`);
     this.renderMetric(metrics, 'Last 7 days', String(this.reviewStats.reviewedLast7Days));
-    this.renderMetric(metrics, 'Lapses 30d', String(this.reviewStats.lapsesLast30Days));
+
+    const totalGraded = this.reviewStats.gradeDistributionLast30Days.reduce((acc, g) => acc + g.count, 0);
+    const passedGraded = this.reviewStats.gradeDistributionLast30Days
+      .filter((g) => g.grade >= 3)
+      .reduce((acc, g) => acc + g.count, 0);
+
+    if (totalGraded > 0) {
+      const retentionRate = Math.round((passedGraded / totalGraded) * 100);
+      this.renderMetric(metrics, '30d Retention', `${retentionRate}%`, retentionRate >= 80 ? 'is-good' : '');
+    } else {
+      this.renderMetric(metrics, '30d Lapses', String(this.reviewStats.lapsesLast30Days));
+    }
   }
 
-  private renderMetric(container: HTMLElement, label: string, value: string): void {
-    const metric = container.createDiv({ cls: 'llm-automation-flashcard-hub-metric' });
+  private renderMetric(container: HTMLElement, label: string, value: string, modifier = ''): void {
+    const metric = container.createDiv({
+      cls: `llm-automation-flashcard-hub-metric${modifier ? ` ${modifier}` : ''}`,
+    });
     metric.createEl('div', { text: value, cls: 'llm-automation-flashcard-hub-metric-value' });
     metric.createEl('div', { text: label, cls: 'llm-automation-flashcard-hub-metric-label' });
   }
@@ -379,34 +458,158 @@ export class FlashcardHubView extends ItemView {
       return;
     }
 
-    const forecast = container.createDiv({ cls: 'llm-automation-flashcard-hub-forecast' });
-    forecast.createEl('span', {
-      text: 'Due forecast:',
-      cls: 'llm-automation-flashcard-hub-forecast-label',
+    const card = container.createDiv({ cls: 'llm-automation-flashcard-hub-forecast-card' });
+    const header = card.createDiv({ cls: 'llm-automation-flashcard-hub-forecast-header' });
+    header.createEl('span', { text: '7-Day Due Forecast', cls: 'llm-automation-flashcard-hub-forecast-title' });
+
+    const totalUpcoming = this.reviewStats.dueForecast.reduce((sum, d) => sum + d.dueCount, 0);
+    header.createEl('span', {
+      text: `${totalUpcoming} card${totalUpcoming === 1 ? '' : 's'} due next 7 days`,
+      cls: 'llm-automation-flashcard-hub-muted',
     });
-    forecast.createEl('span', {
-      text: this.reviewStats.dueForecast
-        .map((day) => `${this.formatShortDate(day.date)}: ${day.dueCount}`)
-        .join('  |  '),
+
+    const maxDue = Math.max(...this.reviewStats.dueForecast.map((d) => d.dueCount), 8);
+    const chart = card.createDiv({ cls: 'llm-automation-flashcard-hub-forecast-chart' });
+
+    this.reviewStats.dueForecast.forEach((day, index) => {
+      const col = chart.createDiv({
+        cls: `llm-automation-flashcard-hub-forecast-col${index === 0 ? ' is-today' : ''}`,
+      });
+      col.setAttribute('title', `${day.dueCount} card${day.dueCount === 1 ? '' : 's'} due on ${day.date}`);
+
+      col.createEl('span', {
+        text: String(day.dueCount),
+        cls: 'llm-automation-flashcard-hub-forecast-count',
+      });
+
+      const barTrack = col.createDiv({ cls: 'llm-automation-flashcard-hub-forecast-bar-track' });
+      const fillHeightPercent = Math.min(100, Math.max(day.dueCount > 0 ? 12 : 0, Math.round((day.dueCount / maxDue) * 100)));
+      const barFill = barTrack.createDiv({ cls: 'llm-automation-flashcard-hub-forecast-bar-fill' });
+      barFill.style.height = `${fillHeightPercent}%`;
+
+      col.createEl('span', {
+        text: index === 0 ? 'Today' : this.formatDayOfWeek(day.date),
+        cls: 'llm-automation-flashcard-hub-forecast-day',
+      });
+
+      col.createEl('span', {
+        text: this.formatShortDate(day.date),
+        cls: 'llm-automation-flashcard-hub-forecast-date',
+      });
     });
   }
 
   private renderDeckList(container: HTMLElement): void {
     const section = container.createDiv({ cls: 'llm-automation-flashcard-hub-decks' });
-    section.createEl('h2', { text: 'Decks' });
+
+    // Filter and sort deck stats in-memory
+    let filteredDecks = [...this.deckStats];
+
+    if (this.deckSearchQuery.trim()) {
+      const q = this.deckSearchQuery.trim().toLowerCase();
+      filteredDecks = filteredDecks.filter((d) =>
+        d.name.toLowerCase().includes(q) || (d.description && d.description.toLowerCase().includes(q))
+      );
+    }
+
+    if (this.deckFilterMode === 'due') {
+      filteredDecks = filteredDecks.filter((d) => d.dueCount > 0);
+    } else if (this.deckFilterMode === 'active') {
+      filteredDecks = filteredDecks.filter((d) => d.enabled);
+    }
+
+    if (this.deckSortOrder === 'due-desc') {
+      filteredDecks.sort((a, b) => b.dueCount - a.dueCount || b.totalCount - a.totalCount);
+    } else if (this.deckSortOrder === 'name-asc') {
+      filteredDecks.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (this.deckSortOrder === 'total-desc') {
+      filteredDecks.sort((a, b) => b.totalCount - a.totalCount);
+    }
+
+    const dueDeckCount = this.deckStats.filter((d) => d.dueCount > 0).length;
+
+    // Header toolbar
+    const toolbar = section.createDiv({ cls: 'llm-automation-flashcard-hub-decks-toolbar' });
+    const headerTitle = toolbar.createDiv({ cls: 'llm-automation-flashcard-hub-decks-heading' });
+    headerTitle.createEl('h2', { text: `Decks (${this.deckStats.length})` });
+
+    const controls = toolbar.createDiv({ cls: 'llm-automation-flashcard-hub-decks-controls' });
+
+    // Search input
+    const searchInput = controls.createEl('input', {
+      type: 'search',
+      cls: 'llm-automation-input llm-automation-flashcard-hub-deck-search',
+      attr: { placeholder: 'Filter decks (F)...' },
+    });
+    searchInput.value = this.deckSearchQuery;
+    searchInput.addEventListener('input', () => {
+      this.deckSearchQuery = searchInput.value;
+      this.render();
+    });
+
+    // Filter pills
+    const filterPills = controls.createDiv({ cls: 'llm-automation-flashcard-hub-filter-pills' });
+
+    const allPill = filterPills.createEl('button', {
+      text: `All (${this.deckStats.length})`,
+      cls: `llm-automation-btn llm-automation-btn-secondary llm-automation-pill${this.deckFilterMode === 'all' ? ' is-active' : ''}`,
+    });
+    allPill.addEventListener('click', () => {
+      this.deckFilterMode = 'all';
+      this.render();
+    });
+
+    const duePill = filterPills.createEl('button', {
+      text: `Due (${dueDeckCount})`,
+      cls: `llm-automation-btn llm-automation-btn-secondary llm-automation-pill${this.deckFilterMode === 'due' ? ' is-active' : ''}`,
+    });
+    duePill.addEventListener('click', () => {
+      this.deckFilterMode = 'due';
+      this.render();
+    });
+
+    // Sort select
+    const sortSelect = controls.createEl('select', { cls: 'dropdown' });
+    sortSelect.createEl('option', { text: 'Sort: Most Due', attr: { value: 'due-desc' } });
+    sortSelect.createEl('option', { text: 'Sort: Name (A-Z)', attr: { value: 'name-asc' } });
+    sortSelect.createEl('option', { text: 'Sort: Total Cards', attr: { value: 'total-desc' } });
+    sortSelect.value = this.deckSortOrder;
+    sortSelect.addEventListener('change', () => {
+      this.deckSortOrder = sortSelect.value as any;
+      this.render();
+    });
 
     if (this.deckStats.length === 0 && this.ungroupedTotal === 0) {
       section.createEl('p', {
-        text: 'No decks yet. Create one from the flashcard generation panel.',
+        text: 'No decks yet. Create one or generate cards from notes to get started.',
         cls: 'llm-automation-flashcard-hub-muted',
       });
       return;
     }
 
-    for (const deck of this.deckStats) {
-      this.renderDeckRow(section, {
+    if (filteredDecks.length === 0 && this.deckStats.length > 0) {
+      const emptySearch = section.createDiv({ cls: 'llm-automation-flashcard-hub-empty-search' });
+      emptySearch.createEl('p', {
+        text: `No decks match "${this.deckSearchQuery}".`,
+        cls: 'llm-automation-flashcard-hub-muted',
+      });
+      emptySearch.createEl('button', {
+        text: 'Clear Filter',
+        cls: 'llm-automation-btn llm-automation-btn-secondary',
+      }).addEventListener('click', () => {
+        this.deckSearchQuery = '';
+        this.deckFilterMode = 'all';
+        this.render();
+      });
+      return;
+    }
+
+    const deckGrid = section.createDiv({ cls: 'llm-automation-flashcard-hub-deck-grid' });
+    for (const deck of filteredDecks) {
+      this.renderDeckRow(deckGrid, {
         studySetId: deck.studySetId,
         title: deck.name,
+        description: deck.description,
         enabled: deck.enabled,
         dueCount: deck.dueCount,
         totalCount: deck.totalCount,
@@ -415,10 +618,11 @@ export class FlashcardHubView extends ItemView {
       });
     }
 
-    if (this.ungroupedTotal > 0) {
-      this.renderDeckRow(section, {
+    if (this.ungroupedTotal > 0 && this.deckFilterMode !== 'due' || (this.deckFilterMode === 'due' && this.ungroupedDue > 0)) {
+      this.renderDeckRow(deckGrid, {
         studySetId: null,
         title: 'Ungrouped Cards',
+        description: 'Cards not assigned to any specific deck',
         enabled: true,
         dueCount: this.ungroupedDue,
         totalCount: this.ungroupedTotal,
@@ -431,6 +635,7 @@ export class FlashcardHubView extends ItemView {
   private renderDeckRow(container: HTMLElement, row: {
     studySetId: string | null;
     title: string;
+    description?: string | null;
     enabled: boolean;
     dueCount: number;
     totalCount: number;
@@ -438,74 +643,181 @@ export class FlashcardHubView extends ItemView {
     archivedCount?: number;
   }): void {
     const card = container.createDiv({
-      cls: row.enabled
-        ? 'llm-automation-flashcard-hub-deck-row'
-        : 'llm-automation-flashcard-hub-deck-row llm-automation-flashcard-hub-deck-row-disabled',
+      cls: 'llm-automation-flashcard-hub-deck-card'
+        + (row.enabled ? '' : ' is-disabled')
+        + (row.dueCount > 0 ? ' has-due' : ''),
     });
 
-    const body = card.createDiv({ cls: 'llm-automation-flashcard-hub-deck-body' });
-    body.createEl('div', {
-      text: row.enabled ? row.title : `${row.title} (disabled)`,
+    // --- Header Row ---
+    const header = card.createDiv({ cls: 'llm-automation-flashcard-hub-deck-header' });
+    const titleGroup = header.createDiv({ cls: 'llm-automation-flashcard-hub-deck-title-group' });
+    titleGroup.createSpan({
+      text: row.studySetId ? '📚' : '🗃️',
+      cls: 'llm-automation-flashcard-hub-deck-icon',
+    });
+    titleGroup.createEl('span', {
+      text: row.title,
       cls: 'llm-automation-flashcard-hub-deck-title',
     });
+    if (!row.enabled) {
+      titleGroup.createSpan({ text: 'disabled', cls: 'llm-automation-badge llm-automation-badge-muted' });
+    }
 
-    const parts = [`${row.dueCount} due`, `${row.totalCount} total`];
-    if (row.suspendedCount !== undefined) {
+    const badges = header.createDiv({ cls: 'llm-automation-flashcard-hub-deck-badges' });
+    if (row.dueCount > 0) {
+      badges.createSpan({
+        text: `🔥 ${row.dueCount} due`,
+        cls: 'llm-automation-badge llm-automation-badge-due',
+      });
+    } else {
+      badges.createSpan({
+        text: '✓ 0 due',
+        cls: 'llm-automation-badge llm-automation-badge-done',
+      });
+    }
+
+    // Optional description
+    if (row.description) {
+      card.createDiv({
+        text: row.description,
+        cls: 'llm-automation-flashcard-hub-deck-desc',
+      });
+    }
+
+    // --- Progress Bar ---
+    const progressSection = card.createDiv({ cls: 'llm-automation-flashcard-hub-deck-progress-section' });
+    const progressBar = progressSection.createDiv({ cls: 'llm-automation-flashcard-hub-deck-progress-bar' });
+
+    const safeTotal = Math.max(row.totalCount, 1);
+    const scheduledCount = Math.max(0, row.totalCount - row.dueCount);
+    const learnedPercent = Math.round((scheduledCount / safeTotal) * 100);
+    const duePercent = Math.round((row.dueCount / safeTotal) * 100);
+
+    if (row.totalCount > 0) {
+      const learnedFill = progressBar.createDiv({ cls: 'progress-fill is-learned' });
+      learnedFill.style.width = `${learnedPercent}%`;
+      learnedFill.setAttribute('title', `${scheduledCount} up to date`);
+
+      const dueFill = progressBar.createDiv({ cls: 'progress-fill is-due' });
+      dueFill.style.width = `${duePercent}%`;
+      dueFill.setAttribute('title', `${row.dueCount} due`);
+    }
+
+    const countsRow = progressSection.createDiv({ cls: 'llm-automation-flashcard-hub-deck-counts' });
+    const parts = [
+      `${row.dueCount} due`,
+      `${scheduledCount} scheduled`,
+      `${row.totalCount} total`,
+    ];
+    if (row.suspendedCount !== undefined && row.suspendedCount > 0) {
       parts.push(`${row.suspendedCount} suspended`);
     }
-    if (row.archivedCount !== undefined) {
+    if (row.archivedCount !== undefined && row.archivedCount > 0) {
       parts.push(`${row.archivedCount} archived`);
     }
-    body.createEl('div', {
-      text: parts.join(' / '),
-      cls: 'llm-automation-flashcard-hub-deck-counts',
-    });
+    countsRow.createSpan({ text: parts.join(' • ') });
 
-    const actions = card.createDiv({ cls: 'llm-automation-flashcard-hub-deck-actions' });
+    // --- Action Footer ---
+    const footer = card.createDiv({ cls: 'llm-automation-flashcard-hub-deck-footer' });
+    const leftActions = footer.createDiv({ cls: 'llm-automation-flashcard-hub-deck-main-actions' });
 
-    if (row.studySetId) {
-      const manageButton = actions.createEl('button', {
-        text: 'Manage Deck',
-        cls: 'llm-automation-btn llm-automation-btn-secondary',
+    if (row.dueCount > 0 && row.enabled) {
+      const reviewBtn = leftActions.createEl('button', {
+        text: `Review (${row.dueCount})`,
+        cls: 'llm-automation-btn llm-automation-btn-primary',
       });
-      manageButton.disabled = false;
-      manageButton.addEventListener('click', () => this.openDeckManagePage(row.studySetId as string));
-
-      const deleteButton = actions.createEl('button', {
-        text: 'Delete',
-        cls: 'llm-automation-btn llm-automation-btn-danger',
-      });
-      const totalCards = row.totalCount + (row.suspendedCount ?? 0) + (row.archivedCount ?? 0);
-      deleteButton.addEventListener('click', () => {
-        void this.deleteDeck(row.studySetId as string, row.title, totalCards);
+      reviewBtn.addEventListener('click', () => {
+        void this.plugin.activateReviewView({
+          title: `Review: ${row.title}`,
+          includeNotDue: false,
+          studySetId: row.studySetId,
+        });
       });
     }
 
-    const reviewButton = actions.createEl('button', {
-      text: 'Review',
+    const cramBtn = leftActions.createEl('button', {
+      text: row.dueCount > 0 ? 'Cram' : 'Cram Deck',
       cls: 'llm-automation-btn llm-automation-btn-secondary',
     });
-    reviewButton.disabled = row.dueCount === 0 || !row.enabled;
-    reviewButton.addEventListener('click', () => {
-      void this.plugin.activateReviewView({
-        title: `Review: ${row.title}`,
-        includeNotDue: false,
-        studySetId: row.studySetId,
-      });
-    });
-
-    const cramButton = actions.createEl('button', {
-      text: 'Cram',
-      cls: 'llm-automation-btn llm-automation-btn-secondary',
-    });
-    cramButton.disabled = row.totalCount === 0 || !row.enabled;
-    cramButton.addEventListener('click', () => {
+    cramBtn.disabled = row.totalCount === 0 || !row.enabled;
+    cramBtn.addEventListener('click', () => {
       void this.plugin.activateReviewView({
         title: `Cram: ${row.title}`,
         includeNotDue: true,
         studySetId: row.studySetId,
       });
     });
+
+    if (row.studySetId) {
+      const manageBtn = leftActions.createEl('button', {
+        text: 'Manage Deck',
+        cls: 'llm-automation-btn llm-automation-btn-secondary',
+      });
+      manageBtn.addEventListener('click', () => this.openDeckManagePage(row.studySetId as string));
+    }
+
+    // Context / Overflow menu on the right
+    if (row.studySetId) {
+      const isMenuOpen = this.activeDeckMenuId === row.studySetId;
+      const menuWrapper = footer.createDiv({ cls: 'llm-automation-flashcard-hub-deck-menu-wrapper' });
+      const menuBtn = menuWrapper.createEl('button', {
+        text: '···',
+        cls: `llm-automation-btn llm-automation-btn-secondary llm-automation-flashcard-hub-menu-trigger${isMenuOpen ? ' is-active' : ''}`,
+        attr: { 'aria-label': 'Deck options' },
+      });
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.activeDeckMenuId = isMenuOpen ? null : row.studySetId;
+        this.render();
+      });
+
+      if (isMenuOpen) {
+        const menuDropdown = menuWrapper.createDiv({ cls: 'llm-automation-flashcard-hub-deck-dropdown' });
+
+        // Toggle Enabled
+        const toggleEnableBtn = menuDropdown.createEl('button', {
+          text: row.enabled ? 'Disable Deck' : 'Enable Deck',
+          cls: 'llm-automation-dropdown-item',
+        });
+        toggleEnableBtn.addEventListener('click', () => {
+          this.activeDeckMenuId = null;
+          void this.setDeckEnabled(row.studySetId as string, !row.enabled);
+        });
+
+        // Export MD
+        const exportMdBtn = menuDropdown.createEl('button', {
+          text: 'Export (Markdown)',
+          cls: 'llm-automation-dropdown-item',
+        });
+        exportMdBtn.disabled = row.totalCount === 0;
+        exportMdBtn.addEventListener('click', () => {
+          this.activeDeckMenuId = null;
+          void this.exportDeckCards(row.title, 'markdown');
+        });
+
+        // Export JSON
+        const exportJsonBtn = menuDropdown.createEl('button', {
+          text: 'Export (JSON)',
+          cls: 'llm-automation-dropdown-item',
+        });
+        exportJsonBtn.disabled = row.totalCount === 0;
+        exportJsonBtn.addEventListener('click', () => {
+          this.activeDeckMenuId = null;
+          void this.exportDeckCards(row.title, 'json');
+        });
+
+        // Delete Deck
+        const deleteBtn = menuDropdown.createEl('button', {
+          text: 'Delete Deck...',
+          cls: 'llm-automation-dropdown-item is-danger',
+        });
+        const totalCards = row.totalCount + (row.suspendedCount ?? 0) + (row.archivedCount ?? 0);
+        deleteBtn.addEventListener('click', () => {
+          this.activeDeckMenuId = null;
+          void this.deleteDeck(row.studySetId as string, row.title, totalCards);
+        });
+      }
+    }
   }
 
   // ------------------------------------------------------------------
@@ -528,6 +840,7 @@ export class FlashcardHubView extends ItemView {
     this.deckCards = [];
     this.selectedCardIds.clear();
     this.deckBulkMoveTargetId = '';
+    this.deckCardSearchQuery = '';
     void this.refresh();
   }
 
@@ -616,9 +929,23 @@ export class FlashcardHubView extends ItemView {
     });
     deleteButton.addEventListener('click', () => this.deleteDeck(deck.studySetId, deck.name, totalDeckCards));
 
-    // --- Deck card list (first 100) with bulk move-out ---
+    // --- Deck card list (first 100) with bulk move-out and search ---
     const listSection = section.createDiv({ cls: 'llm-automation-flashcard-hub-deck-cards' });
-    listSection.createEl('h3', { text: `Cards (${this.deckCards.length}${this.deckCards.length >= 100 ? '+' : ''})` });
+    const listHeader = listSection.createDiv({ cls: 'llm-automation-flashcard-hub-deck-cards-header' });
+    listHeader.createEl('h3', { text: `Cards (${this.deckCards.length}${this.deckCards.length >= 100 ? '+' : ''})` });
+
+    if (this.deckCards.length > 0) {
+      const cardSearch = listHeader.createEl('input', {
+        type: 'search',
+        cls: 'llm-automation-input llm-automation-flashcard-hub-card-search',
+        attr: { placeholder: 'Search cards in deck...' },
+      });
+      cardSearch.value = this.deckCardSearchQuery;
+      cardSearch.addEventListener('input', () => {
+        this.deckCardSearchQuery = cardSearch.value;
+        this.render();
+      });
+    }
 
     if (this.loading) {
       listSection.createEl('p', { text: 'Loading...', cls: 'llm-automation-flashcard-hub-muted' });
@@ -633,9 +960,26 @@ export class FlashcardHubView extends ItemView {
       return;
     }
 
+    const q = this.deckCardSearchQuery.trim().toLowerCase();
+    const visibleCards = q
+      ? this.deckCards.filter((c) =>
+          (c.questionText && c.questionText.toLowerCase().includes(q)) ||
+          (c.questionName && c.questionName.toLowerCase().includes(q)) ||
+          (c.answerText && c.answerText.toLowerCase().includes(q))
+        )
+      : this.deckCards;
+
+    if (visibleCards.length === 0 && this.deckCards.length > 0) {
+      listSection.createEl('p', {
+        text: `No cards match "${this.deckCardSearchQuery}".`,
+        cls: 'llm-automation-flashcard-hub-muted',
+      });
+      return;
+    }
+
     this.renderDeckCardBulkBar(listSection, deck);
 
-    for (const cardRecord of this.deckCards) {
+    for (const cardRecord of visibleCards) {
       const row = listSection.createDiv({
         cls: 'llm-automation-flashcard-hub-deck-card-row'
           + (this.selectedCardIds.has(cardRecord.id) ? ' llm-automation-flashcard-hub-deck-card-row-selected' : ''),
@@ -656,10 +1000,19 @@ export class FlashcardHubView extends ItemView {
         row.toggleClass('llm-automation-flashcard-hub-deck-card-row-selected', select.checked);
       });
 
-      row.createEl('div', {
+      const cardBody = row.createDiv({ cls: 'llm-automation-flashcard-hub-deck-card-content' });
+      cardBody.createEl('div', {
         text: cardRecord.questionName || cardRecord.questionText,
         cls: 'llm-automation-flashcard-hub-deck-card-title',
       });
+      if (cardRecord.answerText) {
+        const cleanAnswer = cardRecord.answerText.replace(/\s+/g, ' ').trim();
+        cardBody.createEl('div', {
+          text: `A: ${cleanAnswer.length > 90 ? cleanAnswer.slice(0, 90) + '...' : cleanAnswer}`,
+          cls: 'llm-automation-flashcard-hub-deck-card-answer-snippet',
+        });
+      }
+
       row.createEl('div', {
         text: [
           cardRecord.questionType,
@@ -943,6 +1296,19 @@ export class FlashcardHubView extends ItemView {
       return;
     }
 
+    if (key === 'n') {
+      event.preventDefault();
+      this.openNewDeckForm();
+      return;
+    }
+
+    if (key === 'f') {
+      event.preventDefault();
+      const searchEl = this.contentEl.querySelector<HTMLInputElement>('.llm-automation-flashcard-hub-deck-search');
+      searchEl?.focus();
+      return;
+    }
+
     if (key === 'd') {
       event.preventDefault();
       const firstDeck = this.deckStats.find((deck) => deck.enabled) ?? this.deckStats[0];
@@ -982,6 +1348,14 @@ export class FlashcardHubView extends ItemView {
   // ------------------------------------------------------------------
   // Formatting helpers
   // ------------------------------------------------------------------
+
+  private formatDayOfWeek(dateStr: string): string {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return 'Today';
+    return d.toLocaleDateString(undefined, { weekday: 'short' });
+  }
 
   private formatShortDate(value: string): string {
     const date = new Date(`${value}T00:00:00`);
