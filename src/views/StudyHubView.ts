@@ -35,6 +35,7 @@ const STUDY_SHORTCUTS: Array<{ keys: string; label: string }> = [
   { keys: 'P', label: 'Study Path' },
   { keys: 'T', label: 'Note Chat' },
   { keys: 'S', label: 'Settings' },
+  { keys: 'Esc', label: 'Toggle Focus' },
 ];
 
 /**
@@ -113,6 +114,7 @@ export class StudyHubView extends ItemView {
   async onClose(): Promise<void> {
     window.removeEventListener('keydown', this.keyHandler);
     this.contentEl.empty();
+    this.plugin.handleStudyHubClosed();
   }
 
   private handleKey(event: KeyboardEvent): void {
@@ -122,6 +124,12 @@ export class StudyHubView extends ItemView {
     }
 
     if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    if (event.key === 'Escape' && this.plugin.isStudyFocusActive()) {
+      event.preventDefault();
+      void this.plugin.toggleStudyFocus();
       return;
     }
 
@@ -293,7 +301,7 @@ export class StudyHubView extends ItemView {
     return items;
   }
 
-  private render(): void {
+  public render(): void {
     const container = this.contentEl;
     container.empty();
 
@@ -319,12 +327,13 @@ export class StudyHubView extends ItemView {
 
     const actions = topbar.createDiv({ cls: 'llm-automation-study-hub-topbar-actions' });
 
+    const isFocused = this.plugin.isStudyFocusActive();
     const focusButton = actions.createEl('button', {
-      text: 'Focus Mode',
-      cls: 'llm-automation-btn llm-automation-btn-secondary',
+      text: isFocused ? 'Exit Focus (Esc)' : 'Focus Mode',
+      cls: `llm-automation-btn llm-automation-btn-secondary${isFocused ? ' is-active' : ''}`,
     });
     focusButton.addEventListener('click', () => {
-      void this.plugin.toggleFlashcardUi();
+      void this.plugin.toggleStudyFocus();
     });
 
     const refreshButton = actions.createEl('button', {

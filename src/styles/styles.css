@@ -1767,18 +1767,22 @@ kbd {
    owns the entire window. Calling the command again restores the default UI.
    ========================================================================== */
 
-body.llm-automation-flashcard-ui-active .workspace-ribbon.mod-left {
+body.llm-automation-flashcard-ui-active .workspace-ribbon.mod-left,
+body.llm-automation-study-focus-active .workspace-ribbon.mod-left {
     display: none;
 }
 
 body.llm-automation-flashcard-ui-active .workspace-split.mod-left-split,
-body.llm-automation-flashcard-ui-active .workspace-split.mod-right-split {
+body.llm-automation-flashcard-ui-active .workspace-split.mod-right-split,
+body.llm-automation-study-focus-active .workspace-split.mod-left-split,
+body.llm-automation-study-focus-active .workspace-split.mod-right-split {
     display: none;
 }
 
-/* Tab bar stays visible in flashcard mode for tab switching. */
+/* Tab bar stays visible in focus mode for tab switching. */
 
-body.llm-automation-flashcard-ui-active .status-bar {
+body.llm-automation-flashcard-ui-active .status-bar,
+body.llm-automation-study-focus-active .status-bar {
     display: none;
 }
 

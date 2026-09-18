@@ -52,6 +52,8 @@ import './styles/styles.css';
 
 /** Body class applied while the Mnemosyne-style flashcard UI is active. */
 const FLASHCARD_UI_BODY_CLASS = 'llm-automation-flashcard-ui-active';
+/** Body class applied while Study Hub focus mode is active. */
+const STUDY_FOCUS_BODY_CLASS = 'llm-automation-study-focus-active';
 
 export default class GptFreeTextGeneratorPlugin extends Plugin {
   settings!: PluginSettings;
@@ -359,6 +361,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       id: 'open-quiz-hub',
       name: 'Open Quiz Hub',
       callback: () => this.activateQuizHub(),
+    });
+
+    this.addCommand({
+      id: 'toggle-study-focus',
+      name: 'Toggle Study Hub Focus Mode',
+      callback: () => this.toggleStudyFocus(),
     });
 
     this.addCommand({
@@ -1171,6 +1179,69 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     await this.toggleFlashcardUi();
   }
 
+  /**
+   * Switches the entire Obsidian window into a distraction-free Study Hub focus mode
+   * (hiding ribbon, sidebars, and status bar).
+   */
+  async toggleStudyFocus(): Promise<void> {
+    const body = document.body;
+    if (body.classList.contains(STUDY_FOCUS_BODY_CLASS)) {
+      this.exitStudyFocus();
+      return;
+    }
+
+    try {
+      body.classList.add(STUDY_FOCUS_BODY_CLASS);
+
+      const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_STUDY_HUB);
+      if (existing.length > 0) {
+        this.app.workspace.revealLeaf(existing[0]);
+        if (existing[0].view instanceof StudyHubView) {
+          existing[0].view.render();
+        }
+        return;
+      }
+
+      const leaf = this.app.workspace.getLeaf('tab');
+      await leaf.setViewState({
+        type: VIEW_TYPE_STUDY_HUB,
+        active: true,
+      });
+      this.app.workspace.revealLeaf(leaf);
+    } catch (error: unknown) {
+      body.classList.remove(STUDY_FOCUS_BODY_CLASS);
+      ErrorHandler.handleError(error, "VIEW_ACTIVATION_ERROR", {
+        operation: "toggle-study-focus",
+        viewType: VIEW_TYPE_STUDY_HUB,
+      });
+      new Notice('Failed to open study focus mode');
+    }
+  }
+
+  exitStudyFocus(): void {
+    document.body.classList.remove(STUDY_FOCUS_BODY_CLASS);
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_STUDY_HUB)) {
+      if (leaf.view instanceof StudyHubView) {
+        leaf.view.render();
+      }
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QUIZ_HUB)) {
+      if (leaf.view instanceof QuizHubView) {
+        leaf.view.render();
+      }
+    }
+  }
+
+  isStudyFocusActive(): boolean {
+    return document.body.classList.contains(STUDY_FOCUS_BODY_CLASS);
+  }
+
+  handleStudyHubClosed(): void {
+    if (this.isStudyFocusActive()) {
+      this.exitStudyFocus();
+    }
+  }
+
   /** Opens or reveals the central Study Hub. */
   async activateStudyHub(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_STUDY_HUB);
@@ -1435,6 +1506,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CODING_EXERCISES);
 
     document.body.classList.remove(FLASHCARD_UI_BODY_CLASS);
+    document.body.classList.remove(STUDY_FOCUS_BODY_CLASS);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services

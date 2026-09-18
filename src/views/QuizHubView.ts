@@ -26,6 +26,8 @@ export class QuizHubView extends ItemView {
   private answerRevealed = false;
   private quizCompleted = false;
 
+  private keyHandler = (event: KeyboardEvent) => this.handleKey(event);
+
   constructor(leaf: WorkspaceLeaf, plugin: GptFreeTextGeneratorPlugin) {
     super(leaf);
     this.plugin = plugin;
@@ -45,11 +47,30 @@ export class QuizHubView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.contentEl.addClass('llm-automation-quiz-hub-view');
+    window.addEventListener('keydown', this.keyHandler);
     await this.refresh();
   }
 
   async onClose(): Promise<void> {
+    window.removeEventListener('keydown', this.keyHandler);
     this.contentEl.empty();
+  }
+
+  private handleKey(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    if (event.key === 'Escape' && this.plugin.isStudyFocusActive()) {
+      event.preventDefault();
+      this.plugin.exitStudyFocus();
+      return;
+    }
   }
 
   async refresh(): Promise<void> {
@@ -88,7 +109,7 @@ export class QuizHubView extends ItemView {
   // Render Main Hub vs. Runner
   // ------------------------------------------------------------------
 
-  private render(): void {
+  public render(): void {
     const container = this.contentEl;
     container.empty();
 
@@ -119,6 +140,16 @@ export class QuizHubView extends ItemView {
     leftArea.createEl('h1', { text: 'Quiz Hub' });
 
     const rightActions = topbar.createDiv({ cls: 'llm-automation-quiz-hub-topbar-actions' });
+
+    if (this.plugin.isStudyFocusActive()) {
+      const exitFocusBtn = rightActions.createEl('button', {
+        text: 'Exit Focus (Esc)',
+        cls: 'llm-automation-btn llm-automation-btn-secondary is-active',
+      });
+      exitFocusBtn.addEventListener('click', () => {
+        this.plugin.exitStudyFocus();
+      });
+    }
 
     const newQuizBtn = rightActions.createEl('button', {
       text: 'New Quiz',
@@ -252,6 +283,17 @@ export class QuizHubView extends ItemView {
     backBtn.addEventListener('click', () => this.exitQuizRunner());
 
     header.createEl('h2', { text: quiz.title });
+
+    if (this.plugin.isStudyFocusActive()) {
+      const exitFocusBtn = header.createEl('button', {
+        text: 'Exit Focus (Esc)',
+        cls: 'llm-automation-btn llm-automation-btn-secondary is-active',
+      });
+      exitFocusBtn.style.marginLeft = 'auto';
+      exitFocusBtn.addEventListener('click', () => {
+        this.plugin.exitStudyFocus();
+      });
+    }
 
     if (this.quizCompleted) {
       this.renderQuizResults(runnerEl);

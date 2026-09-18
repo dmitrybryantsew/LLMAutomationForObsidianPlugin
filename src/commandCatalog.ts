@@ -197,6 +197,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the Quiz Hub for browsing, taking, and generating interactive quizzes.',
   },
   {
+    id: 'toggle-study-focus',
+    name: 'Toggle Study Hub Focus Mode',
+    group: 'Learning',
+    description: 'Switches the Obsidian window into a distraction-free Study Hub mode (hides sidebars, ribbon, and status bar). Run again to restore the default UI.',
+  },
+  {
     id: 'generate-quiz',
     name: 'Generate Quiz from Context',
     group: 'Learning',
