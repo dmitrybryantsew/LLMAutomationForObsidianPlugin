@@ -282,12 +282,17 @@ export class SpacedRepetitionDatabase {
         ]
       );
 
+      const intervalDays = question.initialSchedule?.intervalDays ?? 0;
+      const ease = question.initialSchedule?.ease ?? 2.5;
+      const repetitionCount = question.initialSchedule?.repetitionCount ?? 0;
+      const lapseCount = question.initialSchedule?.lapseCount ?? 0;
+
       db.run(
         `
         INSERT INTO schedules (question_id, algorithm, interval_days, ease, repetition_count, lapse_count)
-        VALUES (?, 'mnemosyne_like_v1', 0, 2.5, 0, 0)
+        VALUES (?, 'mnemosyne_like_v1', ?, ?, ?, ?)
         `,
-        [id]
+        [id, intervalDays, ease, repetitionCount, lapseCount]
       );
     }
 

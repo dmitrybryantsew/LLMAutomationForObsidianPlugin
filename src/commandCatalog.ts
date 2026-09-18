@@ -227,6 +227,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Scans the legacy flashcard folder and imports previously generated Markdown cards into the spaced-repetition database.',
   },
   {
+    id: 'import-obsidian-spaced-repetition',
+    name: 'Import Cards from Spaced Repetition Plugin',
+    group: 'Learning',
+    description: 'Scans markdown notes for cards from the obsidian-spaced-repetition plugin (#CSharpFlashcards, #German, etc.) and imports them in customizable batches with scheduling preserved.',
+  },
+  {
     id: 'open-coding-exercises',
     name: 'Open Coding Exercises',
     group: 'Learning',

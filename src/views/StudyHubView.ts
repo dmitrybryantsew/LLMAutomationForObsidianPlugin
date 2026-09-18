@@ -458,6 +458,11 @@ export class StudyHubView extends ItemView {
           enabled: true,
           handler: () => this.openManualQuestionModal(),
         },
+        {
+          label: 'Import OSR Cards',
+          enabled: true,
+          handler: () => this.plugin.openImportObsidianSpacedRepetitionModal(),
+        },
       ],
     });
 

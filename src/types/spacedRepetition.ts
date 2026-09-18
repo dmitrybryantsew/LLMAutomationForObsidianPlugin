@@ -109,6 +109,12 @@ export interface SpacedRepetitionQuestionInput {
   sectionLabel?: string | null;
   paragraphIndex?: number | null;
   paragraphPage?: number | null;
+  initialSchedule?: {
+    intervalDays?: number;
+    ease?: number;
+    repetitionCount?: number;
+    lapseCount?: number;
+  };
 }
 
 export interface NoteChatRecord {

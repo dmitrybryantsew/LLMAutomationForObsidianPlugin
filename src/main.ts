@@ -47,6 +47,7 @@ import { SpacedRepetitionGenerateQuestionsModal } from './modals/SpacedRepetitio
 import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChatModal';
 import { SearchKnowledgeModal } from './modals/SearchKnowledgeModal';
 import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
+import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpacedRepetitionModal';
 
 import './styles/styles.css';
 
@@ -806,6 +807,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'import-obsidian-spaced-repetition',
+      name: 'Import Cards from Spaced Repetition Plugin',
+      callback: () => this.openImportObsidianSpacedRepetitionModal(),
+    });
+
+    this.addCommand({
       id: 'open-coding-exercises',
       name: 'Open Coding Exercises',
       callback: () => this.activateView(VIEW_TYPE_CODING_EXERCISES),
@@ -1178,6 +1185,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   /** Opens the "Flashcards from Book" (external PDF) modal. */
   openFlashcardsFromBookModal(): void {
     new FlashcardsFromBookModal(this.app, this).open();
+  }
+
+  /** Opens the "Import Cards from Spaced Repetition Plugin" modal. */
+  openImportObsidianSpacedRepetitionModal(): void {
+    new ImportObsidianSpacedRepetitionModal(this.app, this).open();
   }
 
   /** Returns to the flashcard hub tab (used by views in focus mode). */
