@@ -31,6 +31,9 @@ export class CodingExerciseView extends ItemView {
   private loadCatalogButton: HTMLButtonElement | null = null;
   private importButton: HTMLButtonElement | null = null;
 
+  private controlsCollapsed = false;
+  private keyHandler = (event: KeyboardEvent) => this.handleKey(event);
+
   constructor(leaf: WorkspaceLeaf, plugin: GptFreeTextGeneratorPlugin) {
     super(leaf);
     this.plugin = plugin;
@@ -45,30 +48,78 @@ export class CodingExerciseView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    window.addEventListener('keydown', this.keyHandler);
     this.render();
   }
 
   async onClose(): Promise<void> {
-    return;
+    window.removeEventListener('keydown', this.keyHandler);
+    this.contentEl.empty();
+    this.plugin.handleCodingViewClosed();
   }
 
-  private render(): void {
+  private handleKey(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+
+    if (event.key === 'Escape') {
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        target.blur();
+        return;
+      }
+      if (this.plugin.isCodingFocusActive() || this.plugin.isStudyFocusActive()) {
+        event.preventDefault();
+        this.plugin.exitCodingFocus();
+        return;
+      }
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void this.runSolution();
+      return;
+    }
+  }
+
+  public render(): void {
     this.contentEl.empty();
     this.contentEl.addClass('coding-exercise-view');
 
     const header = this.contentEl.createDiv({ cls: 'coding-exercise-header' });
     const headerTitle = header.createDiv({ cls: 'coding-exercise-header-title-row' });
     headerTitle.createEl('h2', { text: 'Coding Exercises' });
-    headerTitle.createEl('button', {
+
+    const headerActions = headerTitle.createDiv({ cls: 'coding-exercise-header-actions' });
+    headerActions.createEl('button', {
       text: '← Study Hub',
       cls: 'llm-automation-btn llm-automation-btn-secondary',
     }).addEventListener('click', () => {
       void this.plugin.activateStudyHub();
     });
+
+    const isFocused = this.plugin.isCodingFocusActive() || this.plugin.isStudyFocusActive();
+    const focusButton = headerActions.createEl('button', {
+      text: isFocused ? 'Exit Focus (Esc)' : 'Focus Mode',
+      cls: `llm-automation-btn llm-automation-btn-secondary${isFocused ? ' is-active' : ''}`,
+    });
+    focusButton.addEventListener('click', () => {
+      void this.plugin.toggleCodingFocus();
+    });
+
+    const toggleControlsBtn = headerActions.createEl('button', {
+      text: this.controlsCollapsed ? 'Show Options' : 'Hide Options',
+      cls: 'llm-automation-btn llm-automation-btn-secondary',
+    });
+    toggleControlsBtn.addEventListener('click', () => {
+      this.controlsCollapsed = !this.controlsCollapsed;
+      this.render();
+    });
+
     const status = header.createDiv({ cls: 'coding-exercise-status' });
     status.setText(`${this.plugin.settings.codingExerciseProvider} · ${this.plugin.settings.codingExerciseModel} · ${this.plugin.settings.allowLocalCodeExecution ? 'local run enabled' : 'local run disabled'}`);
 
-    this.renderControls(this.contentEl);
+    if (!this.controlsCollapsed) {
+      this.renderControls(this.contentEl);
+    }
 
     const body = this.contentEl.createDiv({ cls: 'coding-exercise-body' });
     this.taskContainer = body.createDiv({ cls: 'coding-exercise-task' });

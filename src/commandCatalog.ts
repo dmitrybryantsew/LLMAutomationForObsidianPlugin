@@ -233,6 +233,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Opens the coding exercise side panel for AI-generated C# LINQPad exercises with local compile/run feedback.',
   },
   {
+    id: 'toggle-coding-focus',
+    name: 'Toggle Coding Practice Focus Mode',
+    group: 'Learning',
+    description: 'Switches the Obsidian window into a distraction-free Coding Practice mode (hides sidebars, ribbon, and status bar). Run again to restore the default UI.',
+  },
+  {
     id: 'scan-study-source-library',
     name: 'Scan Study Source Library',
     group: 'Learning',

@@ -1368,6 +1368,25 @@ kbd {
     overflow: hidden;
 }
 
+@media (min-width: 860px) {
+    .coding-exercise-body {
+        grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.3fr);
+        grid-template-rows: 1fr minmax(180px, 0.65fr);
+    }
+    .coding-exercise-task {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+    }
+    .coding-exercise-editor-section {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .coding-exercise-output {
+        grid-column: 2;
+        grid-row: 2;
+    }
+}
+
 .coding-exercise-task,
 .coding-exercise-editor-section,
 .coding-exercise-output {
@@ -1768,21 +1787,25 @@ kbd {
    ========================================================================== */
 
 body.llm-automation-flashcard-ui-active .workspace-ribbon.mod-left,
-body.llm-automation-study-focus-active .workspace-ribbon.mod-left {
+body.llm-automation-study-focus-active .workspace-ribbon.mod-left,
+body.llm-automation-coding-focus-active .workspace-ribbon.mod-left {
     display: none;
 }
 
 body.llm-automation-flashcard-ui-active .workspace-split.mod-left-split,
 body.llm-automation-flashcard-ui-active .workspace-split.mod-right-split,
 body.llm-automation-study-focus-active .workspace-split.mod-left-split,
-body.llm-automation-study-focus-active .workspace-split.mod-right-split {
+body.llm-automation-study-focus-active .workspace-split.mod-right-split,
+body.llm-automation-coding-focus-active .workspace-split.mod-left-split,
+body.llm-automation-coding-focus-active .workspace-split.mod-right-split {
     display: none;
 }
 
 /* Tab bar stays visible in focus mode for tab switching. */
 
 body.llm-automation-flashcard-ui-active .status-bar,
-body.llm-automation-study-focus-active .status-bar {
+body.llm-automation-study-focus-active .status-bar,
+body.llm-automation-coding-focus-active .status-bar {
     display: none;
 }
 
@@ -2582,6 +2605,13 @@ body.llm-automation-flashcard-ui-active .spaced-repetition-empty-state {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
+    gap: 12px;
+}
+
+.coding-exercise-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 /* ==================================================================

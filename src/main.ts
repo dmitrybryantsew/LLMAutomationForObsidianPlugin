@@ -54,6 +54,8 @@ import './styles/styles.css';
 const FLASHCARD_UI_BODY_CLASS = 'llm-automation-flashcard-ui-active';
 /** Body class applied while Study Hub focus mode is active. */
 const STUDY_FOCUS_BODY_CLASS = 'llm-automation-study-focus-active';
+/** Body class applied while Coding Practice focus mode is active. */
+const CODING_FOCUS_BODY_CLASS = 'llm-automation-coding-focus-active';
 
 export default class GptFreeTextGeneratorPlugin extends Plugin {
   settings!: PluginSettings;
@@ -367,6 +369,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       id: 'toggle-study-focus',
       name: 'Toggle Study Hub Focus Mode',
       callback: () => this.toggleStudyFocus(),
+    });
+
+    this.addCommand({
+      id: 'toggle-coding-focus',
+      name: 'Toggle Coding Practice Focus Mode',
+      callback: () => this.toggleCodingFocus(),
     });
 
     this.addCommand({
@@ -1056,9 +1064,13 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         return;
       }
 
-      // While the flashcard UI is active, sidebars are hidden; open views as
+      // While a focus mode is active, sidebars are hidden; open views as
       // main-area tabs instead of the right sidebar.
-      if (document.body.classList.contains(FLASHCARD_UI_BODY_CLASS)) {
+      if (
+        document.body.classList.contains(FLASHCARD_UI_BODY_CLASS) ||
+        document.body.classList.contains(STUDY_FOCUS_BODY_CLASS) ||
+        document.body.classList.contains(CODING_FOCUS_BODY_CLASS)
+      ) {
         const leaf = this.app.workspace.getLeaf('tab');
         await leaf.setViewState({
           type: viewType,
@@ -1230,6 +1242,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         leaf.view.render();
       }
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CODING_EXERCISES)) {
+      if (leaf.view instanceof CodingExerciseView) {
+        leaf.view.render();
+      }
+    }
   }
 
   isStudyFocusActive(): boolean {
@@ -1239,6 +1256,75 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   handleStudyHubClosed(): void {
     if (this.isStudyFocusActive()) {
       this.exitStudyFocus();
+    }
+  }
+
+  /**
+   * Switches the entire Obsidian window into a distraction-free Coding Practice focus mode
+   * (hiding ribbon, sidebars, and status bar).
+   */
+  async toggleCodingFocus(): Promise<void> {
+    const body = document.body;
+    if (body.classList.contains(CODING_FOCUS_BODY_CLASS)) {
+      this.exitCodingFocus();
+      return;
+    }
+
+    try {
+      body.classList.add(CODING_FOCUS_BODY_CLASS);
+
+      const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CODING_EXERCISES);
+      if (existing.length > 0) {
+        this.app.workspace.revealLeaf(existing[0]);
+        if (existing[0].view instanceof CodingExerciseView) {
+          existing[0].view.render();
+        }
+        return;
+      }
+
+      const leaf = this.app.workspace.getLeaf('tab');
+      await leaf.setViewState({
+        type: VIEW_TYPE_CODING_EXERCISES,
+        active: true,
+      });
+      this.app.workspace.revealLeaf(leaf);
+    } catch (error: unknown) {
+      body.classList.remove(CODING_FOCUS_BODY_CLASS);
+      ErrorHandler.handleError(error, "VIEW_ACTIVATION_ERROR", {
+        operation: "toggle-coding-focus",
+        viewType: VIEW_TYPE_CODING_EXERCISES,
+      });
+      new Notice('Failed to open coding focus mode');
+    }
+  }
+
+  exitCodingFocus(): void {
+    document.body.classList.remove(CODING_FOCUS_BODY_CLASS);
+    document.body.classList.remove(STUDY_FOCUS_BODY_CLASS);
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CODING_EXERCISES)) {
+      if (leaf.view instanceof CodingExerciseView) {
+        leaf.view.render();
+      }
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_STUDY_HUB)) {
+      if (leaf.view instanceof StudyHubView) {
+        leaf.view.render();
+      }
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QUIZ_HUB)) {
+      if (leaf.view instanceof QuizHubView) {
+        leaf.view.render();
+      }
+    }
+  }
+
+  isCodingFocusActive(): boolean {
+    return document.body.classList.contains(CODING_FOCUS_BODY_CLASS);
+  }
+
+  handleCodingViewClosed(): void {
+    if (this.isCodingFocusActive()) {
+      this.exitCodingFocus();
     }
   }
 
@@ -1507,6 +1593,7 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
 
     document.body.classList.remove(FLASHCARD_UI_BODY_CLASS);
     document.body.classList.remove(STUDY_FOCUS_BODY_CLASS);
+    document.body.classList.remove(CODING_FOCUS_BODY_CLASS);
 
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services
