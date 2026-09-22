@@ -14,6 +14,7 @@ export interface SpacedRepetitionSettings {
   gradeZeroReaskDelay: number;
   sameDayReviewDelayMinutes: number;
   includeLinkedNotesByDefault: boolean;
+  randomizeCardOrder: boolean;
 }
 
 export interface ReviewScheduleState {

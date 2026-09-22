@@ -4,6 +4,7 @@ import { VIEW_TYPE_SPACED_REPETITION_REVIEW } from '../constants';
 import { DueQuestionRecord } from '../utils/spacedRepetition/SpacedRepetitionDatabase';
 import { AnswerCheckerResult, ExactAnswerField, ReviewGrade } from '../types/spacedRepetition';
 import { matchesExactAnswerField, normalizeExactAnswer, normalizeExactAnswerField } from '../utils/spacedRepetition/ExactAnswerMatcher';
+import { shuffleReviewCards } from '../utils/spacedRepetition/SpacedRepetitionScheduler';
 
 export interface SpacedRepetitionReviewMode {
   title: string;
@@ -55,13 +56,16 @@ export class SpacedRepetitionReviewView extends ItemView {
 
   private async loadDueCards(): Promise<void> {
     const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
-    this.dueCards = database.getReviewQuestions({
+    const randomize = this.plugin.settings.spacedRepetition.randomizeCardOrder ?? true;
+    const cards = database.getReviewQuestions({
       now: new Date(),
       limit: this.plugin.settings.spacedRepetition.maxReviewCardsPerSession,
       includeNotDue: this.reviewMode.includeNotDue,
       noteId: this.reviewMode.noteId,
       studySetId: this.reviewMode.studySetId,
+      randomize,
     });
+    this.dueCards = randomize ? shuffleReviewCards(cards) : cards;
   }
 
   async setReviewMode(mode: SpacedRepetitionReviewMode): Promise<void> {
@@ -105,6 +109,17 @@ export class SpacedRepetitionReviewView extends ItemView {
         attr: { 'aria-label': 'Return to the flashcard hub' },
       }).addEventListener('click', () => {
         void this.plugin.returnToFlashcardHub();
+      });
+    }
+
+    if (this.dueCards.length > 1) {
+      header.createEl('button', {
+        text: 'Shuffle',
+        cls: 'llm-automation-btn llm-automation-btn-secondary spaced-repetition-shuffle-btn',
+        attr: { 'aria-label': 'Shuffle remaining cards in queue' },
+      }).addEventListener('click', () => {
+        this.dueCards = shuffleReviewCards(this.dueCards);
+        new Notice('Remaining cards shuffled');
       });
     }
 

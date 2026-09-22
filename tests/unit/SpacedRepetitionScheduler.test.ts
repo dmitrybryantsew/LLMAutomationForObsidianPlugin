@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SpacedRepetitionScheduler } from '../../src/utils/spacedRepetition/SpacedRepetitionScheduler';
+import { SpacedRepetitionScheduler, shuffleReviewCards } from '../../src/utils/spacedRepetition/SpacedRepetitionScheduler';
 
 describe('SpacedRepetitionScheduler', () => {
   const now = new Date('2026-06-03T08:00:00.000Z');
@@ -67,5 +67,37 @@ describe('SpacedRepetitionScheduler', () => {
     }
 
     expect(state.schedule.ease).toBe(1.3);
+  });
+
+  it('shuffles review cards while prioritizing shouldReask cards at the start', () => {
+    const cards = [
+      { id: '1', questionText: 'Card 1', shouldReask: false },
+      { id: '2', questionText: 'Card 2', shouldReask: true },
+      { id: '3', questionText: 'Card 3', shouldReask: false },
+      { id: '4', questionText: 'Card 4', shouldReask: false },
+      { id: '5', questionText: 'Card 5', shouldReask: true },
+    ];
+
+    const sequence = [0.99, 0.0, 0.5];
+    let idx = 0;
+    const mockRng = () => sequence[idx++ % sequence.length];
+
+    const shuffled = shuffleReviewCards(cards, mockRng);
+
+    // Both shouldReask cards must be at the very front
+    expect(shuffled.slice(0, 2).map((c) => c.shouldReask)).toEqual([true, true]);
+    expect(shuffled.slice(0, 2).map((c) => c.id)).toEqual(['2', '5']);
+
+    // Regular cards are present and shuffled
+    expect(shuffled.slice(2).map((c) => c.shouldReask)).toEqual([false, false, false]);
+    expect(shuffled).toHaveLength(5);
+    expect(new Set(shuffled.map((c) => c.id))).toEqual(new Set(['1', '2', '3', '4', '5']));
+  });
+
+  it('handles empty cards array or all-reask cards gracefully', () => {
+    expect(shuffleReviewCards([])).toEqual([]);
+
+    const allReask = [{ id: '1', shouldReask: true }, { id: '2', shouldReask: true }];
+    expect(shuffleReviewCards(allReask).map((c) => c.id)).toEqual(['1', '2']);
   });
 });

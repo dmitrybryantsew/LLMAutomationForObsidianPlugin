@@ -155,3 +155,17 @@ export class SpacedRepetitionScheduler {
     return new Date(date.getTime() + Math.floor(minutes) * 60 * 1000);
   }
 }
+
+export function shuffleReviewCards<T extends { shouldReask?: boolean }>(cards: T[], rng: () => number = Math.random): T[] {
+  const reaskCards = cards.filter((card) => Boolean(card.shouldReask));
+  const regularCards = [...cards.filter((card) => !card.shouldReask)];
+
+  for (let i = regularCards.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const temp = regularCards[i];
+    regularCards[i] = regularCards[j];
+    regularCards[j] = temp;
+  }
+
+  return [...reaskCards, ...regularCards];
+}

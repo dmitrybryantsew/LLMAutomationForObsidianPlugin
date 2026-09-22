@@ -15,6 +15,10 @@ import {
   import { LLMClientFactory } from '../utils/LLMClientFactory';
   import { LLMProvider, TextProviderId, TEXT_PROVIDER_LABELS } from '../types/providers';
   import { SearchKnowledgeModal } from '../modals/SearchKnowledgeModal';
+  import { ProjectLauncherModal } from '../modals/ProjectLauncherModal';
+  import { PowerShellScriptLauncherModal } from '../modals/PowerShellScriptLauncherModal';
+  import { openInExplorer, openInEditor, openInTerminal, copyProjectPath } from '../utils/projectLauncher';
+  import { ExternalProject, ProjectAction } from '../types/projectLauncher';
 
   class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
@@ -47,6 +51,9 @@ import {
         this.addStudySourceSettings(el);
         this.addStudyPathSettings(el);
         this.addSpacedRepetitionSettings(el);
+      }},
+      { id: 'projects', label: 'Projects & Scripts', render: (el) => {
+        this.addExternalProjectsSettings(el);
       }},
       { id: 'folders', label: 'Folders & Language', render: (el) => {
         this.addFolderSettings(el);
@@ -1842,6 +1849,16 @@ import {
         }));
 
     new Setting(containerEl)
+      .setName("Randomize Card Order")
+      .setDesc("Shuffle cards during review and cram sessions so cards from the same note or topic are not clustered together.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.spacedRepetition.randomizeCardOrder ?? true)
+        .onChange(async value => {
+          this.plugin.settings.spacedRepetition.randomizeCardOrder = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
       .setName("Grade 0 Reask Delay")
       .setDesc("Number of other reviewed cards before a grade 0 card can appear again.")
       .addText(text => text
@@ -2308,6 +2325,215 @@ import {
         .onClick(() => {
           new TestProviderConnectionModal(this.app, this.plugin).open();
         }));
+  }
+
+  addExternalProjectsSettings(containerEl: HTMLElement): void {
+    containerEl.createEl('h2', { text: 'External Projects & Automation Toolsets' });
+
+    containerEl.createEl('p', {
+      text: 'Configure external companion projects, toolsets, and script directories to launch from Obsidian. Supports quick opening in Windows Explorer, VS Code, PowerShell Terminal, or executing PowerShell (.ps1) scripts directly.',
+      cls: 'setting-item-description',
+    });
+
+    new Setting(containerEl)
+      .setName('Open Quick Launcher')
+      .setDesc('Test or trigger the project fuzzy launcher modal.')
+      .addButton((btn) =>
+        btn
+          .setButtonText('Launch Projects Modal')
+          .setCta()
+          .onClick(() => {
+            new ProjectLauncherModal(this.app, this.plugin).open();
+          })
+      );
+
+    // --- Add Project Form ---
+    const addContainer = containerEl.createDiv({ cls: 'external-project-add-container' });
+    addContainer.createEl('h3', { text: 'Add External Project or Toolset' });
+
+    let newName = '';
+    let newPath = '';
+    let newDesc = '';
+    let newIsScriptFolder = false;
+    let newDefaultAction: ProjectAction = 'explorer';
+    let newEditorCommand = 'code';
+
+    new Setting(addContainer)
+      .setName('Project Name')
+      .setDesc('Display name in the launcher and command palette.')
+      .addText((text) =>
+        text.setPlaceholder('e.g. MyPowershellScripts').onChange((val) => {
+          newName = val.trim();
+        })
+      );
+
+    new Setting(addContainer)
+      .setName('Folder Path')
+      .setDesc('Absolute directory path on your machine.')
+      .addText((text) =>
+        text.setPlaceholder('e.g. E:\\Games\\UnityGames\\...').onChange((val) => {
+          newPath = val.trim();
+        })
+      );
+
+    new Setting(addContainer)
+      .setName('Description (Optional)')
+      .setDesc('Helpful note or keywords for fuzzy searching.')
+      .addText((text) =>
+        text.setPlaceholder('e.g. Daily automation & utility scripts').onChange((val) => {
+          newDesc = val.trim();
+        })
+      );
+
+    new Setting(addContainer)
+      .setName('PowerShell Script Folder')
+      .setDesc('If enabled, selecting this project opens the interactive PowerShell script runner to execute .ps1 scripts.')
+      .addToggle((toggle) =>
+        toggle.setValue(newIsScriptFolder).onChange((val) => {
+          newIsScriptFolder = val;
+        })
+      );
+
+    new Setting(addContainer)
+      .setName('Default Action')
+      .setDesc('Primary action when pressing Enter in the launcher.')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            explorer: 'Open in Explorer',
+            editor: 'Open in VS Code / Editor',
+            terminal: 'Open PowerShell Terminal',
+            copy: 'Copy Path to Clipboard',
+          })
+          .setValue(newDefaultAction)
+          .onChange((val) => {
+            newDefaultAction = val as ProjectAction;
+          })
+      );
+
+    new Setting(addContainer)
+      .setName('Editor Command')
+      .setDesc('Executable command used to open the editor (default: "code").')
+      .addText((text) =>
+        text.setValue(newEditorCommand).onChange((val) => {
+          newEditorCommand = val.trim() || 'code';
+        })
+      );
+
+    new Setting(addContainer)
+      .setName('Add Project')
+      .addButton((btn) =>
+        btn
+          .setButtonText('Add Project')
+          .setCta()
+          .onClick(async () => {
+            if (!newName || !newPath) {
+              new Notice('Please enter both a project name and path.');
+              return;
+            }
+
+            if (!this.plugin.settings.externalProjects) {
+              this.plugin.settings.externalProjects = [];
+            }
+
+            const id = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            this.plugin.settings.externalProjects.push({
+              id,
+              name: newName,
+              path: newPath,
+              description: newDesc || undefined,
+              isScriptFolder: newIsScriptFolder,
+              defaultAction: newDefaultAction,
+              editorCommand: newEditorCommand,
+            });
+
+            await this.plugin.saveSettings();
+            new Notice(`Added project: ${newName}`);
+            this.display();
+          })
+      );
+
+    // --- Configured Projects List ---
+    const projects = this.plugin.settings.externalProjects || [];
+    containerEl.createEl('h3', { text: `Configured Projects (${projects.length})` });
+
+    if (projects.length === 0) {
+      containerEl.createEl('p', {
+        text: 'No external projects configured yet. Add one above.',
+        cls: 'setting-item-description',
+      });
+      return;
+    }
+
+    for (const project of projects) {
+      const projSetting = new Setting(containerEl)
+        .setName(project.name + (project.isScriptFolder ? ' [PowerShell Scripts]' : ''))
+        .setDesc(
+          `${project.path}${project.description ? ' — ' + project.description : ''}`
+        );
+
+      if (project.isScriptFolder) {
+        projSetting.addButton((btn) =>
+          btn
+            .setButtonText('📜 Scripts')
+            .setTooltip('Browse and execute scripts')
+            .onClick(() => {
+              new PowerShellScriptLauncherModal(this.app, this.plugin, project.path, project.name).open();
+            })
+        );
+      }
+
+      projSetting
+        .addButton((btn) =>
+          btn
+            .setButtonText('📁 Explorer')
+            .setTooltip('Open folder in Windows Explorer')
+            .onClick(async () => {
+              await openInExplorer(project.path);
+            })
+        )
+        .addButton((btn) =>
+          btn
+            .setButtonText('💻 Code')
+            .setTooltip(`Open in ${project.editorCommand || 'code'}`)
+            .onClick(async () => {
+              await openInEditor(project.path, project.editorCommand || 'code');
+            })
+        )
+        .addButton((btn) =>
+          btn
+            .setButtonText('⚡ Terminal')
+            .setTooltip('Open PowerShell terminal')
+            .onClick(async () => {
+              await openInTerminal(project.path);
+            })
+        )
+        .addButton((btn) =>
+          btn
+            .setButtonText('📋 Copy')
+            .setTooltip('Copy path to clipboard')
+            .onClick(async () => {
+              await copyProjectPath(project.path);
+            })
+        )
+        .addButton((btn) =>
+          btn
+            .setButtonText('❌ Remove')
+            .setWarning()
+            .setTooltip('Remove project from settings')
+            .onClick(async () => {
+              if (!confirm(`Remove project "${project.name}" from settings?`)) {
+                return;
+              }
+              this.plugin.settings.externalProjects = (this.plugin.settings.externalProjects || []).filter(
+                (p) => p.id !== project.id
+              );
+              await this.plugin.saveSettings();
+              new Notice(`Removed ${project.name}`);
+              this.display();
+            })
+        );
+    }
   }
 }
 

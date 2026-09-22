@@ -707,4 +707,55 @@ describe('SpacedRepetitionDatabase', () => {
 
     await database.close();
   });
+
+  it('supports randomized query ordering for due and cram sessions', async () => {
+    const { app } = createBinaryAdapterApp();
+    const database = new SpacedRepetitionDatabase(app as any, {
+      dbPath: '.obsidian/plugins/gpt4free-text-generator-plugin/spaced-repetition.sqlite',
+      wasmPath,
+    });
+
+    await database.initialize();
+    const noteId = await database.upsertNoteFromFile({ path: 'Notes/RandomTest.md', basename: 'RandomTest' } as any, 'hash-random');
+    await database.createQuestions([
+      {
+        noteId,
+        questionText: 'Card A',
+        questionType: 'self_check',
+        answerCheckMode: 'self',
+        nextRepeatAt: '2026-06-01T08:00:00.000Z',
+      },
+      {
+        noteId,
+        questionText: 'Card B',
+        questionType: 'self_check',
+        answerCheckMode: 'self',
+        nextRepeatAt: '2026-06-01T08:00:00.000Z',
+      },
+      {
+        noteId,
+        questionText: 'Card C',
+        questionType: 'self_check',
+        answerCheckMode: 'self',
+        nextRepeatAt: '2026-06-10T08:00:00.000Z',
+      },
+    ]);
+
+    const dueRandom = database.getReviewQuestions({
+      now: new Date('2026-06-02T08:00:00.000Z'),
+      noteId,
+      randomize: true,
+    });
+    expect(dueRandom).toHaveLength(2);
+
+    const cramRandom = database.getReviewQuestions({
+      now: new Date('2026-06-02T08:00:00.000Z'),
+      noteId,
+      includeNotDue: true,
+      randomize: true,
+    });
+    expect(cramRandom).toHaveLength(3);
+
+    await database.close();
+  });
 });

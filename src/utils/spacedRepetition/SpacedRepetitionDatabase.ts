@@ -40,6 +40,7 @@ export interface ReviewQuestionQuery {
   includeNotDue?: boolean;
   noteId?: string | null;
   studySetId?: string | null;
+  randomize?: boolean;
 }
 
 export interface StudySetReviewStats {
@@ -370,6 +371,10 @@ export class SpacedRepetitionDatabase {
 
     filter.params.push(limit);
 
+    const orderBy = query.randomize
+      ? (query.includeNotDue ? 'ORDER BY RANDOM()' : 'ORDER BY should_reask DESC, next_repeat_at ASC, RANDOM()')
+      : 'ORDER BY should_reask DESC, next_repeat_at ASC, created_at ASC';
+
     const rows = this.select<Record<string, unknown>>(
       `
       SELECT
@@ -380,7 +385,7 @@ export class SpacedRepetitionDatabase {
         should_reask as shouldReask, reask_after_count as reaskAfterCount
       FROM questions
       WHERE ${filter.conditions.join(' AND ')}
-      ORDER BY should_reask DESC, next_repeat_at ASC, created_at ASC
+      ${orderBy}
       LIMIT ?
       `,
       filter.params

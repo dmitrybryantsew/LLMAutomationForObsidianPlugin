@@ -7,6 +7,8 @@ import { TextProviderId } from './providers';
 import { SpacedRepetitionSettings } from './spacedRepetition';
 import { RetrievalSettings } from './retrieval';
 import { StudySourceGroup } from './studySources';
+import { ExternalProject } from './projectLauncher';
+export * from './projectLauncher';
 
 /**
  * PluginSettings Interface
@@ -174,6 +176,9 @@ export interface PluginSettings {
 
     // Knowledge retrieval settings
     retrieval: RetrievalSettings;
+
+    // External projects and toolsets
+    externalProjects: ExternalProject[];
   }
   
   /**

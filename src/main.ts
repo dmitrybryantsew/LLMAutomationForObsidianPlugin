@@ -48,6 +48,9 @@ import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChat
 import { SearchKnowledgeModal } from './modals/SearchKnowledgeModal';
 import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
 import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpacedRepetitionModal';
+import { ProjectLauncherModal } from './modals/ProjectLauncherModal';
+import { PowerShellScriptLauncherModal } from './modals/PowerShellScriptLauncherModal';
+import { openInEditor, openInExplorer, openInTerminal } from './utils/projectLauncher';
 
 import './styles/styles.css';
 
@@ -182,6 +185,9 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       this.activateView(VIEW_TYPE_CODING_EXERCISES);
     });
 
+    this.addRibbonIcon("folder-git-2", "Launch External Project / Toolset", () => {
+      new ProjectLauncherModal(this.app, this).open();
+    });
 
     this.addCommands();
     this.addMenuItems();
@@ -853,6 +859,50 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         }
       },
     });
+
+    this.addCommand({
+      id: 'open-project-launcher',
+      name: 'Launch External Project / Toolset',
+      callback: () => {
+        new ProjectLauncherModal(this.app, this).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-powershell-scripts',
+      name: 'Run PowerShell Script (External Toolsets)',
+      callback: () => {
+        const scriptProject = this.settings.externalProjects?.find((p) => p.isScriptFolder);
+        if (scriptProject) {
+          new PowerShellScriptLauncherModal(this.app, this, scriptProject.path, scriptProject.name).open();
+        } else {
+          new ProjectLauncherModal(this.app, this).open();
+        }
+      },
+    });
+
+    this.registerExternalProjectCommands();
+  }
+
+  private registerExternalProjectCommands(): void {
+    const projects = this.settings.externalProjects || [];
+    for (const project of projects) {
+      this.addCommand({
+        id: `open-project-${project.id}`,
+        name: `Open Project: ${project.name}`,
+        callback: async () => {
+          if (project.isScriptFolder) {
+            new PowerShellScriptLauncherModal(this.app, this, project.path, project.name).open();
+          } else if (project.defaultAction === 'editor') {
+            await openInEditor(project.path, project.editorCommand || 'code');
+          } else if (project.defaultAction === 'terminal') {
+            await openInTerminal(project.path);
+          } else {
+            await openInExplorer(project.path);
+          }
+        },
+      });
+    }
   }
 
   private addMenuItems() {
@@ -1042,6 +1092,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         ...(this.settings.retrieval?.companion ?? {}),
       } as CompanionConfig,
     };
+
+    this.settings.externalProjects = this.settings.externalProjects ?? DEFAULT_SETTINGS.externalProjects;
 
     // Settings relevant to service initialization are passed in the constructor
     // of PluginServices during plugin's onload.
