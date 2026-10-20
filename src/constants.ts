@@ -243,6 +243,9 @@ const DEFAULT_SETTINGS = {
       description: 'RP System engine and game tools',
     },
   ],
+  cardSyncEndpoint: 'http://localhost:3000',
+  cardSyncApiKey: '',
+  cardSyncLastSyncAt: null,
 };
 
 export { VIEW_TYPE_GENERATE_TEXT };

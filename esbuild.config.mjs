@@ -21,7 +21,13 @@ const outfile = path.join(packageDir, "main.js");
 
 async function copyStaticFiles() {
   await mkdir(packageDir, { recursive: true });
-  await copyFile(path.join(rootDir, "manifest.json"), path.join(packageDir, "manifest.json"));
+  const fs = await import("fs/promises");
+  const manifestRaw = await fs.readFile(path.join(rootDir, "manifest.json"), "utf8");
+  const manifest = JSON.parse(manifestRaw);
+  if (target === "android") {
+    manifest.isDesktopOnly = false;
+  }
+  await fs.writeFile(path.join(packageDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   await copyFile(path.join(rootDir, "src", "styles", "styles.css"), path.join(packageDir, "styles.css"));
   // Use the vendored FTS5-enabled sql.js wasm (see vendor/sqljs-fts5/README.md).
   // The upstream npm sql.js wasm does NOT include FTS5, which RetrievalDatabase requires.
@@ -107,9 +113,10 @@ const context = await esbuild.context({
             'let moduleObj = { exports: {} };',
             'let exports = moduleObj.exports;',
             'const __require = (id) => {',
-            '  if (id === "node:fs" || id === "fs") return require("fs");',
-            '  if (id === "node:path" || id === "path") return require("path");',
-            '  return require(id);',
+            '  try {',
+            '    if (typeof require === "function") return require(id);',
+            '  } catch (e) {}',
+            '  return undefined;',
             '};',
             '// The UMD source references require and module/exports on the',
             '// Node sync-load path. Provide them as writable bindings.',

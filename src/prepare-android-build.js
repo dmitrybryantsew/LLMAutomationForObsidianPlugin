@@ -1,71 +1,45 @@
-// prepare-android-build.js
-const fs = require('fs').promises;
-const path = require('path');
-const { exec } = require('child_process');
+// prepare-android-build.js (ES Module)
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function prepareAndroidBuild() {
   const rootDir = path.resolve(__dirname, '..');
-  const androidBuildDir = path.join(rootDir, 'android-build');
+  const androidSourceDir = path.join(rootDir, 'build', 'android');
   const zipPath = path.join(rootDir, 'obsidian-gpt4free-plugin-android.zip');
-  
+
   try {
-    // Create build directory if it doesn't exist
-    await fs.mkdir(androidBuildDir, { recursive: true });
-    
-    console.log('Copying files for Android build...');
-    
-    // Files to copy from root directory to android build
-    const filesToCopy = [
-      'manifest.json',
-      'styles.css',
-      // Add any other static files your plugin requires
-    ];
-    
-    // Copy each file
-    for (const file of filesToCopy) {
+    const requiredFiles = ['main.js', 'manifest.json', 'styles.css', 'sql-wasm.wasm'];
+    for (const file of requiredFiles) {
       try {
-        await fs.copyFile(
-          path.join(rootDir, file),
-          path.join(androidBuildDir, file)
-        );
-        console.log(`Copied ${file} to android build directory`);
-      } catch (err) {
-        console.error(`Error copying ${file}:`, err);
+        await fs.access(path.join(androidSourceDir, file));
+      } catch {
+        throw new Error(`Required file missing from android build directory: ${file}`);
       }
     }
-    
-    console.log('All plugin files copied to android build directory');
-    
-    // Create zip file for Android using PowerShell (Windows)
+
+    console.log('All required files verified in build/android directory.');
+
+    // Create zip file for Android
     if (process.platform === 'win32') {
-      const command = `powershell -Command "Compress-Archive -Path '${androidBuildDir}\\*' -DestinationPath '${zipPath}' -Force"`;
-      
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Error creating zip: ${error.message}`);
-          return;
-        }
-        if (stderr) {
-          console.error(`Zip stderr: ${stderr}`);
-          return;
-        }
-        console.log(`Zip created successfully at: ${zipPath}`);
-      });
+      const command = `powershell -NoProfile -Command "Compress-Archive -Path '${androidSourceDir}\\*' -DestinationPath '${zipPath}' -Force"`;
+      console.log(`Creating Android zip at: ${zipPath}`);
+      await execAsync(command);
     } else {
-      // For Linux/Mac
-      const command = `cd "${androidBuildDir}" && zip -r "${zipPath}" .`;
-      
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Error creating zip: ${error.message}`);
-          return;
-        }
-        console.log(`Zip created successfully at: ${zipPath}`);
-      });
+      const command = `cd "${androidSourceDir}" && zip -r "${zipPath}" .`;
+      console.log(`Creating Android zip at: ${zipPath}`);
+      await execAsync(command);
     }
-    
+
+    console.log(`Android plugin package created successfully at: ${zipPath}`);
   } catch (err) {
     console.error('Error preparing Android build:', err);
+    process.exit(1);
   }
 }
 

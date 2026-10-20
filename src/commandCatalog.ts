@@ -70,6 +70,12 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Reviews all enabled spaced repetition cards, ignoring due dates.',
   },
   {
+    id: 'sync-flashcards-with-site',
+    name: 'Sync Flashcards with Remote Site',
+    group: 'Spaced Repetition',
+    description: 'Syncs flashcards, study sets, and review logs with your configured remote proxy server.',
+  },
+  {
     id: 'chat-with-current-note-ollama',
     name: 'Chat With Current Note',
     group: 'Spaced Repetition',

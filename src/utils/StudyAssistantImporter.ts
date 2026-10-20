@@ -1,5 +1,5 @@
-import { readdir, readFile } from 'fs/promises';
-import path from 'path';
+import * as path from './pathUtils';
+import { getNodeFsPromises } from './nodeModules';
 import { ImportedStudyAssistantExercise, StudyAssistantExerciseEntry } from '../types/codingExercise';
 
 const DIFFICULTIES = ['Basic', 'Simple', 'Medium', 'Hard'];
@@ -53,7 +53,11 @@ export class StudyAssistantImporter {
   }
 
   async loadExercise(entry: StudyAssistantExerciseEntry): Promise<ImportedStudyAssistantExercise> {
-    const markdown = await readFile(entry.filePath, 'utf8');
+    const fsPromises = getNodeFsPromises();
+    if (!fsPromises?.readFile) {
+      throw new Error('Local filesystem access is not available on this platform.');
+    }
+    const markdown = await fsPromises.readFile(entry.filePath, 'utf8');
     const block = this.splitExerciseBlocks(markdown)
       .find((candidate) => candidate.exerciseNumber === entry.exerciseNumber);
 
@@ -77,7 +81,11 @@ export class StudyAssistantImporter {
 
   private async safeReadDir(dirPath: string) {
     try {
-      return await readdir(dirPath, { withFileTypes: true });
+      const fsPromises = getNodeFsPromises();
+      if (!fsPromises?.readdir) {
+        return [];
+      }
+      return await fsPromises.readdir(dirPath, { withFileTypes: true });
     } catch {
       return [];
     }
@@ -85,7 +93,11 @@ export class StudyAssistantImporter {
 
   private async safeReadFile(filePath: string): Promise<string | null> {
     try {
-      return await readFile(filePath, 'utf8');
+      const fsPromises = getNodeFsPromises();
+      if (!fsPromises?.readFile) {
+        return null;
+      }
+      return await fsPromises.readFile(filePath, 'utf8');
     } catch {
       return null;
     }

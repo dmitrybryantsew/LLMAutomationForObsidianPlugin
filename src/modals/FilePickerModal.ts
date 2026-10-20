@@ -1,5 +1,5 @@
 import { App, Modal, Setting, TFile, normalizePath } from "obsidian";
-import * as path from 'path';
+import * as path from '../utils/pathUtils';
 
 interface SelectedFile {
   path: string;

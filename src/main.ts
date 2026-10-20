@@ -50,6 +50,7 @@ import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
 import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpacedRepetitionModal';
 import { ImportFlashcardJsonModal } from './modals/ImportFlashcardJsonModal';
 import { ExportFlashcardsModal } from './modals/ExportFlashcardsModal';
+import { CardSyncClient } from './utils/spacedRepetition/CardSyncClient';
 import { ProjectLauncherModal } from './modals/ProjectLauncherModal';
 import { PowerShellScriptLauncherModal } from './modals/PowerShellScriptLauncherModal';
 import { openInEditor, openInExplorer, openInTerminal } from './utils/projectLauncher';
@@ -444,6 +445,16 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         title: 'Cram: All Cards',
         includeNotDue: true,
       }),
+    });
+
+    this.addCommand({
+      id: 'sync-flashcards-with-site',
+      name: 'Sync Flashcards with Remote Site',
+      callback: async () => {
+        const database = await this.services.ensureSpacedRepetitionDatabase();
+        const client = new CardSyncClient(this, database);
+        await client.sync();
+      },
     });
 
     this.addCommand({

@@ -1,5 +1,6 @@
 import { App, TFile, normalizePath } from 'obsidian';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '../bufferUtils';
 import {
   QuestionReviewState,
   NoteChatMessageRecord,
@@ -1105,6 +1106,209 @@ export class SpacedRepetitionDatabase {
     return id;
   }
 
+  getAllStudySetsForSync(): any[] {
+    return this.select<any>('SELECT * FROM study_sets').map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      sourceType: row.source_type,
+      sourceRule: this.parseJson(row.source_rule_json, {}),
+      tags: this.parseJson(row.tags_json, []),
+      enabled: Boolean(row.enabled),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  getAllQuestionsForSync(): any[] {
+    return this.select<any>(`
+      SELECT q.*, s.algorithm, s.interval_days, s.ease, s.repetition_count, s.lapse_count, s.last_grade
+      FROM questions q
+      LEFT JOIN schedules s ON s.question_id = q.id
+    `).map((row) => ({
+      id: row.id,
+      studySetId: row.study_set_id,
+      questionName: row.question_name,
+      questionText: row.question_text,
+      questionType: row.question_type,
+      answerText: row.answer_text,
+      choices: this.parseJson(row.choices_json, null),
+      answerCheckMode: row.answer_check_mode,
+      metadata: this.parseJson(row.metadata_json, {}),
+      enabled: Boolean(row.enabled),
+      archivedAt: row.archived_at,
+      nextRepeatAt: row.next_repeat_at,
+      lastReviewedAt: row.last_reviewed_at,
+      algorithm: row.algorithm || 'mnemosyne_like_v1',
+      intervalDays: Number(row.interval_days || 0),
+      ease: Number(row.ease || 2.5),
+      repetitionCount: Number(row.repetition_count || 0),
+      lapseCount: Number(row.lapse_count || 0),
+      lastGrade: row.last_grade !== null && row.last_grade !== undefined ? Number(row.last_grade) : null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  getReviewsSince(since: string | null): any[] {
+    const query = since
+      ? 'SELECT * FROM review_history WHERE reviewed_at > ? ORDER BY reviewed_at ASC'
+      : 'SELECT * FROM review_history ORDER BY reviewed_at DESC LIMIT 500';
+    const params = since ? [since] : [];
+    return this.select<any>(query, params).map((row) => ({
+      id: row.id,
+      cardId: row.question_id,
+      grade: row.grade,
+      userAnswer: row.user_answer,
+      checkerResult: this.parseJson(row.checker_result_json, null),
+      reviewedAt: row.reviewed_at,
+      elapsedMs: row.elapsed_ms,
+    }));
+  }
+
+  async applySyncResult(serverResult: { decks?: any[]; cards?: any[]; reviews?: any[] }): Promise<{
+    importedDecks: number;
+    importedCards: number;
+    importedReviews: number;
+  }> {
+    const db = this.requireDb();
+    let importedDecks = 0;
+    let importedCards = 0;
+    let importedReviews = 0;
+    const now = new Date().toISOString();
+
+    if (serverResult.decks && Array.isArray(serverResult.decks)) {
+      for (const d of serverResult.decks) {
+        if (!d.id || !d.name) continue;
+        db.run(
+          `
+          INSERT INTO study_sets (id, name, description, source_type, source_rule_json, tags_json, enabled, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            source_type = excluded.source_type,
+            source_rule_json = excluded.source_rule_json,
+            tags_json = excluded.tags_json,
+            enabled = excluded.enabled,
+            updated_at = excluded.updated_at
+          WHERE excluded.updated_at >= study_sets.updated_at
+          `,
+          [
+            d.id,
+            d.name,
+            d.description ?? null,
+            d.sourceType ?? 'manual',
+            typeof d.sourceRule === 'string' ? d.sourceRule : JSON.stringify(d.sourceRule ?? {}),
+            typeof d.tags === 'string' ? d.tags : JSON.stringify(d.tags ?? []),
+            d.enabled === false ? 0 : 1,
+            d.createdAt ?? now,
+            d.updatedAt ?? now,
+          ]
+        );
+        importedDecks++;
+      }
+    }
+
+    if (serverResult.cards && Array.isArray(serverResult.cards)) {
+      for (const c of serverResult.cards) {
+        if (!c.id || !c.questionText) continue;
+        db.run(
+          `
+          INSERT INTO questions (
+            id, study_set_id, question_name, question_text, question_type, answer_text,
+            choices_json, answer_check_mode, metadata_json, enabled, archived_at,
+            next_repeat_at, last_reviewed_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            study_set_id = excluded.study_set_id,
+            question_name = excluded.question_name,
+            question_text = excluded.question_text,
+            question_type = excluded.question_type,
+            answer_text = excluded.answer_text,
+            choices_json = excluded.choices_json,
+            answer_check_mode = excluded.answer_check_mode,
+            metadata_json = excluded.metadata_json,
+            enabled = excluded.enabled,
+            archived_at = excluded.archived_at,
+            next_repeat_at = excluded.next_repeat_at,
+            last_reviewed_at = excluded.last_reviewed_at,
+            updated_at = excluded.updated_at
+          WHERE excluded.updated_at >= questions.updated_at
+          `,
+          [
+            c.id,
+            c.deckId ?? c.studySetId ?? null,
+            c.questionName ?? null,
+            c.questionText,
+            c.questionType ?? 'self_check',
+            c.answerText ?? null,
+            typeof c.choices === 'string' ? c.choices : (c.choices ? JSON.stringify(c.choices) : null),
+            c.answerCheckMode ?? 'self',
+            typeof c.metadata === 'string' ? c.metadata : JSON.stringify(c.metadata ?? {}),
+            c.enabled === false ? 0 : 1,
+            c.archivedAt ?? null,
+            c.nextRepeatAt ?? now,
+            c.lastReviewedAt ?? null,
+            c.createdAt ?? now,
+            c.updatedAt ?? now,
+          ]
+        );
+
+        db.run(
+          `
+          INSERT INTO schedules (
+            question_id, algorithm, interval_days, ease, repetition_count, lapse_count, last_grade
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(question_id) DO UPDATE SET
+            algorithm = excluded.algorithm,
+            interval_days = excluded.interval_days,
+            ease = excluded.ease,
+            repetition_count = excluded.repetition_count,
+            lapse_count = excluded.lapse_count,
+            last_grade = excluded.last_grade
+          `,
+          [
+            c.id,
+            c.algorithm ?? 'mnemosyne_like_v1',
+            Number(c.intervalDays ?? 0),
+            Number(c.ease ?? 2.5),
+            Number(c.repetitionCount ?? 0),
+            Number(c.lapseCount ?? 0),
+            c.lastGrade ?? null,
+          ]
+        );
+        importedCards++;
+      }
+    }
+
+    if (serverResult.reviews && Array.isArray(serverResult.reviews)) {
+      for (const r of serverResult.reviews) {
+        if (!r.id || !r.cardId || r.grade === undefined) continue;
+        db.run(
+          `
+          INSERT OR IGNORE INTO review_history (
+            id, question_id, reviewed_at, grade, user_answer, checker_result_json, elapsed_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            r.id,
+            r.cardId,
+            r.reviewedAt ?? now,
+            Number(r.grade),
+            r.userAnswer ?? null,
+            typeof r.checkerResult === 'string' ? r.checkerResult : (r.checkerResult ? JSON.stringify(r.checkerResult) : null),
+            r.elapsedMs ?? null,
+          ]
+        );
+        importedReviews++;
+      }
+    }
+
+    await this.persist();
+    return { importedDecks, importedCards, importedReviews };
+  }
+
   async close(): Promise<void> {
     if (this.db) {
       await this.persist();
@@ -1325,7 +1529,7 @@ export class SpacedRepetitionDatabase {
       return null;
     }
 
-    return Uint8Array.from(Buffer.from(encoded, 'base64'));
+    return base64ToUint8Array(encoded);
   }
 
   private async readWasmBinary(): Promise<Uint8Array | null> {
@@ -1363,7 +1567,7 @@ export class SpacedRepetitionDatabase {
           }
           if (typeof adapter.read === 'function') {
             const encoded = await adapter.read(normalized);
-            return Uint8Array.from(Buffer.from(encoded, 'base64'));
+            return base64ToUint8Array(encoded);
           }
         }
       } catch (e) {
@@ -1384,7 +1588,7 @@ export class SpacedRepetitionDatabase {
       return;
     }
 
-    await adapter.write(this.config.dbPath, Buffer.from(bytes).toString('base64'));
+    await adapter.write(this.config.dbPath, uint8ArrayToBase64(bytes));
   }
 
   private select<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {

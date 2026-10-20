@@ -18,6 +18,7 @@ transcripts.db
 /main.css
 /styles.css
 *.js.map
+*.zip
 
 # Old generated/context files that should never enter this repo
 combined.ts

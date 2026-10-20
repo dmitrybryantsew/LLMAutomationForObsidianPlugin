@@ -9,6 +9,7 @@ import { CardManagementRecord, ReviewStats, StudySetReviewStats } from '../utils
 import { exportFlashcards } from '../utils/spacedRepetition/FlashcardExport';
 import { SpacedRepetitionManualQuestionModal } from '../modals/SpacedRepetitionManualQuestionModal';
 import { NotePickerModal } from '../modals/NotePickerModal';
+import { CardSyncClient } from '../utils/spacedRepetition/CardSyncClient';
 
 const HUB_SHORTCUTS: Array<{ keys: string; label: string }> = [
   { keys: 'R', label: 'Review due' },
@@ -318,6 +319,12 @@ export class FlashcardHubView extends ItemView {
     const auxGroup = toolbar.createDiv({ cls: 'llm-automation-flashcard-hub-toolbar-group is-aux' });
     this.addQuickAction(auxGroup, 'Export MD (E)', this.totalCards > 0, () => this.exportAllCards('markdown'));
     this.addQuickAction(auxGroup, 'Export JSON (Shift+E)', this.totalCards > 0, () => this.exportAllCards('json'));
+    this.addQuickAction(auxGroup, '🔄 Sync Site', true, async () => {
+      const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+      const client = new CardSyncClient(this.plugin, database);
+      await client.sync();
+      await this.refresh();
+    });
     this.addQuickAction(auxGroup, 'Settings (S)', true, () => this.openPluginSettings());
     this.addQuickAction(auxGroup, '↻ Refresh', true, () => this.refresh());
   }

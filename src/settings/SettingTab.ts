@@ -19,6 +19,7 @@ import {
   import { PowerShellScriptLauncherModal } from '../modals/PowerShellScriptLauncherModal';
   import { openInExplorer, openInEditor, openInTerminal, copyProjectPath } from '../utils/projectLauncher';
   import { ExternalProject, ProjectAction } from '../types/projectLauncher';
+  import { CardSyncClient } from '../utils/spacedRepetition/CardSyncClient';
 
   class SettingTab extends PluginSettingTab {
   plugin: GptFreeTextGeneratorPlugin;
@@ -1881,6 +1882,52 @@ import {
           if (!Number.isNaN(parsed) && parsed >= 1) {
             this.plugin.settings.spacedRepetition.sameDayReviewDelayMinutes = parsed;
             await this.plugin.saveSettings();
+          }
+        }));
+
+    containerEl.createEl('h3', { text: 'Remote Card Sync (openai-nim-proxy)' });
+
+    new Setting(containerEl)
+      .setName("Card Sync Endpoint")
+      .setDesc("URL of your openai-nim-proxy server (e.g. http://localhost:3000 or your remote VPS URL)")
+      .addText(text => text
+        .setPlaceholder("http://localhost:3000")
+        .setValue(this.plugin.settings.cardSyncEndpoint || '')
+        .onChange(async value => {
+          this.plugin.settings.cardSyncEndpoint = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Card Sync API Key")
+      .setDesc("Proxy API key configured on your server (PROXY_API_KEY)")
+      .addText(text => text
+        .setPlaceholder("Enter PROXY_API_KEY")
+        .setValue(this.plugin.settings.cardSyncApiKey || '')
+        .onChange(async value => {
+          this.plugin.settings.cardSyncApiKey = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Sync Flashcards Now")
+      .setDesc(this.plugin.settings.cardSyncLastSyncAt
+        ? `Last synced: ${new Date(this.plugin.settings.cardSyncLastSyncAt).toLocaleString()}`
+        : "Never synced yet.")
+      .addButton(button => button
+        .setButtonText("Sync with Site")
+        .setCta()
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Syncing...");
+          try {
+            const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
+            const client = new CardSyncClient(this.plugin, database);
+            await client.sync();
+            this.display();
+          } catch (e) {
+            new Notice(`Sync failed: ${e instanceof Error ? e.message : 'Unknown'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Sync with Site");
           }
         }));
   }

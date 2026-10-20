@@ -181,6 +181,11 @@ export interface PluginSettings {
 
     // External projects and toolsets
     externalProjects: ExternalProject[];
+
+    // Remote card sync
+    cardSyncEndpoint: string;
+    cardSyncApiKey: string;
+    cardSyncLastSyncAt: string | null;
   }
   
   /**

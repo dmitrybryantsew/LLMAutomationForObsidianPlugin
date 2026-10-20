@@ -1,6 +1,6 @@
 import { App, normalizePath, TFile } from 'obsidian';
-import { readdir, readFile, stat } from 'fs/promises';
-import path from 'path';
+import * as path from './pathUtils';
+import { getNodeFsPromises } from './nodeModules';
 import { PluginSettings } from '../types';
 import { StudySourceContext, StudySourceContextFile, StudySourceFile, StudySourceGroup, StudySourceScanResult } from '../types/studySources';
 
@@ -70,7 +70,12 @@ export class StudySourceLibrary {
       }
 
       try {
-        const content = await readFile(file.path, 'utf8');
+        const fsPromises = getNodeFsPromises();
+        if (!fsPromises?.readFile) {
+          skippedFiles++;
+          continue;
+        }
+        const content = await fsPromises.readFile(file.path, 'utf8');
         files.push({ ...file, content });
         estimatedTokens += file.estimatedTokens;
       } catch {
@@ -182,8 +187,12 @@ export class StudySourceLibrary {
 
   private async readFileInfo(group: StudySourceGroup, filePath: string, extension: string): Promise<StudySourceFile | null> {
     try {
-      const fileStat = await stat(filePath);
-      const content = await readFile(filePath, 'utf8');
+      const fsPromises = getNodeFsPromises();
+      if (!fsPromises?.stat || !fsPromises?.readFile) {
+        return null;
+      }
+      const fileStat = await fsPromises.stat(filePath);
+      const content = await fsPromises.readFile(filePath, 'utf8');
 
       return {
         groupId: group.id,
@@ -217,7 +226,9 @@ export class StudySourceLibrary {
 
   private async safeStat(targetPath: string) {
     try {
-      return await stat(targetPath);
+      const fsPromises = getNodeFsPromises();
+      if (!fsPromises?.stat) return null;
+      return await fsPromises.stat(targetPath);
     } catch {
       return null;
     }
@@ -225,7 +236,9 @@ export class StudySourceLibrary {
 
   private async safeReadDir(targetPath: string) {
     try {
-      return await readdir(targetPath, { withFileTypes: true });
+      const fsPromises = getNodeFsPromises();
+      if (!fsPromises?.readdir) return [];
+      return await fsPromises.readdir(targetPath, { withFileTypes: true });
     } catch {
       return [];
     }

@@ -1,5 +1,6 @@
 import { App, normalizePath } from 'obsidian';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '../utils/bufferUtils';
 import { RetrievalChunkDraft, SearchHit, SearchRequest } from '../types/retrieval';
 import { PlannedQuery } from './QueryPlanner';
 
@@ -414,7 +415,7 @@ export class RetrievalDatabase {
       return;
     }
 
-    await adapter.write(this.config.dbPath, Buffer.from(bytes).toString('base64'));
+    await adapter.write(this.config.dbPath, uint8ArrayToBase64(bytes));
   }
 
   private async ensureParentDirectory(): Promise<void> {
@@ -444,7 +445,7 @@ export class RetrievalDatabase {
         return new Uint8Array(buffer);
       }
       const encoded = await adapter.read(this.config.dbPath);
-      return Uint8Array.from(Buffer.from(encoded, 'base64'));
+      return base64ToUint8Array(encoded);
     } catch {
       return null;
     }
@@ -483,7 +484,7 @@ export class RetrievalDatabase {
           }
           if (typeof adapter.read === 'function') {
             const encoded = await adapter.read(candidate);
-            return Uint8Array.from(Buffer.from(encoded, 'base64'));
+            return base64ToUint8Array(encoded);
           }
         }
       } catch {

@@ -1,5 +1,5 @@
 import { App, normalizePath, TFile } from 'obsidian';
-import path from 'path';
+import * as path from './pathUtils';
 import { PluginSettings } from '../types';
 import { StudyPathGenerationResult, StudyPathPlan, StudyPathStage } from '../types/studyPath';
 import { StudySourceContext } from '../types/studySources';

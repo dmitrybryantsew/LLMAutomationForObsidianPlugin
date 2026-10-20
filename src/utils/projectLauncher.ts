@@ -1,15 +1,10 @@
 import { Notice } from 'obsidian';
-import * as path from 'path';
-import * as fs from 'fs';
+import * as path from './pathUtils';
 import { ExternalProject, PowerShellScriptEntry } from '../types/projectLauncher';
+import { getNodeChildProcess, getNodeFs } from './nodeModules';
 
 function getChildProcess(): typeof import('child_process') | null {
-  try {
-    const req = (window as unknown as { require?: (mod: string) => typeof import('child_process') }).require;
-    return req ? req('child_process') : null;
-  } catch {
-    return null;
-  }
+  return getNodeChildProcess();
 }
 
 function getElectronShell(): { openPath: (path: string) => Promise<string> } | null {
@@ -173,16 +168,18 @@ export async function runPowerShellScript(scriptPath: string, workingDir?: strin
 export function listPowerShellScriptsSync(folderPath: string): PowerShellScriptEntry[] {
   const normFolder = path.normalize(folderPath);
 
-  if (!fs.existsSync(normFolder)) {
+  const fs = getNodeFs();
+  if (!fs || !fs.existsSync(normFolder)) {
     return [];
   }
+  const activeFs = fs;
 
   const results: PowerShellScriptEntry[] = [];
 
   function scan(currentDir: string, depth = 0): void {
     if (depth > 2) return;
     try {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      const entries = activeFs.readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
         const full = path.join(currentDir, entry.name);
         if (entry.isDirectory()) {
@@ -194,7 +191,7 @@ export function listPowerShellScriptsSync(folderPath: string): PowerShellScriptE
           let sizeBytes: number | undefined;
           let modifiedAt: number | undefined;
           try {
-            const stat = fs.statSync(full);
+            const stat = activeFs.statSync(full);
             sizeBytes = stat.size;
             modifiedAt = stat.mtimeMs;
           } catch {
