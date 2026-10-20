@@ -1930,6 +1930,87 @@ import {
             button.setDisabled(false).setButtonText("Sync with Site");
           }
         }));
+
+    containerEl.createEl('h3', { text: 'Remote Vault Note Sync (Multi-Device)' });
+
+    new Setting(containerEl)
+      .setName("Device Role")
+      .setDesc("PC (Master) is the authoritative source of truth. Mobile (Replica) downloads missing content and uploads new notes.")
+      .addDropdown(drop => drop
+        .addOption('pc', 'PC (Master)')
+        .addOption('mobile', 'Mobile (Replica & Capture)')
+        .setValue(this.plugin.settings.noteSyncDeviceRole || 'pc')
+        .onChange(async value => {
+          this.plugin.settings.noteSyncDeviceRole = value as 'pc' | 'mobile';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Note Sync Endpoint")
+      .setDesc("URL of your sync server (defaults to Card Sync Endpoint if empty)")
+      .addText(text => text
+        .setPlaceholder("http://localhost:3000")
+        .setValue(this.plugin.settings.noteSyncEndpoint || '')
+        .onChange(async value => {
+          this.plugin.settings.noteSyncEndpoint = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Note Sync API Key")
+      .setDesc("Proxy API key configured on your server (defaults to Card Sync API key if empty)")
+      .addText(text => text
+        .setPlaceholder("Enter PROXY_API_KEY")
+        .setValue(this.plugin.settings.noteSyncApiKey || '')
+        .onChange(async value => {
+          this.plugin.settings.noteSyncApiKey = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Auto-Sync Interval (minutes)")
+      .setDesc("Periodic background sync frequency (set to 0 to disable periodic auto-sync)")
+      .addText(text => text
+        .setPlaceholder("10")
+        .setValue(String(this.plugin.settings.noteSyncAutoSyncIntervalMinutes ?? 10))
+        .onChange(async value => {
+          const parsed = parseInt(value, 10);
+          if (!Number.isNaN(parsed) && parsed >= 0) {
+            this.plugin.settings.noteSyncAutoSyncIntervalMinutes = parsed;
+            await this.plugin.saveSettings();
+            this.plugin.noteSyncManager?.startPeriodicSync();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("Sync on Startup")
+      .setDesc("Automatically run note synchronization when Obsidian loads")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.noteSyncOnStartup ?? true)
+        .onChange(async value => {
+          this.plugin.settings.noteSyncOnStartup = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Sync Notes Now")
+      .setDesc(this.plugin.settings.noteSyncLastSyncAt
+        ? `Last synced: ${new Date(this.plugin.settings.noteSyncLastSyncAt).toLocaleString()}`
+        : "Never synced yet.")
+      .addButton(button => button
+        .setButtonText("Sync Notes")
+        .setCta()
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Syncing Notes...");
+          try {
+            await this.plugin.noteSyncManager?.sync();
+            this.display();
+          } catch (e) {
+            new Notice(`Note sync failed: ${e instanceof Error ? e.message : 'Unknown'}`);
+          } finally {
+            button.setDisabled(false).setButtonText("Sync Notes");
+          }
+        }));
   }
 
   addMultiProviderSettings(containerEl: HTMLElement): void {

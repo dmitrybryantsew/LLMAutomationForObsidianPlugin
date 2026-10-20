@@ -51,6 +51,7 @@ import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpac
 import { ImportFlashcardJsonModal } from './modals/ImportFlashcardJsonModal';
 import { ExportFlashcardsModal } from './modals/ExportFlashcardsModal';
 import { CardSyncClient } from './utils/spacedRepetition/CardSyncClient';
+import { NoteSyncManager } from './utils/sync/NoteSyncManager';
 import { ProjectLauncherModal } from './modals/ProjectLauncherModal';
 import { PowerShellScriptLauncherModal } from './modals/PowerShellScriptLauncherModal';
 import { openInEditor, openInExplorer, openInTerminal } from './utils/projectLauncher';
@@ -67,6 +68,7 @@ const CODING_FOCUS_BODY_CLASS = 'llm-automation-coding-focus-active';
 export default class GptFreeTextGeneratorPlugin extends Plugin {
   settings!: PluginSettings;
   services!: PluginServices;
+  noteSyncManager!: NoteSyncManager;
   
   async onload() {
     // First load settings
@@ -190,6 +192,21 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
 
     this.addRibbonIcon("folder-git-2", "Launch External Project / Toolset", () => {
       new ProjectLauncherModal(this.app, this).open();
+    });
+
+    this.noteSyncManager = new NoteSyncManager(this);
+    this.noteSyncManager.startPeriodicSync();
+
+    if (this.settings.noteSyncOnStartup) {
+      this.app.workspace.onLayoutReady(() => {
+        void this.noteSyncManager.sync({ silent: true }).catch((err) => {
+          console.error('Note auto-sync on startup failed:', err);
+        });
+      });
+    }
+
+    this.addRibbonIcon('refresh-cw', 'Sync Vault Notes with Server', () => {
+      void this.noteSyncManager.sync();
     });
 
     this.addCommands();
@@ -454,6 +471,14 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         const database = await this.services.ensureSpacedRepetitionDatabase();
         const client = new CardSyncClient(this, database);
         await client.sync();
+      },
+    });
+
+    this.addCommand({
+      id: 'sync-notes-with-server',
+      name: 'Sync Vault Notes with Server',
+      callback: async () => {
+        await this.noteSyncManager.sync();
       },
     });
 
@@ -1705,6 +1730,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     if (this.services) {
       this.services.destroy(); // Custom cleanup for services
     }
+
+    this.noteSyncManager?.stopPeriodicSync();
     
     // Obsidian automatically handles unregistering views, commands, settings tab, ribbon icons
   }

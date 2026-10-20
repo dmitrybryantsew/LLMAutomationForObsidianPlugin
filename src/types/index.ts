@@ -186,6 +186,14 @@ export interface PluginSettings {
     cardSyncEndpoint: string;
     cardSyncApiKey: string;
     cardSyncLastSyncAt: string | null;
+
+    // Remote vault note sync
+    noteSyncEndpoint: string;
+    noteSyncApiKey: string;
+    noteSyncDeviceRole: 'pc' | 'mobile';
+    noteSyncAutoSyncIntervalMinutes: number;
+    noteSyncOnStartup: boolean;
+    noteSyncLastSyncAt: string | null;
   }
   
   /**

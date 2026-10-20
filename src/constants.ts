@@ -246,6 +246,12 @@ const DEFAULT_SETTINGS = {
   cardSyncEndpoint: 'http://localhost:3000',
   cardSyncApiKey: '',
   cardSyncLastSyncAt: null,
+  noteSyncEndpoint: 'http://localhost:3000',
+  noteSyncApiKey: '',
+  noteSyncDeviceRole: 'pc',
+  noteSyncAutoSyncIntervalMinutes: 10,
+  noteSyncOnStartup: true,
+  noteSyncLastSyncAt: null,
 };
 
 export { VIEW_TYPE_GENERATE_TEXT };
