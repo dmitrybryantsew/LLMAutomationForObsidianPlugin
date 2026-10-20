@@ -48,6 +48,8 @@ import { SpacedRepetitionNoteChatModal } from './modals/SpacedRepetitionNoteChat
 import { SearchKnowledgeModal } from './modals/SearchKnowledgeModal';
 import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
 import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpacedRepetitionModal';
+import { ImportFlashcardJsonModal } from './modals/ImportFlashcardJsonModal';
+import { ExportFlashcardsModal } from './modals/ExportFlashcardsModal';
 import { ProjectLauncherModal } from './modals/ProjectLauncherModal';
 import { PowerShellScriptLauncherModal } from './modals/PowerShellScriptLauncherModal';
 import { openInEditor, openInExplorer, openInTerminal } from './utils/projectLauncher';
@@ -819,6 +821,24 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'import-flashcards-json',
+      name: 'Import Flashcards from JSON',
+      callback: () => this.openImportFlashcardJsonModal(),
+    });
+
+    this.addCommand({
+      id: 'export-flashcards-json',
+      name: 'Export Flashcards to JSON',
+      callback: () => this.openExportFlashcardsModal('json'),
+    });
+
+    this.addCommand({
+      id: 'export-flashcards-markdown',
+      name: 'Export Flashcards to Markdown',
+      callback: () => this.openExportFlashcardsModal('markdown'),
+    });
+
+    this.addCommand({
       id: 'open-coding-exercises',
       name: 'Open Coding Exercises',
       callback: () => this.activateView(VIEW_TYPE_CODING_EXERCISES),
@@ -1029,6 +1049,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.settings.flashcardGenerationMaxTokens = this.settings.flashcardGenerationMaxTokens ?? DEFAULT_SETTINGS.flashcardGenerationMaxTokens;
     this.settings.flashcardTwoPassGeneration = this.settings.flashcardTwoPassGeneration ?? DEFAULT_SETTINGS.flashcardTwoPassGeneration;
     this.settings.flashcardStripThinking = this.settings.flashcardStripThinking ?? DEFAULT_SETTINGS.flashcardStripThinking;
+    this.settings.flashcardAdaptiveCardCount = this.settings.flashcardAdaptiveCardCount ?? DEFAULT_SETTINGS.flashcardAdaptiveCardCount;
+    this.settings.flashcardAutoCardTypes = this.settings.flashcardAutoCardTypes ?? DEFAULT_SETTINGS.flashcardAutoCardTypes;
     this.settings.flashcardConceptExtractionPrompt = this.settings.flashcardConceptExtractionPrompt ?? DEFAULT_SETTINGS.flashcardConceptExtractionPrompt;
     this.settings.flashcardQuestionGenerationPrompt = this.settings.flashcardQuestionGenerationPrompt ?? DEFAULT_SETTINGS.flashcardQuestionGenerationPrompt;
     this.settings.codingExercisesFolder = this.settings.codingExercisesFolder ?? DEFAULT_SETTINGS.codingExercisesFolder;
@@ -1242,6 +1264,16 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
   /** Opens the "Import Cards from Spaced Repetition Plugin" modal. */
   openImportObsidianSpacedRepetitionModal(): void {
     new ImportObsidianSpacedRepetitionModal(this.app, this).open();
+  }
+
+  /** Opens the "Import Flashcards from JSON" modal. */
+  openImportFlashcardJsonModal(): void {
+    new ImportFlashcardJsonModal(this.app, this).open();
+  }
+
+  /** Opens the "Export Flashcards" modal. */
+  openExportFlashcardsModal(defaultFormat: 'json' | 'markdown' = 'json'): void {
+    new ExportFlashcardsModal(this.app, this, defaultFormat).open();
   }
 
   /** Returns to the flashcard hub tab (used by views in focus mode). */

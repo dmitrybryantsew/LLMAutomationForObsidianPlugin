@@ -12,6 +12,10 @@ export interface GenerateQuestionsForNoteOptions {
   model: string;
   questionCount: number;
   questionTypes: QuestionType[];
+  /** When true, questionCount acts as a guideline and the LLM determines card count dynamically based on concept density. */
+  adaptiveCount?: boolean;
+  /** When true, the LLM selects the optimal questionType for each concept based on retention needs. */
+  autoCardTypes?: boolean;
   additionalInstructions?: string;
   outputLanguage?: string;
   temperature?: number;
@@ -257,9 +261,9 @@ export class SpacedRepetitionGenerator {
    * think longer and blow past upstream time limits (observed as 502s).
    */
   private scaleMaxTokens(options: GenerateQuestionsForNoteOptions): number {
-    const count = Math.max(1, options.questionCount);
+    const count = Math.max(1, options.adaptiveCount ? Math.ceil(options.questionCount * 1.5) : options.questionCount);
     let required = 700 * count + 1200;
-    if (options.questionTypes.includes('typed_fields_exact') || options.questionTypes.includes('multiple_choice')) {
+    if (options.autoCardTypes || options.questionTypes.includes('typed_fields_exact') || options.questionTypes.includes('multiple_choice')) {
       required += 800;
     }
     if (isThinkingModel(options.model)) {
@@ -276,11 +280,11 @@ export class SpacedRepetitionGenerator {
     options: GenerateQuestionsForNoteOptions,
     maxTokens: number,
   ): Promise<ExtractedConcept[]> {
-    const conceptCount = Math.max(8, Math.ceil(options.questionCount * 1.5));
+    const conceptCount = Math.max(8, Math.ceil(options.questionCount * 1.8));
     const noteContent = options.noteContent.trim().slice(0, 30000);
     const language = options.outputLanguage ?? 'english';
 
-    const prompt = `Extract the key learnable concepts from this text. This is a research step: identify what is genuinely worth memorizing, not what is merely mentioned.
+    const prompt = `Extract the key learnable concepts, domain keywords, and rules from this text. This is a research step for spaced repetition flashcards: identify what is genuinely critical for complete understanding and durable retention.
 
 Return ONLY valid JSON. Do not wrap it in markdown. Do not include commentary.
 
@@ -288,8 +292,8 @@ JSON shape:
 {
   "concepts": [
     {
-      "name": "Short concept name",
-      "summary": "One or two sentence explanation of the idea",
+      "name": "Short concept name or keyword",
+      "summary": "Clear explanation of the idea, rule, or syntax",
       "sourceQuote": "Short supporting quote from the text",
       "kind": "definition"
     }
@@ -298,9 +302,14 @@ JSON shape:
 
 Rules:
 - Extract up to ${conceptCount} concepts.
-- kind values: definition, mechanism, distinction, cause_effect, edge_case, fact, procedure.
-- Prioritize durable knowledge: definitions, mechanisms, how things differ, why things happen, edge cases, procedures, and concrete facts.
-- Skip trivia, page numbers, cross-references, and passing mentions.
+- Allowed kind values: keyword_or_syntax, definition, mechanism, distinction, rule_or_invariant, cause_effect, edge_case, procedure.
+- Prioritize durable knowledge and complete information retention:
+  * Domain keywords, reserved terms, notation, and exact syntax/signatures (e.g. programming language keywords, types, method names, parameters, or specialized terminology in any domain).
+  * Fundamental definitions, mental models, and principles.
+  * Internal mechanisms (how it works step-by-step, execution order, lifecycle).
+  * Key distinctions (how concept A differs from concept B, common confusion/traps).
+  * Explicit rules, invariants, constraints, and edge cases.
+- Skip fluff, page numbers, cross-references, and trivial passing mentions.
 - Ground every concept in this text only.
 - Write names and summaries in ${language}.
 ${options.conceptExtractionPrompt?.trim() ? `\nAdditional instructions:\n${options.conceptExtractionPrompt.trim()}\n` : ''}
@@ -352,7 +361,10 @@ ${noteContent}`;
     concepts: ExtractedConcept[] = [],
     isRetry: boolean = false,
   ): string {
-    const typeList = options.questionTypes.join(', ');
+    const effectiveTypes: QuestionType[] = options.autoCardTypes
+      ? ['self_check', 'typed_exact', 'typed_fields_exact', 'typed_llm_checked', 'multiple_choice']
+      : options.questionTypes;
+    const typeList = effectiveTypes.join(', ');
     const noteContent = options.noteContent.trim().slice(0, 30000);
     const additionalInstructions = options.additionalInstructions?.trim()
       ? `\nAdditional user instructions:\n${options.additionalInstructions.trim()}\n`
@@ -361,7 +373,7 @@ ${noteContent}`;
       ? `\nAdditional context from related notes:\n${options.extraContext.trim()}\n`
       : '';
     const conceptSection = concepts.length
-      ? `\nKey concepts identified in this excerpt — ground the questions in these:\n${concepts
+      ? `\nKey concepts identified in this excerpt (including domain keywords) — ground the questions in these:\n${concepts
         .map((concept) => `- ${concept.name}: ${concept.summary}${concept.sourceQuote ? ` ("${concept.sourceQuote}")` : ''}`)
         .join('\n')}\n`
       : '';
@@ -387,6 +399,24 @@ ${noteContent}`;
       ? 'IMPORTANT: Your previous answer was not valid JSON. Respond now with ONLY the JSON object. No thinking out loud, no explanations, no markdown fences.\n\n'
       : '';
 
+    const countRule = options.adaptiveCount
+      ? `- ADAPTIVE CARD COUNT (Guideline: ~${options.questionCount} cards):
+  You must determine the optimal number of cards based on the information density and importance of the concepts:
+  * If the text is rich with crucial concepts, rules, keywords, and subtle distinctions, create more cards (up to ${Math.min(40, Math.ceil(options.questionCount * 1.8))}) so that every key idea is surfaced and retained.
+  * If the text is introductory, brief, or low-density, create fewer cards without creating fluff or trivial wording recall.
+  * RETENTION GOAL: Ensure comprehensive coverage. Every key concept, rule, and domain keyword identified in the research pass must be prompted by at least one card.`
+      : `- Create ${options.questionCount} useful questions. Cover different concepts — do not ask the same thing twice.`;
+
+    const typeSelectionRule = options.autoCardTypes
+      ? `- SMART CARD TYPE SELECTION FOR MAXIMUM RETENTION:
+  Allowed questionType values: ${typeList}.
+  For EACH concept, choose the questionType that builds the strongest memory and retention:
+  * Exact syntax, language keywords, API method calls, parameter ordering, flags, formulas, or short precise terms -> USE "typed_fields_exact" OR "typed_exact".
+  * Subtle distinctions between similar ideas, common pitfalls, traps, or edge cases -> USE "multiple_choice" (choices must be exactly 4 plausible options, answerText is the correct option).
+  * Conceptual explanations, "why/how", architectural trade-offs, internal mechanics -> USE "typed_llm_checked" (include evaluation rubric in metadata) OR "self_check".
+  * General definition or quick recall -> USE "self_check".`
+      : `- Allowed questionType values: ${typeList}.`;
+
     return `${retryPreamble}Generate spaced repetition review questions from this Obsidian note.
 
 Return ONLY valid JSON. Do not wrap it in markdown. Do not include commentary.
@@ -411,9 +441,8 @@ JSON shape:
 }
 
 Rules:
-- Create ${options.questionCount} useful questions.
-- Allowed questionType values: ${typeList}.
-- Cover different concepts — do not ask the same thing twice.
+${countRule}
+${typeSelectionRule}
 - Aim for a difficulty mix: mostly medium, a few easy and a few hard (set metadata.difficulty to easy/medium/hard).
 - For self_check, answerCheckMode must be "self".
 - For typed_exact, answerCheckMode must be "exact" and answerText should be concise.

@@ -19,6 +19,8 @@ export class FlashcardGenerationView extends ItemView {
   private includeTypedFieldsExact = false;
   private includeMultipleChoice = false;
   private includeLlmChecked = false;
+  private adaptiveCardCount = true;
+  private autoCardTypes = true;
   private studySets: SpacedRepetitionStudySetRecord[] = [];
   private selectedStudySetId = '';
   private newDeckName = '';
@@ -41,6 +43,8 @@ export class FlashcardGenerationView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.contentEl.addClass('flashcard-generation-view');
+    this.adaptiveCardCount = this.plugin.settings.flashcardAdaptiveCardCount ?? true;
+    this.autoCardTypes = this.plugin.settings.flashcardAutoCardTypes ?? true;
     await this.loadActiveNoteContext();
     await this.loadStudySets();
     this.render();
@@ -164,6 +168,7 @@ export class FlashcardGenerationView extends ItemView {
   private renderGenerationControls(container: HTMLElement): void {
     new Setting(container)
       .setName('Question Count')
+      .setDesc(this.adaptiveCardCount ? 'Target guideline; LLM will adjust based on concept density.' : 'Exact card count to generate.')
       .addText((text) => text
         .setValue(String(this.questionCount))
         .onChange((value) => {
@@ -174,35 +179,57 @@ export class FlashcardGenerationView extends ItemView {
         }));
 
     new Setting(container)
-      .setName('Self-check')
-      .addToggle((toggle) => toggle.setValue(this.includeSelfCheck).onChange((value) => {
-        this.includeSelfCheck = value;
-      }));
+      .setName('Adaptive Card Count')
+      .setDesc('Card count is a guideline. Let the model decide the optimal number of cards based on concept and keyword density to ensure complete retention.')
+      .addToggle((toggle) => toggle
+        .setValue(this.adaptiveCardCount)
+        .onChange((value) => {
+          this.adaptiveCardCount = value;
+          this.render();
+        }));
 
     new Setting(container)
-      .setName('Typed exact')
-      .addToggle((toggle) => toggle.setValue(this.includeTypedExact).onChange((value) => {
-        this.includeTypedExact = value;
-      }));
+      .setName('Auto / Smart Card Types')
+      .setDesc('Let the model choose the optimal card type for each concept (syntax/keywords -> exact fields, distinctions -> multiple choice, concepts -> LLM check).')
+      .addToggle((toggle) => toggle
+        .setValue(this.autoCardTypes)
+        .onChange((value) => {
+          this.autoCardTypes = value;
+          this.render();
+        }));
 
-    new Setting(container)
-      .setName('Typed exact fields')
-      .setDesc('Use for exact syntax pieces such as method name, parameters, flags, or function call parts.')
-      .addToggle((toggle) => toggle.setValue(this.includeTypedFieldsExact).onChange((value) => {
-        this.includeTypedFieldsExact = value;
-      }));
+    if (!this.autoCardTypes) {
+      new Setting(container)
+        .setName('Self-check')
+        .addToggle((toggle) => toggle.setValue(this.includeSelfCheck).onChange((value) => {
+          this.includeSelfCheck = value;
+        }));
 
-    new Setting(container)
-      .setName('Multiple choice')
-      .addToggle((toggle) => toggle.setValue(this.includeMultipleChoice).onChange((value) => {
-        this.includeMultipleChoice = value;
-      }));
+      new Setting(container)
+        .setName('Typed exact')
+        .addToggle((toggle) => toggle.setValue(this.includeTypedExact).onChange((value) => {
+          this.includeTypedExact = value;
+        }));
 
-    new Setting(container)
-      .setName('LLM-checked typed')
-      .addToggle((toggle) => toggle.setValue(this.includeLlmChecked).onChange((value) => {
-        this.includeLlmChecked = value;
-      }));
+      new Setting(container)
+        .setName('Typed exact fields')
+        .setDesc('Use for exact syntax pieces such as method name, parameters, flags, or function call parts.')
+        .addToggle((toggle) => toggle.setValue(this.includeTypedFieldsExact).onChange((value) => {
+          this.includeTypedFieldsExact = value;
+        }));
+
+      new Setting(container)
+        .setName('Multiple choice')
+        .addToggle((toggle) => toggle.setValue(this.includeMultipleChoice).onChange((value) => {
+          this.includeMultipleChoice = value;
+        }));
+
+      new Setting(container)
+        .setName('LLM-checked typed')
+        .addToggle((toggle) => toggle.setValue(this.includeLlmChecked).onChange((value) => {
+          this.includeLlmChecked = value;
+        }));
+    }
   }
 
   private renderContextControls(container: HTMLElement): void {
@@ -345,6 +372,8 @@ export class FlashcardGenerationView extends ItemView {
         model: this.plugin.settings.flashcardGenerationModel,
         questionCount: this.questionCount,
         questionTypes,
+        adaptiveCount: this.adaptiveCardCount,
+        autoCardTypes: this.autoCardTypes,
         additionalInstructions: this.prompt,
         outputLanguage: this.plugin.settings.defaultOutputLanguage || 'english',
         temperature: this.plugin.settings.flashcardGenerationTemperature,
@@ -476,6 +505,9 @@ export class FlashcardGenerationView extends ItemView {
   }
 
   private getSelectedQuestionTypes(): QuestionType[] {
+    if (this.autoCardTypes) {
+      return ['self_check', 'typed_exact', 'typed_fields_exact', 'typed_llm_checked', 'multiple_choice'];
+    }
     const types: QuestionType[] = [];
     if (this.includeSelfCheck) types.push('self_check');
     if (this.includeTypedExact) types.push('typed_exact');

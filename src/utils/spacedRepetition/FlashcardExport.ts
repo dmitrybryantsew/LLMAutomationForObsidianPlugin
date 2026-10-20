@@ -36,11 +36,24 @@ function renderCardsMarkdown(cards: CardManagementRecord[]): string {
       `- Note: ${card.notePath ?? 'No note'}`,
       `- Status: ${card.enabled ? 'Enabled' : 'Suspended'}${card.archivedAt ? ' (Archived)' : ''}`,
       `- Due: ${card.nextRepeatAt}`,
+      card.answerCheckMode ? `- Check Mode: \`${card.answerCheckMode}\`` : '',
       '',
       '### Question',
       '',
       card.questionText,
-      '',
+      ''
+    );
+
+    if (card.choices?.length) {
+      lines.push('### Choices', '');
+      for (const choice of card.choices) {
+        const isCorrect = choice.trim().toLowerCase() === (card.answerText ?? '').trim().toLowerCase();
+        lines.push(`- [${isCorrect ? 'x' : ' '}] ${choice}`);
+      }
+      lines.push('');
+    }
+
+    lines.push(
       '### Answer',
       '',
       card.answerText ?? '',

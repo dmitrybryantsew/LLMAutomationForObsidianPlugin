@@ -308,6 +308,8 @@ export class FlashcardHubView extends ItemView {
       this.plugin.openFlashcardsFromBookModal());
     this.addQuickAction(mainGroup, '📥 Import OSR Cards', true, () =>
       this.plugin.openImportObsidianSpacedRepetitionModal());
+    this.addQuickAction(mainGroup, '📋 Import JSON Cards', true, () =>
+      this.plugin.openImportFlashcardJsonModal());
     this.addQuickAction(mainGroup, '🗂 Browse Cards (M)', true, () =>
       this.plugin.activateView(VIEW_TYPE_SPACED_REPETITION_CARD_MANAGEMENT));
     this.addQuickAction(mainGroup, '➕ New Deck (N)', true, () => this.openNewDeckForm());

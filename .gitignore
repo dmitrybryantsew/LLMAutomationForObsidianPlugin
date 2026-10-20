@@ -48,3 +48,4 @@ companion/.pytest_cache/
 
 docs/
 src/.mermaid-export
+.workbuddy-ai/

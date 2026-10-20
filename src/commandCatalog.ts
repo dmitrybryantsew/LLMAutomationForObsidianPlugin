@@ -233,6 +233,24 @@ export const PLUGIN_COMMAND_CATALOG: PluginCommandCatalogEntry[] = [
     description: 'Scans markdown notes for cards from the obsidian-spaced-repetition plugin (#CSharpFlashcards, #German, etc.) and imports them in customizable batches with scheduling preserved.',
   },
   {
+    id: 'import-flashcards-json',
+    name: 'Import Flashcards from JSON',
+    group: 'Learning',
+    description: 'Imports flashcards from JSON (clipboard or file) with full support for multiple choice, typed exact, typed fields, and rubrics.',
+  },
+  {
+    id: 'export-flashcards-json',
+    name: 'Export Flashcards to JSON',
+    group: 'Learning',
+    description: 'Exports flashcards to JSON preserving all card types, choices, fields, and schedules.',
+  },
+  {
+    id: 'export-flashcards-markdown',
+    name: 'Export Flashcards to Markdown',
+    group: 'Learning',
+    description: 'Exports flashcards to a human-readable Markdown document.',
+  },
+  {
     id: 'open-coding-exercises',
     name: 'Open Coding Exercises',
     group: 'Learning',

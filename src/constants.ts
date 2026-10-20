@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS = {
   flashcardGenerationMaxTokens: 8000,
   flashcardTwoPassGeneration: true,
   flashcardStripThinking: true,
+  flashcardAdaptiveCardCount: true,
+  flashcardAutoCardTypes: true,
   flashcardConceptExtractionPrompt: "",
   flashcardQuestionGenerationPrompt: "",
   codingExercisesFolder: "Coding Exercises",

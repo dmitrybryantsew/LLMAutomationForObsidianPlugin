@@ -62,6 +62,8 @@ export class FlashcardsFromBookModal extends Modal {
   private includeTypedFieldsExact = false;
   private includeMultipleChoice = false;
   private includeLlmChecked = false;
+  private adaptiveCardCount = true;
+  private autoCardTypes = true;
   private studySets: SpacedRepetitionStudySetRecord[] = [];
   private selectedStudySetId = '';
   private newDeckName = '';
@@ -81,6 +83,8 @@ export class FlashcardsFromBookModal extends Modal {
 
   async onOpen(): Promise<void> {
     this.contentEl.empty();
+    this.adaptiveCardCount = this.plugin.settings.flashcardAdaptiveCardCount ?? true;
+    this.autoCardTypes = this.plugin.settings.flashcardAutoCardTypes ?? true;
     await this.loadSourceRoots();
     await this.loadStudySets();
     this.render();
@@ -526,6 +530,7 @@ export class FlashcardsFromBookModal extends Modal {
 
     new Setting(section)
       .setName('Questions per chapter / 20 pages')
+      .setDesc(this.adaptiveCardCount ? 'Target guideline; LLM will adjust based on concept density.' : 'Target card count per chunk.')
       .addText((text) => text
         .setValue(String(this.questionCount))
         .onChange((value) => {
@@ -536,6 +541,31 @@ export class FlashcardsFromBookModal extends Modal {
         }));
 
     new Setting(section)
+      .setName('Adaptive Card Count')
+      .setDesc('Card count is a guideline. Let the model decide the optimal number of cards based on concept and keyword density to ensure complete retention.')
+      .addToggle((toggle) => toggle
+        .setValue(this.adaptiveCardCount)
+        .onChange((value) => {
+          this.adaptiveCardCount = value;
+          this.render();
+        }));
+
+    new Setting(section)
+      .setName('Auto / Smart Card Types')
+      .setDesc('Let the model choose the optimal card type for each concept (syntax/keywords -> exact fields, distinctions -> multiple choice, concepts -> LLM check).')
+      .addToggle((toggle) => toggle
+        .setValue(this.autoCardTypes)
+        .onChange((value) => {
+          this.autoCardTypes = value;
+          this.render();
+        }));
+
+    if (!this.autoCardTypes) {
+      const typesSetting = new Setting(section).setName('Card types').setDesc('Manual types: self-check, typed exact, exact fields, multiple choice, LLM checked.');
+      this.renderTypeToggles(typesSetting);
+    }
+
+    new Setting(section)
       .setName('Additional direction')
       .setDesc('Extra instructions appended to the generation prompt for this run (e.g. "focus on async/await", "include edge cases").')
       .addTextArea((text) => text
@@ -544,9 +574,6 @@ export class FlashcardsFromBookModal extends Modal {
         .onChange((value) => {
           this.additionalDirection = value;
         }));
-
-    const typesSetting = new Setting(section).setName('Card types').setDesc('What kinds of questions to generate.');
-    this.renderTypeToggles(typesSetting);
 
     new Setting(section)
       .setName('Save To Deck')
@@ -810,6 +837,8 @@ export class FlashcardsFromBookModal extends Modal {
             model: this.plugin.settings.flashcardGenerationModel,
             questionCount: this.questionCount,
             questionTypes,
+            adaptiveCount: this.adaptiveCardCount,
+            autoCardTypes: this.autoCardTypes,
             additionalInstructions: this.buildUnitInstructions(unit) + (this.additionalDirection.trim() ? `\n${this.additionalDirection.trim()}` : ''),
             outputLanguage: this.cardsLanguage,
             temperature: this.plugin.settings.flashcardGenerationTemperature,
@@ -937,6 +966,9 @@ export class FlashcardsFromBookModal extends Modal {
   }
 
   private getSelectedQuestionTypes(): QuestionType[] {
+    if (this.autoCardTypes) {
+      return ['self_check', 'typed_exact', 'typed_fields_exact', 'typed_llm_checked', 'multiple_choice'];
+    }
     const types: QuestionType[] = [];
     if (this.includeSelfCheck) types.push('self_check');
     if (this.includeTypedExact) types.push('typed_exact');

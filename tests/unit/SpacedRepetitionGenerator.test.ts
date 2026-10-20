@@ -392,4 +392,87 @@ describe('SpacedRepetitionGenerator research pipeline', () => {
     expect(concepts).toBe(cachedConcepts);
     expect(generateText).toHaveBeenCalledTimes(1);
   });
+
+  it('includes adaptive card count instructions and retention goal when adaptiveCount is true', async () => {
+    const questionsJson = JSON.stringify({
+      questions: [{ questionText: 'Adaptive Q?', answerText: 'Answer', questionType: 'self_check' }],
+    });
+    const generateText = vi.fn().mockResolvedValue({ output: questionsJson });
+    const client = { generateText };
+    const generator = new SpacedRepetitionGenerator({
+      getClient: () => client,
+      getClientForProvider: () => client,
+    } as any);
+
+    await generator.generateQuestionsForNote({
+      ...options,
+      questionCount: 10,
+      adaptiveCount: true,
+      twoPass: false,
+    });
+
+    const prompt = generateText.mock.calls[0][0].message;
+    expect(prompt).toContain('ADAPTIVE CARD COUNT (Guideline: ~10 cards)');
+    expect(prompt).toContain('RETENTION GOAL: Ensure comprehensive coverage');
+  });
+
+  it('includes smart card type selection rules when autoCardTypes is true', async () => {
+    const questionsJson = JSON.stringify({
+      questions: [
+        {
+          questionText: 'Smart Q?',
+          answerText: 'Answer',
+          questionType: 'typed_fields_exact',
+          metadata: {
+            exactFields: [{ id: 'f1', label: 'Keyword', answer: 'Answer' }],
+          },
+        },
+      ],
+    });
+    const generateText = vi.fn().mockResolvedValue({ output: questionsJson });
+    const client = { generateText };
+    const generator = new SpacedRepetitionGenerator({
+      getClient: () => client,
+      getClientForProvider: () => client,
+    } as any);
+
+    await generator.generateQuestionsForNote({
+      ...options,
+      autoCardTypes: true,
+      twoPass: false,
+    });
+
+    const prompt = generateText.mock.calls[0][0].message;
+    expect(prompt).toContain('SMART CARD TYPE SELECTION FOR MAXIMUM RETENTION');
+    expect(prompt).toContain('typed_fields_exact');
+    expect(prompt).toContain('multiple_choice');
+    expect(prompt).toContain('typed_llm_checked');
+  });
+
+  it('concept extraction prompt prioritizes domain keywords and durable retention', async () => {
+    const conceptsJson = JSON.stringify({
+      concepts: [{ name: 'Keyword', summary: 'Reserved syntax token', kind: 'keyword_or_syntax' }],
+    });
+    const questionsJson = JSON.stringify({
+      questions: [{ questionText: 'Q?', answerText: 'A', questionType: 'self_check' }],
+    });
+    const generateText = vi.fn()
+      .mockResolvedValueOnce({ output: conceptsJson })
+      .mockResolvedValueOnce({ output: questionsJson });
+    const client = { generateText };
+    const generator = new SpacedRepetitionGenerator({
+      getClient: () => client,
+      getClientForProvider: () => client,
+    } as any);
+
+    await generator.generateQuestionsForNote({
+      ...options,
+      twoPass: true,
+    });
+
+    const conceptPrompt = generateText.mock.calls[0][0].message;
+    expect(conceptPrompt).toContain('domain keywords');
+    expect(conceptPrompt).toContain('complete understanding and durable retention');
+    expect(conceptPrompt).toContain('keyword_or_syntax');
+  });
 });

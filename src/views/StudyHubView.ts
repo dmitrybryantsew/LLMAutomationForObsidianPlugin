@@ -463,6 +463,11 @@ export class StudyHubView extends ItemView {
           enabled: true,
           handler: () => this.plugin.openImportObsidianSpacedRepetitionModal(),
         },
+        {
+          label: 'Import JSON Cards',
+          enabled: true,
+          handler: () => this.plugin.openImportFlashcardJsonModal(),
+        },
       ],
     });
 

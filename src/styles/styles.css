@@ -927,20 +927,85 @@ kbd {
     border-color: var(--llm-accent, var(--interactive-accent));
 }
 
+.spaced-repetition-answer-input-mono {
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+}
+
+.spaced-repetition-answer-textarea {
+    width: 100%;
+    min-height: 84px;
+    resize: vertical;
+    line-height: 1.45;
+}
+
+.spaced-repetition-input-valid {
+    border-color: var(--text-success) !important;
+    background: rgba(var(--color-green-rgb, 40, 167, 69), 0.05);
+}
+
+.spaced-repetition-input-invalid {
+    border-color: var(--text-error) !important;
+    background: rgba(var(--color-red-rgb, 220, 53, 69), 0.05);
+}
+
 .spaced-repetition-field-inputs {
     display: grid;
-    gap: 10px;
+    gap: 12px;
 }
 
 .spaced-repetition-field-row {
     display: grid;
-    gap: 5px;
+    gap: 6px;
+}
+
+.spaced-repetition-field-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
 }
 
 .spaced-repetition-field-label {
     color: var(--text-muted);
     font-size: 12px;
     font-weight: 600;
+}
+
+.spaced-repetition-fields-score {
+    margin-bottom: 6px;
+}
+
+.spaced-repetition-score-badge {
+    font-weight: 600;
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+    display: inline-block;
+}
+
+.spaced-repetition-field-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.spaced-repetition-expected-code {
+    font-family: var(--font-monospace);
+    background: var(--background-primary-alt);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.spaced-repetition-field-diff {
+    width: 100%;
+    margin-top: 4px;
 }
 
 .spaced-repetition-grade-buttons {
@@ -1094,34 +1159,315 @@ kbd {
     color: var(--text-warning);
 }
 
+.spaced-repetition-diff-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.spaced-repetition-diff-result.spaced-repetition-match-ok {
+    border-left: 4px solid var(--text-success);
+}
+
+.spaced-repetition-diff-result.spaced-repetition-match-different {
+    border-left: 4px solid var(--text-warning);
+}
+
+.spaced-repetition-match-badge {
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.spaced-repetition-diff-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.spaced-repetition-diff-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.spaced-repetition-diff-legend {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Character & Token Diff inline highlights */
+.sr-diff-container {
+    display: inline-block;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    line-height: 1.5;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.sr-diff-equal {
+    color: var(--text-normal);
+}
+
+.sr-diff-missing {
+    color: var(--text-warning);
+    background: rgba(234, 179, 8, 0.18);
+    text-decoration: underline wavy var(--text-warning);
+    font-weight: 600;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+.sr-diff-extra {
+    color: var(--text-error);
+    background: rgba(239, 68, 68, 0.18);
+    text-decoration: line-through;
+    font-weight: 600;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+/* Multiple choice interactive options */
+.spaced-repetition-choices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.spaced-repetition-choice-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--llm-border, var(--background-modifier-border));
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--llm-surface-raised, var(--background-secondary));
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.spaced-repetition-choice-card:hover:not(.spaced-repetition-choice-revealed) {
+    border-color: var(--llm-accent, var(--interactive-accent));
+    background: var(--llm-surface-inset, var(--background-primary-alt));
+    transform: translateX(2px);
+}
+
+.spaced-repetition-choice-selected {
+    border-color: var(--llm-accent, var(--interactive-accent));
+    background: var(--llm-surface-inset, var(--background-primary-alt));
+    box-shadow: 0 0 0 2px var(--llm-accent, var(--interactive-accent));
+}
+
+.spaced-repetition-choice-correct {
+    border-color: var(--text-success) !important;
+    background: rgba(var(--color-green-rgb, 40, 167, 69), 0.14) !important;
+    font-weight: 600;
+}
+
+.spaced-repetition-choice-incorrect {
+    border-color: var(--text-error) !important;
+    background: rgba(var(--color-red-rgb, 220, 53, 69), 0.14) !important;
+}
+
+.spaced-repetition-choice-dimmed {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.spaced-repetition-choice-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 13px;
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+    flex-shrink: 0;
+}
+
+.spaced-repetition-choice-card.spaced-repetition-choice-selected .spaced-repetition-choice-key {
+    background: var(--llm-accent, var(--interactive-accent));
+    color: var(--text-on-accent);
+}
+
+.spaced-repetition-choice-text {
+    flex: 1;
+    font-size: var(--font-ui-medium);
+    line-height: 1.4;
+}
+
+.spaced-repetition-choice-badge {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.spaced-repetition-choice-badge-correct {
+    background: var(--text-success);
+    color: var(--text-on-accent, #fff);
+}
+
+.spaced-repetition-choice-badge-incorrect {
+    background: var(--text-error);
+    color: var(--text-on-accent, #fff);
+}
+
+/* Ollama Checker Evaluation */
+.spaced-repetition-checker-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--llm-radius-md, 8px);
+    background: var(--background-secondary);
+    border: 1px dashed var(--background-modifier-border);
+    color: var(--text-muted);
+}
+
+.spaced-repetition-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--background-modifier-border);
+    border-top-color: var(--interactive-accent);
+    border-radius: 50%;
+    animation: sr-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes sr-spin {
+    to { transform: rotate(360deg); }
+}
+
+.spaced-repetition-loading-text {
+    font-size: var(--font-ui-small);
+}
+
 .spaced-repetition-checker-result {
     border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    padding: 10px 12px;
+    border-radius: var(--llm-radius-md, 8px);
+    padding: 12px 16px;
     background: var(--background-primary-alt);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .spaced-repetition-checker-ok {
-    border-left: 3px solid var(--text-success);
+    border-left: 4px solid var(--text-success);
 }
 
 .spaced-repetition-checker-warning {
-    border-left: 3px solid var(--text-warning);
+    border-left: 4px solid var(--text-warning);
+}
+
+.spaced-repetition-checker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .spaced-repetition-checker-title {
     font-weight: var(--font-semibold);
+    font-size: var(--font-ui-medium);
 }
 
-.spaced-repetition-checker-confidence,
-.spaced-repetition-checker-feedback,
+.spaced-repetition-confidence-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.spaced-repetition-confidence-badge.confidence-high {
+    color: var(--text-success);
+}
+
+.spaced-repetition-confidence-badge.confidence-medium {
+    color: var(--text-warning);
+}
+
+.spaced-repetition-confidence-bar {
+    width: 100%;
+    height: 5px;
+    background: var(--background-modifier-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.spaced-repetition-confidence-fill {
+    height: 100%;
+    background: var(--text-success);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.spaced-repetition-confidence-fill.confidence-warning {
+    background: var(--text-warning);
+}
+
+.spaced-repetition-checker-feedback {
+    font-size: var(--font-ui-small);
+    line-height: 1.45;
+}
+
 .spaced-repetition-checker-corrected {
-    margin-top: 6px;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
 }
 
-.spaced-repetition-choices {
-    margin: 0;
-    padding-left: 24px;
+.spaced-repetition-corrected-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.spaced-repetition-corrected-text {
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+/* Keyboard hint footer */
+.spaced-repetition-shortcuts-hint {
+    margin-top: 14px;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    border-radius: 4px;
+    background: var(--background-secondary);
+    border: 1px dashed var(--background-modifier-border);
+    user-select: none;
+    letter-spacing: 0.2px;
 }
 
 .spaced-repetition-note-chat-modal .modal-content,

@@ -108,6 +108,8 @@ export interface CardManagementRecord {
   questionText: string;
   questionType: string;
   answerText: string | null;
+  choices?: string[] | null;
+  answerCheckMode?: string | null;
   metadata: Record<string, unknown>;
   enabled: boolean;
   archivedAt: string | null;
@@ -967,6 +969,7 @@ export class SpacedRepetitionDatabase {
         q.study_set_id as studySetId, ss.name as studySetName,
         q.question_name as questionName, q.question_text as questionText,
         q.question_type as questionType, q.answer_text as answerText,
+        q.choices_json as choicesJson, q.answer_check_mode as answerCheckMode,
         q.metadata_json as metadataJson, q.enabled, q.archived_at as archivedAt, q.next_repeat_at as nextRepeatAt,
         q.last_reviewed_at as lastReviewedAt, q.created_at as createdAt, q.updated_at as updatedAt,
         q.book_path as bookPath, q.book_name as bookName,
@@ -993,6 +996,8 @@ export class SpacedRepetitionDatabase {
       questionText: String(row.questionText),
       questionType: String(row.questionType),
       answerText: row.answerText ? String(row.answerText) : null,
+      choices: this.parseJson(row.choicesJson, null),
+      answerCheckMode: row.answerCheckMode ? String(row.answerCheckMode) : null,
       metadata: this.parseJson(row.metadataJson, {}),
       enabled: Number(row.enabled) === 1,
       archivedAt: row.archivedAt ? String(row.archivedAt) : null,

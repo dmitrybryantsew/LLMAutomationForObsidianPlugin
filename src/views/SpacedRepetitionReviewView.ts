@@ -5,6 +5,7 @@ import { DueQuestionRecord } from '../utils/spacedRepetition/SpacedRepetitionDat
 import { AnswerCheckerResult, ExactAnswerField, ReviewGrade } from '../types/spacedRepetition';
 import { matchesExactAnswerField, normalizeExactAnswer, normalizeExactAnswerField } from '../utils/spacedRepetition/ExactAnswerMatcher';
 import { shuffleReviewCards } from '../utils/spacedRepetition/SpacedRepetitionScheduler';
+import { computeCharDiff, renderDiffToElement } from '../utils/spacedRepetition/DiffHelper';
 
 export interface SpacedRepetitionReviewMode {
   title: string;
@@ -20,6 +21,7 @@ export class SpacedRepetitionReviewView extends ItemView {
   private answerRevealed = false;
   private userAnswer = '';
   private fieldAnswers: Record<string, string> = {};
+  private selectedChoiceIndex: number | null = null;
   private checkerResult: AnswerCheckerResult | null = null;
   private checkingAnswer = false;
   private sessionReviewed = 0;
@@ -85,6 +87,7 @@ export class SpacedRepetitionReviewView extends ItemView {
     this.answerRevealed = false;
     this.userAnswer = '';
     this.fieldAnswers = {};
+    this.selectedChoiceIndex = null;
     this.checkerResult = null;
     this.checkingAnswer = false;
     this.cardStartedAt = Date.now();
@@ -145,13 +148,17 @@ export class SpacedRepetitionReviewView extends ItemView {
 
     this.renderAnswerInput(card);
 
-    if (this.answerRevealed) {
-      card.createEl('div', {
-        text: this.currentCard.answerText ?? '',
-        cls: 'spaced-repetition-answer-text',
-      });
+    if (this.answerRevealed || this.checkingAnswer) {
+      if (this.answerRevealed) {
+        card.createEl('div', {
+          text: this.currentCard.answerText ?? '',
+          cls: 'spaced-repetition-answer-text',
+        });
+      }
       this.renderCheckerResult(card);
-      this.renderGradeButtons(card);
+      if (this.answerRevealed) {
+        this.renderGradeButtons(card);
+      }
     } else {
       new Setting(card)
         .addButton((button) => {
@@ -177,6 +184,7 @@ export class SpacedRepetitionReviewView extends ItemView {
     }
 
     this.renderCardManagementButtons(card);
+    this.renderKeyboardHints(card);
   }
 
   private renderEmptyState(container: HTMLElement): void {
@@ -241,95 +249,260 @@ export class SpacedRepetitionReviewView extends ItemView {
       return;
     }
 
-    if (this.currentCard.questionType === 'typed_exact' || this.currentCard.questionType === 'typed_llm_checked') {
-      const input = container.createEl('input', {
+    if (this.currentCard.questionType === 'typed_exact') {
+      const inputWrapper = container.createDiv({ cls: 'spaced-repetition-input-wrapper' });
+      const input = inputWrapper.createEl('input', {
         type: 'text',
-        cls: 'spaced-repetition-answer-input',
-        attr: { placeholder: 'Type answer, then reveal/check' },
+        cls: 'spaced-repetition-answer-input spaced-repetition-answer-input-mono',
+        attr: { placeholder: 'Type exact answer, then press Enter or Reveal' },
       });
       input.value = this.userAnswer;
       input.addEventListener('input', () => {
         this.userAnswer = input.value;
       });
       input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && this.currentCard?.questionType === 'typed_llm_checked' && !this.answerRevealed) {
+        if (event.key === 'Enter' && !this.answerRevealed) {
           event.preventDefault();
-          this.checkAnswerWithOllama();
+          this.answerRevealed = true;
+          this.render();
         }
       });
 
-      if (this.currentCard.questionType === 'typed_exact' && this.answerRevealed) {
+      if (!this.answerRevealed) {
+        setTimeout(() => input.focus(), 30);
+      } else {
+        input.disabled = true;
         const normalizedUser = normalizeExactAnswer(this.userAnswer);
         const normalizedExpected = normalizeExactAnswer(this.currentCard.answerText ?? '');
-        container.createEl('div', {
-          text: normalizedUser === normalizedExpected ? 'Exact match' : 'Different from expected answer',
-          cls: normalizedUser === normalizedExpected ? 'spaced-repetition-match-ok' : 'spaced-repetition-match-different',
+        const isMatch = normalizedUser === normalizedExpected;
+        input.addClass(isMatch ? 'spaced-repetition-input-valid' : 'spaced-repetition-input-invalid');
+
+        const resultBanner = container.createDiv({
+          cls: `spaced-repetition-diff-result ${isMatch ? 'spaced-repetition-match-ok' : 'spaced-repetition-match-different'}`,
         });
+
+        if (isMatch) {
+          resultBanner.createSpan({ text: '✓ Exact match', cls: 'spaced-repetition-match-badge' });
+        } else {
+          resultBanner.createSpan({ text: '✗ Different from expected', cls: 'spaced-repetition-match-badge' });
+          const diffBox = resultBanner.createDiv({ cls: 'spaced-repetition-diff-box' });
+          diffBox.createDiv({ text: 'Detailed difference:', cls: 'spaced-repetition-diff-label' });
+          const chunks = computeCharDiff(this.userAnswer, this.currentCard.answerText ?? '');
+          renderDiffToElement(diffBox, chunks);
+          diffBox.createDiv({
+            text: 'Legend: Green = matched, Red strikethrough = extra typed, Yellow wavy = missing expected',
+            cls: 'spaced-repetition-diff-legend',
+          });
+        }
       }
     }
 
     if (this.currentCard.questionType === 'typed_fields_exact') {
       const fields = this.getExactFields(this.currentCard.metadata);
       const fieldContainer = container.createDiv({ cls: 'spaced-repetition-field-inputs' });
-      for (const field of fields) {
+      const fieldInputs: HTMLInputElement[] = [];
+
+      if (this.answerRevealed) {
+        let matchedFieldsCount = 0;
+        for (const field of fields) {
+          if (matchesExactAnswerField(this.fieldAnswers[field.id] ?? '', field)) {
+            matchedFieldsCount++;
+          }
+        }
+        const scoreBanner = fieldContainer.createDiv({
+          cls: `spaced-repetition-fields-score ${matchedFieldsCount === fields.length ? 'spaced-repetition-match-ok' : 'spaced-repetition-match-different'}`,
+        });
+        scoreBanner.createSpan({
+          text: `${matchedFieldsCount} / ${fields.length} fields correct`,
+          cls: 'spaced-repetition-score-badge',
+        });
+      }
+
+      fields.forEach((field, index) => {
         const row = fieldContainer.createDiv({ cls: 'spaced-repetition-field-row' });
-        row.createEl('label', { text: field.label, cls: 'spaced-repetition-field-label' });
+        const labelRow = row.createDiv({ cls: 'spaced-repetition-field-label-row' });
+        labelRow.createEl('label', { text: field.label, cls: 'spaced-repetition-field-label' });
+
         const input = row.createEl('input', {
           type: 'text',
-          cls: 'spaced-repetition-answer-input spaced-repetition-field-input',
-          attr: { placeholder: field.placeholder || 'Type exact value' },
+          cls: 'spaced-repetition-answer-input spaced-repetition-field-input spaced-repetition-answer-input-mono',
+          attr: { placeholder: field.placeholder || `Type ${field.label}` },
         });
         input.value = this.fieldAnswers[field.id] ?? '';
+        fieldInputs.push(input);
+
         input.addEventListener('input', () => {
           this.fieldAnswers[field.id] = input.value;
         });
 
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            if (index < fields.length - 1) {
+              fieldInputs[index + 1]?.focus();
+            } else if (!this.answerRevealed) {
+              this.answerRevealed = true;
+              this.render();
+            }
+          }
+        });
+
         if (this.answerRevealed) {
+          input.disabled = true;
           const isMatch = matchesExactAnswerField(this.fieldAnswers[field.id] ?? '', field);
-          row.createEl('div', {
-            text: isMatch ? 'Match' : `Expected: ${field.answer}`,
-            cls: isMatch ? 'spaced-repetition-match-ok' : 'spaced-repetition-match-different',
-          });
+          input.addClass(isMatch ? 'spaced-repetition-input-valid' : 'spaced-repetition-input-invalid');
+
+          const statusEl = row.createDiv({ cls: 'spaced-repetition-field-status' });
+          if (isMatch) {
+            statusEl.createSpan({ text: '✓ Match', cls: 'spaced-repetition-match-ok' });
+          } else {
+            statusEl.createSpan({ text: '✗ Expected: ', cls: 'spaced-repetition-match-different' });
+            statusEl.createEl('code', { text: field.answer, cls: 'spaced-repetition-expected-code' });
+            if (this.fieldAnswers[field.id]?.trim()) {
+              const diffLine = statusEl.createDiv({ cls: 'spaced-repetition-field-diff' });
+              renderDiffToElement(diffLine, computeCharDiff(this.fieldAnswers[field.id], field.answer));
+            }
+          }
         }
+      });
+
+      if (!this.answerRevealed && fieldInputs.length > 0) {
+        setTimeout(() => fieldInputs[0]?.focus(), 30);
+      }
+    }
+
+    if (this.currentCard.questionType === 'typed_llm_checked') {
+      const textareaWrapper = container.createDiv({ cls: 'spaced-repetition-textarea-wrapper' });
+      const textarea = textareaWrapper.createEl('textarea', {
+        cls: 'spaced-repetition-answer-input spaced-repetition-answer-textarea',
+        attr: {
+          placeholder: 'Type your explanation or response here...\n(Press Ctrl+Enter or Cmd+Enter to evaluate with Ollama)',
+          rows: '3',
+        },
+      });
+      textarea.value = this.userAnswer;
+      textarea.addEventListener('input', () => {
+        this.userAnswer = textarea.value;
+      });
+
+      textarea.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !this.answerRevealed && !this.checkingAnswer) {
+          event.preventDefault();
+          this.checkAnswerWithOllama();
+        }
+      });
+
+      if (!this.answerRevealed && !this.checkingAnswer) {
+        setTimeout(() => textarea.focus(), 30);
+      } else if (this.answerRevealed) {
+        textarea.disabled = true;
       }
     }
 
     if (this.currentCard.questionType === 'multiple_choice' && this.currentCard.choices?.length) {
-      const choices = container.createEl('ol', { cls: 'spaced-repetition-choices' });
-      for (const choice of this.currentCard.choices) {
-        choices.createEl('li', { text: choice });
-      }
+      const choicesContainer = container.createDiv({ cls: 'spaced-repetition-choices-list' });
+      const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+      const expectedAnswerText = (this.currentCard.answerText ?? '').trim().toLowerCase();
+
+      this.currentCard.choices.forEach((choice, index) => {
+        const letter = optionLetters[index] ?? String(index + 1);
+        const isSelected = this.selectedChoiceIndex === index;
+        const normalizedChoice = choice.trim().toLowerCase();
+        const isCorrectChoice = normalizedChoice === expectedAnswerText;
+
+        const choiceCard = choicesContainer.createDiv({
+          cls: 'spaced-repetition-choice-card',
+        });
+
+        if (!this.answerRevealed) {
+          if (isSelected) {
+            choiceCard.addClass('spaced-repetition-choice-selected');
+          }
+          choiceCard.addEventListener('click', () => {
+            this.selectedChoiceIndex = index;
+            this.render();
+          });
+        } else {
+          choiceCard.addClass('spaced-repetition-choice-revealed');
+          if (isCorrectChoice) {
+            choiceCard.addClass('spaced-repetition-choice-correct');
+          } else if (isSelected) {
+            choiceCard.addClass('spaced-repetition-choice-incorrect');
+          } else {
+            choiceCard.addClass('spaced-repetition-choice-dimmed');
+          }
+        }
+
+        choiceCard.createSpan({
+          text: letter,
+          cls: 'spaced-repetition-choice-key',
+        });
+
+        choiceCard.createSpan({
+          text: choice,
+          cls: 'spaced-repetition-choice-text',
+        });
+
+        if (this.answerRevealed) {
+          if (isCorrectChoice) {
+            choiceCard.createSpan({
+              text: '✓ Correct',
+              cls: 'spaced-repetition-choice-badge spaced-repetition-choice-badge-correct',
+            });
+          } else if (isSelected) {
+            choiceCard.createSpan({
+              text: '✗ Selected',
+              cls: 'spaced-repetition-choice-badge spaced-repetition-choice-badge-incorrect',
+            });
+          }
+        }
+      });
     }
   }
 
   private renderCheckerResult(container: HTMLElement): void {
+    if (this.checkingAnswer) {
+      const loading = container.createDiv({ cls: 'spaced-repetition-checker-loading' });
+      loading.createSpan({ cls: 'spaced-repetition-spinner' });
+      loading.createSpan({ text: 'Evaluating your answer with Ollama...', cls: 'spaced-repetition-loading-text' });
+      return;
+    }
+
     if (!this.checkerResult) {
       return;
     }
 
-    const result = container.createDiv({
-      cls: this.checkerResult.isAcceptable
-        ? 'spaced-repetition-checker-result spaced-repetition-checker-ok'
-        : 'spaced-repetition-checker-result spaced-repetition-checker-warning',
+    const isAcceptable = this.checkerResult.isAcceptable;
+    const resultCard = container.createDiv({
+      cls: `spaced-repetition-checker-result ${isAcceptable ? 'spaced-repetition-checker-ok' : 'spaced-repetition-checker-warning'}`,
     });
-    result.createEl('div', {
-      text: this.checkerResult.isAcceptable ? 'Ollama check: acceptable' : 'Ollama check: needs work',
+
+    const header = resultCard.createDiv({ cls: 'spaced-repetition-checker-header' });
+    header.createSpan({
+      text: isAcceptable ? '✓ Ollama: Acceptable' : '⚠ Ollama: Needs Work',
       cls: 'spaced-repetition-checker-title',
     });
-    result.createEl('div', {
-      text: `Confidence: ${Math.round(this.checkerResult.confidence * 100)}%`,
-      cls: 'spaced-repetition-checker-confidence',
+
+    const confidencePct = Math.round(this.checkerResult.confidence * 100);
+    header.createSpan({
+      text: `${confidencePct}% confidence`,
+      cls: `spaced-repetition-confidence-badge ${confidencePct >= 70 ? 'confidence-high' : 'confidence-medium'}`,
     });
-    result.createEl('div', {
+
+    const barContainer = resultCard.createDiv({ cls: 'spaced-repetition-confidence-bar' });
+    const fill = barContainer.createDiv({ cls: 'spaced-repetition-confidence-fill' });
+    fill.style.width = `${Math.max(5, Math.min(100, confidencePct))}%`;
+    if (!isAcceptable) fill.addClass('confidence-warning');
+
+    resultCard.createDiv({
       text: this.checkerResult.feedback,
       cls: 'spaced-repetition-checker-feedback',
     });
 
     if (this.checkerResult.correctedAnswer) {
-      result.createEl('div', {
-        text: `Suggested answer: ${this.checkerResult.correctedAnswer}`,
-        cls: 'spaced-repetition-checker-corrected',
-      });
+      const correctedBox = resultCard.createDiv({ cls: 'spaced-repetition-checker-corrected' });
+      correctedBox.createEl('div', { text: 'Suggested Answer / Key Points:', cls: 'spaced-repetition-corrected-label' });
+      correctedBox.createEl('div', { text: this.checkerResult.correctedAnswer, cls: 'spaced-repetition-corrected-text' });
     }
   }
 
@@ -520,30 +693,77 @@ export class SpacedRepetitionReviewView extends ItemView {
       return;
     }
 
-    if (event.key === ' ' && !this.answerRevealed) {
+    // Multiple choice option selection with 1-4 or A-D
+    if (!this.answerRevealed && this.currentCard.questionType === 'multiple_choice' && this.currentCard.choices?.length) {
+      const num = parseInt(event.key, 10);
+      if (!Number.isNaN(num) && num >= 1 && num <= this.currentCard.choices.length) {
+        event.preventDefault();
+        this.selectedChoiceIndex = num - 1;
+        this.render();
+        return;
+      }
+      const charCode = event.key.toUpperCase().charCodeAt(0);
+      if (event.key.length === 1 && charCode >= 65 && charCode < 65 + this.currentCard.choices.length) {
+        event.preventDefault();
+        this.selectedChoiceIndex = charCode - 65;
+        this.render();
+        return;
+      }
+    }
+
+    if ((event.key === ' ' || event.key === 'Enter') && !this.answerRevealed) {
       event.preventDefault();
       this.answerRevealed = true;
       this.render();
+      return;
     }
 
     if (this.answerRevealed && ['0', '1', '2', '3', '4'].includes(event.key)) {
       event.preventDefault();
       this.gradeCurrentCard(Number(event.key) as ReviewGrade);
+      return;
     }
 
     if (this.answerRevealed && event.key.toLowerCase() === 'l') {
       event.preventDefault();
       this.gradeCurrentCardLaterToday();
+      return;
     }
 
     if (event.key.toLowerCase() === 'b') {
       event.preventDefault();
       this.buryCurrentCardUntilTomorrow();
+      return;
     }
 
     if (event.key.toLowerCase() === 's') {
       event.preventDefault();
       this.suspendCurrentCard();
+      return;
+    }
+  }
+
+  private renderKeyboardHints(container: HTMLElement): void {
+    if (!this.currentCard) {
+      return;
+    }
+
+    const footer = container.createDiv({ cls: 'spaced-repetition-shortcuts-hint' });
+
+    if (!this.answerRevealed) {
+      if (this.currentCard.questionType === 'multiple_choice') {
+        footer.setText('[1–4 / A–D] Select Option  •  [Space / Enter] Reveal Answer  •  [S] Suspend  •  [B] Bury');
+      } else if (this.currentCard.questionType === 'typed_exact') {
+        footer.setText('[Enter] Reveal & Compare  •  [S] Suspend  •  [B] Bury');
+      } else if (this.currentCard.questionType === 'typed_fields_exact') {
+        footer.setText('[Tab / Enter] Next Field  •  [Enter on last] Reveal  •  [S] Suspend  •  [B] Bury');
+      } else if (this.currentCard.questionType === 'typed_llm_checked') {
+        footer.setText('[Ctrl+Enter] Evaluate with Ollama  •  [Space] Reveal  •  [S] Suspend  •  [B] Bury');
+      } else {
+        footer.setText('[Space / Enter] Reveal Answer  •  [S] Suspend  •  [B] Bury');
+      }
+    } else {
+      footer.setText('[0] Again  •  [1] Barely  •  [2] Partial  •  [3] Good  •  [4] Easy  •  [L] Later Today');
     }
   }
 
@@ -566,6 +786,10 @@ export class SpacedRepetitionReviewView extends ItemView {
   }
 
   private getRecordedUserAnswer(): string | null {
+    if (this.currentCard?.questionType === 'multiple_choice' && this.selectedChoiceIndex !== null && this.currentCard.choices) {
+      return this.currentCard.choices[this.selectedChoiceIndex] ?? null;
+    }
+
     if (this.currentCard?.questionType === 'typed_fields_exact') {
       return JSON.stringify(this.fieldAnswers);
     }
