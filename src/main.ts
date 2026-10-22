@@ -50,6 +50,7 @@ import { FlashcardsFromBookModal } from './modals/FlashcardsFromBookModal';
 import { ImportObsidianSpacedRepetitionModal } from './modals/ImportObsidianSpacedRepetitionModal';
 import { ImportFlashcardJsonModal } from './modals/ImportFlashcardJsonModal';
 import { ExportFlashcardsModal } from './modals/ExportFlashcardsModal';
+import { SpacedRepetitionFilterReviewModal } from './modals/SpacedRepetitionFilterReviewModal';
 import { CardSyncClient } from './utils/spacedRepetition/CardSyncClient';
 import { NoteSyncManager } from './utils/sync/NoteSyncManager';
 import { ProjectLauncherModal } from './modals/ProjectLauncherModal';
@@ -77,13 +78,8 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // Initialize services (includes PathManager and TagManager async init)
     this.services = new PluginServices(this.app, this, this.settings);
     
-    // Initialize async services that need `await`
+    // Initialize core async services that need immediate setup during onload (PathManager)
     await this.services.initializeServices();
-
-    // Register retrieval vault listeners only if retrieval initialized successfully.
-    if (this.settings.retrieval.enabled && this.services.indexCoordinator) {
-      this.services.indexCoordinator.registerVaultListeners(this);
-    }
 
     // Add settings tab
     this.addSettingTab(new SettingTab(this.app, this));
@@ -113,13 +109,21 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     // initializeVideoQueueManager is now just about creating the instance.
     this.services.initializeVideoQueueManager();
 
-    // Schedule an optional retrieval auto-index after the workspace layout is ready.
-    // Never block onload on this; it is cancellable and reports via index status.
-    if (this.settings.retrieval.enabled && this.settings.retrieval.autoIndexOnStartup && this.services.indexCoordinator) {
-      const coordinator = this.services.indexCoordinator;
+    // Defer heavy retrieval service setup, vault listeners, and optional auto-index
+    // until workspace layout is ready, keeping plugin onload near-instant (<50ms).
+    if (this.settings.retrieval.enabled) {
       this.app.workspace.onLayoutReady(() => {
-        void coordinator.indexAll().catch((error) => {
-          console.error('Retrieval auto-index failed:', error);
+        void this.services.ensureRetrievalServices().then((coordinator) => {
+          if (coordinator) {
+            coordinator.registerVaultListeners(this);
+            if (this.settings.retrieval.autoIndexOnStartup) {
+              void coordinator.indexAll().catch((error) => {
+                console.error('Retrieval auto-index failed:', error);
+              });
+            }
+          }
+        }).catch((error) => {
+          console.error('Retrieval initialization on layout ready failed:', error);
         });
       });
     }
@@ -202,6 +206,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
         void this.noteSyncManager.sync({ silent: true }).catch((err) => {
           console.error('Note auto-sync on startup failed:', err);
         });
+        if (this.settings.cardSyncEndpoint) {
+          void this.syncFlashcards({ silent: true }).catch((err) => {
+            console.warn('Card auto-sync on startup skipped:', err);
+          });
+        }
       });
     }
 
@@ -465,12 +474,24 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'open-spaced-repetition-filter-review',
+      name: 'Review Flashcards by Filter (Book, Section, Paragraph, Title)',
+      callback: () => this.openFilterReviewModal(),
+    });
+
+    this.addCommand({
       id: 'sync-flashcards-with-site',
       name: 'Sync Flashcards with Remote Site',
       callback: async () => {
-        const database = await this.services.ensureSpacedRepetitionDatabase();
-        const client = new CardSyncClient(this, database);
-        await client.sync();
+        await this.syncFlashcards();
+      },
+    });
+
+    this.addCommand({
+      id: 'download-all-flashcards-from-site',
+      name: 'Download All Flashcards from Remote Site (Full Sync)',
+      callback: async () => {
+        await this.syncFlashcards({ fullDownload: true });
       },
     });
 
@@ -479,6 +500,16 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
       name: 'Sync Vault Notes with Server',
       callback: async () => {
         await this.noteSyncManager.sync();
+      },
+    });
+
+    this.addCommand({
+      id: 'sync-all-notes-and-flashcards',
+      name: 'Sync All (Vault Notes & Flashcards)',
+      callback: async () => {
+        new Notice('Starting full sync (Notes + Flashcards)...');
+        await this.noteSyncManager.sync();
+        await this.syncFlashcards();
       },
     });
 
@@ -814,11 +845,12 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     this.addCommand({
       id: 'search-knowledge-base',
       name: 'Search Knowledge Base',
-      callback: () => {
+      callback: async () => {
         if (!this.settings.retrieval.enabled) {
           new Notice('Knowledge retrieval is disabled. Enable it in Settings → Knowledge Retrieval.');
           return;
         }
+        await this.services.ensureRetrievalServices();
         if (!this.services.retrievalService || !this.services.indexCoordinator) {
           new Notice('Retrieval services are not initialized. Open Settings → Knowledge Retrieval to build the index.');
           return;
@@ -1297,6 +1329,11 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     new FlashcardsFromBookModal(this.app, this).open();
   }
 
+  /** Opens the "Review by Filter" modal. */
+  openFilterReviewModal(): void {
+    new SpacedRepetitionFilterReviewModal(this.app, this).open();
+  }
+
   /** Opens the "Import Cards from Spaced Repetition Plugin" modal. */
   openImportObsidianSpacedRepetitionModal(): void {
     new ImportObsidianSpacedRepetitionModal(this.app, this).open();
@@ -1512,6 +1549,20 @@ export default class GptFreeTextGeneratorPlugin extends Plugin {
     } catch (error) {
       console.error('Failed to open plugin settings:', error);
       new Notice('Failed to open settings — open them via Obsidian Settings manually');
+    }
+  }
+
+  async syncFlashcards(options: { fullDownload?: boolean; silent?: boolean } = {}) {
+    try {
+      const database = await this.services.ensureSpacedRepetitionDatabase();
+      const client = new CardSyncClient(this, database);
+      return await client.sync(options);
+    } catch (err) {
+      if (!options.silent) {
+        console.error('Failed to initialize flashcard database for sync:', err);
+        new Notice(`Failed to initialize flashcard database: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return null;
     }
   }
 

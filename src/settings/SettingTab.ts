@@ -1920,14 +1920,22 @@ import {
         .onClick(async () => {
           button.setDisabled(true).setButtonText("Syncing...");
           try {
-            const database = await this.plugin.services.ensureSpacedRepetitionDatabase();
-            const client = new CardSyncClient(this.plugin, database);
-            await client.sync();
+            await this.plugin.syncFlashcards();
             this.display();
-          } catch (e) {
-            new Notice(`Sync failed: ${e instanceof Error ? e.message : 'Unknown'}`);
           } finally {
             button.setDisabled(false).setButtonText("Sync with Site");
+          }
+        }))
+      .addButton(button => button
+        .setButtonText("Download All from Site")
+        .setTooltip("Forces a complete download of all decks and cards from the server (ideal for a new Android install)")
+        .onClick(async () => {
+          button.setDisabled(true).setButtonText("Downloading All...");
+          try {
+            await this.plugin.syncFlashcards({ fullDownload: true });
+            this.display();
+          } finally {
+            button.setDisabled(false).setButtonText("Download All from Site");
           }
         }));
 

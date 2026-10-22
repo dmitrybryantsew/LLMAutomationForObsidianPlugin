@@ -29,6 +29,9 @@ export class NoteSyncManager {
       const ms = intervalMinutes * 60 * 1000;
       this.timerId = window.setInterval(() => {
         void this.sync({ silent: true });
+        if (this.plugin.settings.cardSyncEndpoint) {
+          void this.plugin.syncFlashcards({ silent: true });
+        }
       }, ms);
     }
   }

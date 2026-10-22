@@ -17,15 +17,17 @@ export class CardSyncClient {
     private database: SpacedRepetitionDatabase
   ) {}
 
-  async sync(): Promise<CardSyncResult> {
+  async sync(options: { fullDownload?: boolean; silent?: boolean } = {}): Promise<CardSyncResult> {
     const endpoint = (this.plugin.settings.cardSyncEndpoint || '').trim().replace(/\/+$/, '');
     if (!endpoint) {
-      new Notice('Card sync endpoint is not configured in settings.');
+      if (!options.silent) {
+        new Notice('Card sync endpoint is not configured in settings.');
+      }
       return { success: false, importedDecks: 0, importedCards: 0, importedReviews: 0, error: 'Endpoint not configured' };
     }
 
     const apiKey = (this.plugin.settings.cardSyncApiKey || '').trim();
-    const lastSync = this.plugin.settings.cardSyncLastSyncAt;
+    const lastSync = options.fullDownload ? null : this.plugin.settings.cardSyncLastSyncAt;
 
     try {
       const decks = this.database.getAllStudySetsForSync();
@@ -46,7 +48,9 @@ export class CardSyncClient {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      new Notice('Syncing flashcards with remote site...');
+      if (!options.silent) {
+        new Notice(options.fullDownload ? 'Downloading all flashcards from remote site...' : 'Syncing flashcards with remote site...');
+      }
 
       const response = await requestUrl({
         url: `${endpoint}/api/cards/sync`,
@@ -68,14 +72,20 @@ export class CardSyncClient {
         reviews: data.reviews || [],
       });
 
+      if (!this.plugin.settings.spacedRepetition.enabled && (applyCounts.importedCards > 0 || applyCounts.importedDecks > 0)) {
+        this.plugin.settings.spacedRepetition.enabled = true;
+      }
+
       if (data.serverTime) {
         this.plugin.settings.cardSyncLastSyncAt = data.serverTime;
         await this.plugin.saveSettings();
       }
 
-      new Notice(
-        `Sync complete: ${applyCounts.importedDecks} deck(s), ${applyCounts.importedCards} card(s), ${applyCounts.importedReviews} review(s) updated from site.`
-      );
+      if (!options.silent) {
+        new Notice(
+          `Sync complete: ${applyCounts.importedDecks} deck(s), ${applyCounts.importedCards} card(s), ${applyCounts.importedReviews} review(s) updated from site.`
+        );
+      }
 
       return {
         success: true,
@@ -86,8 +96,12 @@ export class CardSyncClient {
       };
     } catch (err: any) {
       const msg = err?.message || 'Unknown sync error';
-      console.error('Failed to sync flashcards:', err);
-      new Notice(`Card sync failed: ${msg}`);
+      if (options.silent) {
+        console.warn('[CardSyncClient] Background sync skipped (server unreachable or error):', msg);
+      } else {
+        console.error('Failed to sync flashcards:', err);
+        new Notice(`Card sync failed: ${msg}`);
+      }
       return {
         success: false,
         importedDecks: 0,
