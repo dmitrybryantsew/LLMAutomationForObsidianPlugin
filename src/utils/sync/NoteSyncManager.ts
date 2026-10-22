@@ -22,6 +22,8 @@ export class NoteSyncManager {
 
   startPeriodicSync() {
     this.stopPeriodicSync();
+    const endpoint = (this.plugin.settings.noteSyncEndpoint || this.plugin.settings.cardSyncEndpoint || '').trim();
+    if (!endpoint) return;
     const intervalMinutes = Number(this.plugin.settings.noteSyncAutoSyncIntervalMinutes ?? 10);
     if (intervalMinutes > 0) {
       const ms = intervalMinutes * 60 * 1000;
@@ -44,6 +46,14 @@ export class NoteSyncManager {
         new Notice('Note sync is already in progress.');
       }
       return { success: false, uploaded: 0, downloaded: 0, deleted: 0, conflicts: 0, error: 'Already syncing' };
+    }
+
+    const endpoint = (this.plugin.settings.noteSyncEndpoint || this.plugin.settings.cardSyncEndpoint || '').trim();
+    if (!endpoint) {
+      if (!options.silent) {
+        new Notice('Note sync endpoint is not configured in settings.');
+      }
+      return { success: false, uploaded: 0, downloaded: 0, deleted: 0, conflicts: 0, error: 'Endpoint not configured' };
     }
 
     this.isSyncing = true;
@@ -187,9 +197,11 @@ export class NoteSyncManager {
 
       return summary;
     } catch (err: any) {
-      console.error('[NoteSyncManager] Sync failed:', err);
       const errMsg = err?.message || String(err);
-      if (!options.silent) {
+      if (options.silent) {
+        console.warn('[NoteSyncManager] Background sync skipped (server unreachable or error):', errMsg);
+      } else {
+        console.error('[NoteSyncManager] Sync failed:', err);
         new Notice(`Note Sync failed: ${errMsg}`);
       }
       return {
