@@ -1,4 +1,4 @@
-import { Notice, TFile } from 'obsidian';
+import { Notice, Platform, TFile } from 'obsidian';
 import type GptFreeTextGeneratorPlugin from '../../main';
 import { calculateSha256, LocalNoteManifestItem, NotePayload, NoteSyncClient } from './NoteSyncClient';
 
@@ -18,6 +18,13 @@ export class NoteSyncManager {
 
   constructor(private plugin: GptFreeTextGeneratorPlugin) {
     this.client = new NoteSyncClient(plugin);
+  }
+
+  getEffectiveDeviceRole(): 'pc' | 'mobile' {
+    if (Platform.isMobile) {
+      return 'mobile';
+    }
+    return (this.plugin.settings.noteSyncDeviceRole || 'pc') as 'pc' | 'mobile';
   }
 
   startPeriodicSync() {
@@ -65,7 +72,7 @@ export class NoteSyncManager {
     }
 
     try {
-      const deviceRole = (this.plugin.settings.noteSyncDeviceRole || 'pc') as 'pc' | 'mobile';
+      const deviceRole = this.getEffectiveDeviceRole();
 
       // 1. Scan markdown files in vault
       const mdFiles = this.plugin.app.vault.getMarkdownFiles().filter(file => {

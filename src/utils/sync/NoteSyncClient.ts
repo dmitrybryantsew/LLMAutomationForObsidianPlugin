@@ -36,7 +36,8 @@ export interface RemoteNoteItem {
 }
 
 export async function calculateSha256(content: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(content);
+  const normalized = (content || '').replace(/\r\n/g, '\n');
+  const msgBuffer = new TextEncoder().encode(normalized);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');

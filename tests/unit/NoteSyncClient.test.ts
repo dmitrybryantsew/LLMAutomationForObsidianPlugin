@@ -24,6 +24,16 @@ describe('NoteSyncClient and hashing', () => {
     expect(hash1).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it('produces identical hash for CRLF and LF content', async () => {
+    const crlfText = 'Line 1\r\nLine 2\r\nLine 3';
+    const lfText = 'Line 1\nLine 2\nLine 3';
+
+    const hashCrlf = await calculateSha256(crlfText);
+    const hashLf = await calculateSha256(lfText);
+
+    expect(hashCrlf).toBe(hashLf);
+  });
+
   it('fails gracefully when endpoint is empty', async () => {
     mockPlugin.settings.noteSyncEndpoint = '';
     mockPlugin.settings.cardSyncEndpoint = '';
